@@ -1,0 +1,124 @@
+<?php
+/*
+|--------------------------------------------------------------------------
+| Classe Session
+|--------------------------------------------------------------------------
+|
+| Esta classe fornece uma interface para gerenciar a sessão do usuário de
+| forma segura. Ela inclui métodos para iniciar, definir, obter, remover
+| e destruir a sessão, além de configurações de segurança para cookies.
+| Funcionalidades adicionais foram incluídas para verificar a existência
+| de chaves na sessão, obter todos os dados da sessão e regenerar o ID.
+|
+*/
+
+declare(strict_types=1);
+
+namespace Slenix\Builds;
+
+/**
+ * Classe para gerenciar a sessão do usuário com segurança.
+ */
+class Session
+{
+    /**
+     * Inicia a sessão com configurações de segurança.
+     *
+     * @return void
+     */
+    public static function start(): void
+    {
+        ini_set('session.use_strict_mode', 1);
+        ini_set('session.cookie_httponly', 1);
+        ini_set('session.cookie_secure', isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] != 'off');
+        ini_set('session.cookie_samesite', 'Lax');
+
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+    }
+
+    /**
+     * Define um valor na sessão para uma chave específica.
+     *
+     * @param string $key A chave para armazenar o valor na sessão.
+     * @param mixed $value O valor a ser armazenado.
+     * @return void
+     */
+    public static function set(string $key, mixed $value): void
+    {
+        self::start();
+        $_SESSION[$key] = $value;
+    }
+
+    /**
+     * Obtém um valor da sessão com base na chave.
+     *
+     * @param string $key A chave do valor a ser recuperado.
+     * @param mixed $default O valor padrão a ser retornado caso a chave não exista.
+     * @return mixed O valor da sessão ou o valor padrão.
+     */
+    public static function get(string $key, mixed $default = null): mixed
+    {
+        self::start();
+        return $_SESSION[$key] ?? $default;
+    }
+
+    /**
+     * Verifica se uma chave existe na sessão.
+     *
+     * @param string $key A chave a ser verificada.
+     * @return bool True se a chave existir na sessão, false caso contrário.
+     */
+    public static function has(string $key): bool
+    {
+        self::start();
+        return isset($_SESSION[$key]);
+    }
+
+    /**
+     * Obtém todos os dados armazenados na sessão.
+     *
+     * @return array<string, mixed> Um array associativo contendo todos os dados da sessão.
+     */
+    public static function all(): array
+    {
+        self::start();
+        return $_SESSION ?? [];
+    }
+
+    /**
+     * Remove uma chave e seu valor da sessão.
+     *
+     * @param string $key A chave a ser removida.
+     * @return void
+     */
+    public static function remove(string $key): void
+    {
+        self::start();
+        unset($_SESSION[$key]);
+    }
+
+    /**
+     * Regenera o ID da sessão atual.
+     *
+     * @param bool $deleteOldSession Se true, a sessão antiga será destruída.
+     * @return bool True em caso de sucesso, false em caso de falha.
+     */
+    public static function regenerateId(bool $deleteOldSession = false): bool
+    {
+        self::start();
+        return session_regenerate_id($deleteOldSession);
+    }
+
+    /**
+     * Destrói a sessão atual.
+     *
+     * @return void
+     */
+    public static function destroy(): void
+    {
+        self::start();
+        session_destroy();
+    }
+}

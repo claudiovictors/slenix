@@ -46,15 +46,7 @@ O **Slenix Framework** é um micro framework PHP projetado para desenvolvedores 
    ```bash
    composer create-project slenix/slenix [project-name]
 ---
-
-4. **Configurar o Ambiente:**
-   ```bash
-   cp .env.example .env
----
-O Slenix usa um arquivo `.env` para configurações de ambiente
-Execute o comando acima para copiar o arquivo `.env.example para .env`:
-
-5. **Instale as dependências:**
+4. **Instale as dependências:**
    ```bash
    composer install
 ---

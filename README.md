@@ -5,9 +5,9 @@
 <h1 align="center">Slenix Framework</h1>
 <p align="center">Um micro framework PHP leve e elegante baseado no padrão MVC</p>
 <p align="center">
-  <a href="https://github.com/claudiovictors/slenix.git"><img src="https://img.shields.io/github/stars/claudiovictors/framework-luna?style=social" alt="GitHub Stars"></a>
-  <a href="https://packagist.org/packages/slenix/slenix"><img src="https://img.shields.io/packagist/v/luna/luna.svg" alt="Packagist Version"></a>
-  <a href="https://github.com/claudiovictors/slenix.git/blob/main/LICENSE"><img src="https://img.shields.io/github/license/claudiovictors/framework-luna" alt="License"></a>
+  <a href="https://github.com/claudiovictors/slenix"><img src="https://img.shields.io/github/stars/claudiovictors/slenix?style=social" alt="GitHub Stars"></a>
+  <a href="https://packagist.org/packages/slenix/slenix"><img src="https://img.shields.io/packagist/v/slenix" alt="Packagist Version"></a>
+  <a href="https://github.com/claudiovictors/slenix.git/blob/main/LICENSE"><img src="https://img.shields.io/github/license/claudiovictors/slenix" alt="License"></a>
   <img src="https://img.shields.io/badge/PHP-8.0%2B-blue" alt="PHP Version">
 </p>
 

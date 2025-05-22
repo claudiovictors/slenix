@@ -20,7 +20,7 @@ require_once __DIR__ . '/database/Database.php';
 
 final class Slenix
 {
-    private const VERSION = '1.0.0';
+    private const VERSION = '1.0.1';
     private const DEFAULT_PORT = 8080;
     private const ASCII_ART = <<<'EOT'
     
@@ -43,6 +43,7 @@ EOT;
     public function __construct(array $args)
     {
         $this->args = $args;
+        $this->checkDirectoryStructure();
         $this->run();
     }
 
@@ -67,6 +68,12 @@ EOT;
                     break;
                 case 'make:controller':
                     $this->makeController();
+                    break;
+                case 'make:middleware':
+                    $this->makeMiddleware();
+                    break;
+                case 'make:util':
+                    $this->makeUtil();
                     break;
                 case 'serve':
                     $this->serve();
@@ -93,6 +100,34 @@ EOT;
     }
 
     /**
+     * Verifica a estrutura de diretórios necessária
+     *
+     * @return void
+     */
+    private function checkDirectoryStructure(): void
+    {
+        $requiredDirs = [
+            '/app/Controllers',
+            '/app/Models',
+            '/src/Middlewares',
+            '/src/Utils',
+            '/database',
+            '/public',
+            '/routes'
+        ];
+
+        foreach ($requiredDirs as $dir) {
+            $fullPath = __DIR__ . $dir;
+            if (!is_dir($fullPath)) {
+                if (!mkdir($fullPath, 0755, true)) {
+                    $this->showError("Não foi possível criar o diretório: {$fullPath}");
+                    exit(1);
+                }
+            }
+        }
+    }
+
+    /**
      * Exibe a mensagem de ajuda com os comandos disponíveis.
      *
      * @return void
@@ -108,6 +143,8 @@ EOT;
         echo $this->colorize('COMANDOS DISPONÍVEIS:', 'white', true) . PHP_EOL;
         echo "  " . $this->colorize('make:model <nome>', 'green') . "        Cria um novo Model" . PHP_EOL;
         echo "  " . $this->colorize('make:controller <nome>', 'green') . "   Cria um novo Controller" . PHP_EOL;
+        echo "  " . $this->colorize('make:middleware <nome>', 'green') . "   Cria um novo Middleware" . PHP_EOL;
+        echo "  " . $this->colorize('make:util <nome>', 'green') . "         Cria uma nova classe Utils" . PHP_EOL;
         echo "  " . $this->colorize('serve [porta]', 'green') . "            Inicia o servidor PHP (padrão: " . self::DEFAULT_PORT . ")" . PHP_EOL;
         echo "  " . $this->colorize('help', 'green') . "                     Mostra esta ajuda" . PHP_EOL;
         echo "  " . $this->colorize('version', 'green') . "                  Mostra a versão" . PHP_EOL . PHP_EOL;
@@ -115,6 +152,9 @@ EOT;
         echo $this->colorize('EXEMPLOS:', 'white', true) . PHP_EOL;
         echo "  " . $this->colorize('php celestial make:model User', 'cyan') . PHP_EOL;
         echo "  " . $this->colorize('php celestial make:controller Home', 'cyan') . PHP_EOL;
+        echo "  " . $this->colorize('php celestial make:middleware AuthMiddleware', 'cyan') . PHP_EOL;
+        echo "  " . $this->colorize('php celestial make:util StringHelper', 'cyan') . PHP_EOL;
+        echo "  " . $this->colorize('php celestial make:util PaymentProcessor --namespace App\Services', 'cyan') . PHP_EOL;
         echo "  " . $this->colorize('php celestial serve', 'cyan') . PHP_EOL;
         echo "  " . $this->colorize('php celestial serve 1212', 'cyan') . PHP_EOL;
     }
@@ -140,7 +180,7 @@ EOT;
     {
         if (count($this->args) < 3) {
             $this->showError("Nome do Model é obrigatório.");
-            echo "Exemplo: " . $this->colorize('php slenix make:model User', 'cyan') . PHP_EOL;
+            echo "Exemplo: " . $this->colorize('php celestial make:model User', 'cyan') . PHP_EOL;
             exit(1);
         }
 
@@ -204,6 +244,101 @@ class $controllerName {
 EOT;
 
         $this->createFile($filePath, $template, $controllerName, 'Controller');
+    }
+
+    /**
+     * Cria um novo arquivo de Middleware com o nome fornecido.
+     *
+     * @return void
+     */
+    private function makeMiddleware(): void
+    {
+        if (count($this->args) < 3) {
+            $this->showError("Nome do Middleware é obrigatório.");
+            echo "Exemplo: " . $this->colorize('php celestial make:middleware AuthMiddleware', 'cyan') . PHP_EOL;
+            exit(1);
+        }
+
+        $middlewareName = ucfirst($this->args[2]);
+        $filePath = __DIR__ . '/src/Middlewares/' . $middlewareName . '.php';
+
+        $this->ensureFileDoesNotExist($filePath, $middlewareName, 'Middleware');
+
+        $template = <<<EOT
+<?php
+
+declare(strict_types=1);
+namespace Slenix\Middlewares;
+
+use Slenix\Http\Message\Request;
+use Slenix\Http\Message\Response;
+use Slenix\Http\Messages\Middleware;
+
+class $middlewareName implements Middleware
+{
+    public function __invoke(Request \$request, Response \$response, callable \$next): Response
+    {
+        // Lógica do middleware aqui
+        
+        // Chamar o próximo middleware/controller
+        return \$next(\$request, \$response);
+    }
+}
+EOT;
+
+        $this->createFile($filePath, $template, $middlewareName, 'Middleware');
+    }
+
+    /**
+     * Cria um novo arquivo de Util com o nome fornecido.
+     *
+     * @return void
+     */
+    private function makeUtil(): void
+    {
+        if (count($this->args) < 3) {
+            $this->showError("Nome da classe Utils é obrigatório.");
+            echo "Exemplo: " . $this->colorize('php celestial make:util StringHelper', 'cyan') . PHP_EOL;
+            exit(1);
+        }
+
+        $utilName = ucfirst($this->args[2]);
+        $namespace = 'Slenix\Utils';
+        
+        // Verifica se foi fornecido um namespace personalizado
+        if (count($this->args) > 3 && $this->args[3] === '--namespace') {
+            if (count($this->args) > 4) {
+                $namespace = $this->args[4];
+            } else {
+                $this->showError("Namespace é obrigatório quando a opção --namespace é usada.");
+                exit(1);
+            }
+        }
+
+        // Cria a estrutura de pastas se necessário
+        $relativePath = str_replace('Slenix\\', '', $namespace);
+        $relativePath = str_replace('\\', '/', $relativePath);
+        $filePath = __DIR__ . '/src/' . $relativePath . '/' . $utilName . '.php';
+        
+        $this->ensureFileDoesNotExist($filePath, $utilName, 'Util');
+
+        $template = <<<EOT
+<?php
+declare(strict_types=1);
+namespace $namespace;
+
+class $utilName
+{
+    // Adicione seus métodos utilitários aqui
+    
+    public static function exampleMethod(): string
+    {
+        return 'Exemplo de método utilitário';
+    }
+}
+EOT;
+
+        $this->createFile($filePath, $template, $utilName, 'Util');
     }
 
     /**

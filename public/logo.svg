@@ -1,15 +1,18 @@
-<svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Hexágono de fundo com gradiente -->
-  <path d="M50 10L86.6 30V70L50 90L13.4 70V30L50 10Z" fill="url(#grad1)"/>
-  <!-- Linhas dinâmicas formando um "S" -->
-  <path d="M35 30C35 20 45 15 50 20C55 25 65 35 65 50C65 65 55 75 50 80C45 85 35 80 35 70C35 60 45 55 50 60C55 65 65 75 65 80" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round"/>
-  <!-- Texto "Slenix" -->
-  <text x="50" y="95" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Slenix</text>
-  <!-- Definição do gradiente -->
+<svg width="160" height="160" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg" fill="none">
   <defs>
-    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#00CED1;stop-opacity:1"/>
-      <stop offset="100%" style="stop-color:#8A2BE2;stop-opacity:1"/>
-    </linearGradient>
+    <radialGradient id="grad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#5A4FCF"/>
+      <stop offset="100%" stop-color="#3023AE"/>
+    </radialGradient>
   </defs>
+  <!-- Base circular -->
+  <circle cx="80" cy="80" r="70" fill="url(#grad)" />
+  <!-- Forma central abstrata -->
+  <path d="M60 50 C80 40, 100 40, 100 70 C100 100, 80 110, 60 100 C40 90, 40 70, 60 50 Z" fill="#EDE7F6" />
+  <!-- Traço diagonal estilizado -->
+  <path d="M60 50 L100 100" stroke="#3023AE" stroke-width="6" stroke-linecap="round" />
+  <!-- Traço horizontal interno -->
+  <path d="M50 80 L110 80" stroke="#3023AE" stroke-width="4" stroke-linecap="round" />
+  <!-- Texto subido -->
+  <text x="80" y="130" text-anchor="middle" font-family="Verdana, sans-serif" font-weight="bold" font-size="22" fill="#EDE7F6">Slenix</text>
 </svg>

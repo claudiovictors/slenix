@@ -1,0 +1,22 @@
+{
+    "name": "slenix/slenix",
+    "description": "Slenix é um Micro framework MVC flexível para construir APIs Rest robustas e aplicações web dinâmicas com facilidade e rapidez.",
+    "type": "project",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/",
+            "Slenix\\": "src/",
+            "Slenix\\Database\\": "database/"
+        },
+        "files": [
+            "src/Helpers/Helpers.php"
+        ]
+    },
+    "authors": [
+        {
+            "name": "Cláudio Victor",
+            "email": "barrosclaudio147@gmail.com"
+        }
+    ]
+}

@@ -1,0 +1,362 @@
+#!/usr/bin/env php
+<?php
+
+/*
+|--------------------------------------------------------------------------
+| SLENIX CLI - Ferramenta de Desenvolvimento
+|--------------------------------------------------------------------------
+|
+| Esta classe final representa a interface de linha de comando (CLI) do
+| framework Slenix. Ela fornece uma série de comandos úteis para auxiliar
+| no desenvolvimento, como a criação de models e controllers, e o
+| gerenciamento do servidor de desenvolvimento local.
+|
+*/
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/src/Libraries/Template.php';
+require_once __DIR__ . '/database/Database.php';
+
+final class Slenix
+{
+    private const VERSION = '1.0.1';
+    private const DEFAULT_PORT = 8080;
+    private const ASCII_ART = <<<'EOT'
+    
+    ██████╗███████╗██╗     ███████╗███████╗████████╗██╗ █████╗ ██╗     
+    ██╔════╝██╔════╝██║     ██╔════╝██╔════╝╚══██╔══╝██║██╔══██╗██║     
+    ██║     █████╗  ██║     █████╗  ███████╗   ██║   ██║███████║██║     
+    ██║     ██╔══╝  ██║     ██╔══╝  ╚════██║   ██║   ██║██╔══██║██║     
+    ╚██████╗███████╗███████╗███████╗███████║   ██║   ██║██║  ██║███████╗
+     ╚═════╝╚══════╝╚══════╝╚══════╝╚══════╝   ╚═╝   ╚═╝╚═╝  ╚═╝╚══════╝
+                                                                                                                                              
+EOT;
+
+    private array $args;
+
+    /**
+     * Construtor da classe Slenix.
+     *
+     * @param array<int, string> $args Os argumentos da linha de comando.
+     */
+    public function __construct(array $args)
+    {
+        $this->args = $args;
+        $this->run();
+    }
+
+    /**
+     * Executa a lógica principal da CLI com base no comando fornecido.
+     *
+     * @return void
+     */
+    private function run(): void
+    {
+        if (count($this->args) < 2) {
+            $this->showHelp();
+            exit(1);
+        }
+
+        $command = $this->args[1];
+
+        try {
+            switch ($command) {
+                case 'make:model':
+                    $this->makeModel();
+                    break;
+                case 'make:controller':
+                    $this->makeController();
+                    break;
+                case 'serve':
+                    $this->serve();
+                    break;
+                case 'make:build':
+                    $this->makeBuild();
+                    break;
+                case 'help':
+                case '--help':
+                case '-h':
+                    $this->showHelp();
+                    break;
+                case 'version':
+                case '--version':
+                case '-v':
+                    $this->showVersion();
+                    break;
+                default:
+                    $this->showError("Comando desconhecido: {$command}");
+                    $this->showHelp();
+                    exit(1);
+            }
+        } catch (Exception $e) {
+            $this->showError($e->getMessage());
+            exit(1);
+        }
+    }
+
+    /**
+     * Exibe a mensagem de ajuda com os comandos disponíveis.
+     *
+     * @return void
+     */
+    private function showHelp(): void
+    {
+        echo self::ASCII_ART . PHP_EOL;
+        echo "Slenix CLI v" . self::VERSION . " - Ferramenta de desenvolvimento" . PHP_EOL . PHP_EOL;
+
+        echo $this->colorize('USO:', 'white', true) . PHP_EOL;
+        echo "  php celestial <comando> [opções]" . PHP_EOL . PHP_EOL;
+
+        echo $this->colorize('COMANDOS DISPONÍVEIS:', 'white', true) . PHP_EOL;
+        echo "  " . $this->colorize('make:model <nome>', 'green') . "        Cria um novo Model" . PHP_EOL;
+        echo "  " . $this->colorize('make:controller <nome>', 'green') . "   Cria um novo Controller" . PHP_EOL;
+        echo "  " . $this->colorize('serve [porta]', 'green') . "            Inicia o servidor PHP (padrão: " . self::DEFAULT_PORT . ")" . PHP_EOL;
+        echo "  " . $this->colorize('help', 'green') . "                     Mostra esta ajuda" . PHP_EOL;
+        echo "  " . $this->colorize('version', 'green') . "                  Mostra a versão" . PHP_EOL . PHP_EOL;
+
+        echo $this->colorize('EXEMPLOS:', 'white', true) . PHP_EOL;
+        echo "  " . $this->colorize('php celestial make:model User', 'cyan') . PHP_EOL;
+        echo "  " . $this->colorize('php celestial make:controller Home', 'cyan') . PHP_EOL;
+        echo "  " . $this->colorize('php celestial serve', 'cyan') . PHP_EOL;
+        echo "  " . $this->colorize('php celestial serve 1212', 'cyan') . PHP_EOL;
+    }
+
+    /**
+     * Exibe a versão atual da CLI.
+     *
+     * @return void
+     */
+    private function showVersion(): void
+    {
+        echo self::ASCII_ART . PHP_EOL;
+        echo $this->colorize('Celestial CLI v' . self::VERSION, 'purple', true) . PHP_EOL;
+        echo "Desenvolvido com ♥ para o ecossistema Slenix" . PHP_EOL;
+    }
+
+    /**
+     * Cria um novo arquivo de Model com o nome fornecido.
+     *
+     * @return void
+     */
+    private function makeModel(): void
+    {
+        if (count($this->args) < 3) {
+            $this->showError("Nome do Model é obrigatório.");
+            echo "Exemplo: " . $this->colorize('php slenix make:model User', 'cyan') . PHP_EOL;
+            exit(1);
+        }
+
+        $modelName = ucfirst($this->args[2]);
+        $tableName = strtolower(preg_replace('/(?<!^)[A-Z]/', '_$0', $modelName)) . 's';
+        $filePath = __DIR__ . '/app/Models/' . $modelName . '.php';
+
+        $this->ensureFileDoesNotExist($filePath, $modelName, 'Model');
+
+        $template = <<<EOT
+<?php
+
+namespace App\Models;
+
+use Slenix\Database\Model;
+
+
+class $modelName extends Model {
+    protected string \$table = '$tableName';
+    protected string \$primaryKey = 'id';
+    protected array \$fillable = [];
+}
+EOT;
+
+        $this->createFile($filePath, $template, $modelName, 'Model');
+    }
+
+    /**
+     * Cria um novo arquivo de Build com o nome fornecido.
+     *
+     * @return void
+     */
+    private function makeBuild(): void {
+        if (count($this->args) < 3) {
+            $this->showError("Nome da class é obrigatório.");
+            echo "Exemplo: " . $this->colorize('php celestial make:build Test', 'cyan') . PHP_EOL;
+            exit(1);
+        }
+
+        $classNames = ucfirst($this->args[2]);
+        $filePath = __DIR__ . '/src/Builds/' . $classNames . '.php';
+
+        $this->ensureFileDoesNotExist($filePath, $classNames, 'Classe');
+
+        $template = <<<EOT
+        <?php
+
+        namespace Slenix\Builds;
+
+        class $classNames {
+
+            // Lógica de négocio
+        }
+        EOT;
+
+        $this->createFile($filePath, $template, $classNames, 'Classe');
+    }
+
+    /**
+     * Cria um novo arquivo de Controller com o nome fornecido.
+     *
+     * @return void
+     */
+    private function makeController(): void
+    {
+        if (count($this->args) < 3) {
+            $this->showError("Nome do Controller é obrigatório.");
+            echo "Exemplo: " . $this->colorize('php celestial make:controller Home', 'cyan') . PHP_EOL;
+            exit(1);
+        }
+
+        $controllerName = ucfirst($this->args[2]);
+        $filePath = __DIR__ . '/app/Controllers/' . $controllerName . '.php';
+
+        $this->ensureFileDoesNotExist($filePath, $controllerName, 'Controller');
+
+        $template = <<<EOT
+<?php
+
+namespace App\Controllers;
+
+use Slenix\Http\Message\Request;
+use Slenix\Http\Message\Response;
+
+class $controllerName {
+
+    public function index(Request \$request, Response \$response)
+    {
+        // Lógica do controller aqui
+    }
+}
+EOT;
+
+        $this->createFile($filePath, $template, $controllerName, 'Controller');
+    }
+
+    /**
+     * Inicia o servidor de desenvolvimento PHP na porta especificada (ou padrão).
+     *
+     * @return void
+     */
+    private function serve(): void
+    {
+        $port = $this->args[2] ?? self::DEFAULT_PORT;
+
+        if (!is_numeric($port) || $port < 1 || $port > 65535) {
+            $this->showError("Porta inválida. Use um número entre 1 e 65535.");
+            exit(1);
+        }
+
+        $host = '127.0.0.1';
+        $publicDir = __DIR__ . '/public';
+
+        echo self::ASCII_ART . PHP_EOL;
+        echo $this->colorize('Servidor Slenix iniciado', 'green', true) . PHP_EOL;
+        echo $this->colorize('URL:', 'white', true) . " " . $this->colorize("http://{$host}:{$port}", 'cyan') . PHP_EOL;
+        echo $this->colorize('Diretório:', 'white', true) . " {$publicDir}" . PHP_EOL;
+        echo $this->colorize('Pressione ', 'white') . $this->colorize('Ctrl+C', 'red', true) . $this->colorize(' para parar', 'white') . PHP_EOL . PHP_EOL;
+
+        passthru("php -S {$host}:{$port} -t {$publicDir}");
+    }
+
+    /**
+     * Garante que um arquivo com o nome especificado não exista.
+     *
+     * @param string $path O caminho completo do arquivo.
+     * @param string $name O nome do arquivo.
+     * @param string $type O tipo do arquivo (ex: Model, Controller).
+     * @return void
+     */
+    private function ensureFileDoesNotExist(string $path, string $name, string $type): void
+    {
+        if (file_exists($path)) {
+            $this->showError("O {$type} '{$name}' já existe em {$path}");
+            exit(1);
+        }
+
+        $dir = dirname($path);
+        if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
+            $this->showError("Não foi possível criar o diretório {$dir}");
+            exit(1);
+        }
+    }
+
+    /**
+     * Cria um novo arquivo com o conteúdo fornecido.
+     *
+     * @param string $path O caminho completo do arquivo a ser criado.
+     * @param string $content O conteúdo a ser escrito no arquivo.
+     * @param string $name O nome do arquivo criado.
+     * @param string $type O tipo do arquivo criado (ex: Model, Controller).
+     * @return void
+     */
+    private function createFile(string $path, string $content, string $name, string $type): void
+    {
+        if (file_put_contents($path, $content)) {
+            echo $this->colorize("✔ {$type} '{$name}' criado com sucesso em:", 'green') . PHP_EOL;
+            echo "  {$path}" . PHP_EOL;
+        } else {
+            $this->showError("Falha ao criar {$type} '{$name}' em {$path}");
+            exit(1);
+        }
+    }
+
+    /**
+     * Exibe uma mensagem de erro formatada na saída.
+     *
+     * @param string $message A mensagem de erro a ser exibida.
+     * @return void
+     */
+    private function showError(string $message): void
+    {
+        echo $this->colorize("ERRO: {$message}", 'red', true) . PHP_EOL;
+    }
+
+    /**
+     * Aplica cores e formatação ao texto para exibição na linha de comando.
+     *
+     * @param string $text O texto a ser formatado.
+     * @param string $color A cor do texto (black, red, green, yellow, blue, purple, cyan, white).
+     * @param bool $bold Se true, aplica negrito ao texto.
+     * @return string O texto formatado com códigos ANSI.
+     */
+    private function colorize(string $text, string $color, bool $bold = false): string
+    {
+        $colors = [
+            'black' => '0;30',
+            'red' => '0;31',
+            'green' => '0;32',
+            'yellow' => '0;33',
+            'blue' => '0;34',
+            'purple' => '0;35',
+            'cyan' => '0;36',
+            'white' => '0;37',
+        ];
+
+        if (!isset($colors[$color])) {
+            return $text;
+        }
+
+        $code = $colors[$color];
+        if ($bold) {
+            $code = str_replace('0;', '1;', $code);
+        }
+
+        return "\033[{$code}m{$text}\033[0m";
+    }
+}
+
+// Inicia a aplicação Slenix CLI
+try {
+    new Slenix($argv);
+} catch (Throwable $e) {
+    echo "\033[1;31mERRO FATAL:\033[0m " . $e->getMessage() . PHP_EOL;
+    exit(1);
+}

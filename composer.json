@@ -1,0 +1,48 @@
+{
+    "name": "slenix/slenix",
+    "description": "Slenix é um micro framework MVC flexível para construir APIs REST robustas e aplicações web dinâmicas com facilidade.",
+    "keywords": [
+        "framework",
+        "microframework",
+        "php",
+        "mvc",
+        "rest",
+        "slenix"
+    ],
+    "homepage": "https://github.com/claudiovictors/slenix",
+    "type": "project",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Cláudio Victor",
+            "email": "barrosclaudio147@gmail.com",
+            "role": "Developer",
+            "homepage": "https://github.com/claudiovictors"
+        }
+    ],
+    "require": {
+        "php": ">=7.4"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/",
+            "Slenix\\": "src/",
+            "Slenix\\Database\\": "database/"
+        },
+        "files": [
+            "src/Helpers/Helpers.php"
+        ]
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "scripts": {
+        "post-install-cmd": [
+            "@php -r \"echo 'Slenix instalado com sucesso!\\n';\""
+        ]
+    },
+    "support": {
+        "email": "barrosclaudio147@gmail.com",
+        "issues": "https://github.com/claudiovictors/slenix/issues",
+        "source": "https://github.com/claudiovictors/slenix"
+    }
+}

@@ -1,0 +1,15 @@
+<svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Hexágono de fundo com gradiente -->
+  <path d="M50 10L86.6 30V70L50 90L13.4 70V30L50 10Z" fill="url(#grad1)"/>
+  <!-- Linhas dinâmicas formando um "S" -->
+  <path d="M35 30C35 20 45 15 50 20C55 25 65 35 65 50C65 65 55 75 50 80C45 85 35 80 35 70C35 60 45 55 50 60C55 65 65 75 65 80" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round"/>
+  <!-- Texto "Slenix" -->
+  <text x="50" y="95" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Slenix</text>
+  <!-- Definição do gradiente -->
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00CED1;stop-opacity:1"/>
+      <stop offset="100%" style="stop-color:#8A2BE2;stop-opacity:1"/>
+    </linearGradient>
+  </defs>
+</svg>

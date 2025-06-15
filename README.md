@@ -1,72 +1,88 @@
+
 <p align="center">
   <img src="public/logo.svg" alt="Slenix Logo" width="150">
 </p>
 
 <h1 align="center">Slenix Framework</h1>
-<p align="center">Um micro framework PHP leve e elegante baseado no padrão MVC</p>
+<p align="center">Um microframework PHP leve e elegante baseado no padrão MVC</p>
 <p align="center">
   <a href="https://github.com/claudiovictors/slenix.git"><img src="https://img.shields.io/github/stars/claudiovictors/slenix?style=social" alt="GitHub Stars"></a>
-  <a href="https://packagist.org/packages/slenix/slenix"><img src="https://img.shields.io/packagist/v/slenix/slenix.svg" alt="Packagist Version"></a>
-  <a href="https://github.com/claudiovictors/slenix.git/blob/main/LICENSE"><img src="https://img.shields.io/github/license/claudiovictors/slenix" alt="License"></a>
+  <a href="https://packagist.org/packages/slenix/slenix"><img src="https://img.shields.io/packagist/v/slenix/slenix" alt="Packagist Version"></a>
+  <a href="https://github.com/claudiovictors/slenix/blob/main/LICENSE"><img src="https://img.shields.io/github/license/claudiovictors/slenix" alt="License"></a>
   <img src="https://img.shields.io/badge/PHP-8.0%2B-blue" alt="PHP Version">
 </p>
 
-## Sobre o Slenix
-
-O **Slenix Framework** é um micro framework PHP projetado para desenvolvedores que buscam simplicidade e desempenho. Com uma arquitetura MVC (Model-View-Controller), ele oferece ferramentas essenciais como roteamento dinâmico, ORM integrado, motor de templates personalizado e uma CLI chamada **Celestial** para agilizar o desenvolvimento de aplicações web e APIs.
-
-### Recursos Principais
-- **Roteamento Simples**: Defina rotas com suporte a parâmetros dinâmicos e grupos.
-- **ORM Integrado**: Gerencie seu banco de dados com facilidade usando modelos intuitivos.
-- **Templates**: Crie views dinâmicas com uma sintaxe limpa e poderosa.
-- **Celestial CLI**: Crie Models, Controllers e inicie o servidor com um único comando.
-- **Leve e Rápido**: Sem dependências pesadas, ideal para projetos de pequeno a médio porte.
-- **Upload de Arquivos** Faça ulploads de arquivos com slenix de forma simples e fácil.
 ---
 
-## Pré-requisitos
+## 📦 Sobre o Slenix
+
+O **Slenix Framework** é um microframework PHP projetado para desenvolvedores que buscam simplicidade, desempenho e organização. Baseado na arquitetura MVC (Model-View-Controller), ele fornece recursos essenciais como roteamento dinâmico, ORM integrado, motor de templates, e uma poderosa CLI chamada **Celestial**.
+
+---
+
+## ✨ Recursos Principais
+
+- **Roteamento simples**: Rotas com parâmetros dinâmicos e suporte a grupos.
+- **ORM integrado**: Gerencie o banco de dados com modelos orientados a objetos.
+- **Motor de Templates**: Crie views dinâmicas com uma sintaxe clara e elegante.
+- **Celestial CLI**: Crie Controllers, Models e inicie o servidor com comandos simples.
+- **Upload de arquivos**: Realize uploads de forma prática e segura.
+- **Leve e rápido**: Sem dependências pesadas, ideal para projetos pequenos e médios.
+
+---
+
+## ✅ Pré-requisitos
 
 - PHP 7.4 ou superior
-- Extensão PDO habilitada (para o ORM)
-- Composer (opcional, mas recomendado para autoload)
-- Servidor web (ou use o servidor embutido do PHP via `celestial serve`)
+- Extensão PDO habilitada
+- Composer (recomendado)
+- Servidor Web (ou use o servidor embutido com `celestial serve`)
 
 ---
 
-## Instalação
+## 🚀 Instalação
 
-1. **Instale via Composer:**
+1. **Instalar via Composer:**
    ```bash
    composer require slenix/slenix
-2. **Clone o repositório:**
+   ```
+
+2. **Ou clonar o repositório:**
    ```bash
    git clone https://github.com/claudiovictors/slenix.git
----
-3. **Criar projecto comcomposer:**
+   ```
+
+3. **Criar projeto com Composer:**
    ```bash
-   composer create-project slenix/slenix [project-name]
----
-4. **Instale as dependências:**
+   composer create-project slenix/slenix nome-do-projeto
+   ```
+
+4. **Instalar as dependências:**
    ```bash
    composer install
+   ```
+
 ---
 
-## Inicie o servidor embutido
+## 🔥 Iniciando o servidor embutido
 
-6. **Abra o seu terminal e execute esse comando:**
-    ```bash
-    php celestial serve
-Acesse http://127.0.0.1:8080 no navegador para ver a página de boas-vindas.
+Execute:
 
-**Nota**: *Se você estiver usando um servidor web como Apache ou Nginx, configure o diretório public/ como raiz do documento.*
+```bash
+php celestial serve
+```
 
+Acesse `http://127.0.0.1:8080` no navegador.
 
+> ⚠️ **Importante**: Caso utilize Apache ou Nginx, defina a pasta `public/` como raiz do documento.
 
-## Primeiros Passos
+---
+
+## 🛠 Primeiros Passos
 
 ### Definindo Rotas
 
-Edite o arquivo `routes/web.php` para criar rotas simples e dinâmicas:
+Edite `routes/web.php`:
 
 ```php
 use Slenix\Http\Message\Router;
@@ -80,65 +96,54 @@ Router::get('/user/{id}', function ($request, $response, $params) {
 });
 ```
 
-## Grupos de Rotas
-
-Organize rotas relacionadas usando grupos com prefixos ou middlewares:
+### Grupos de Rotas
 
 ```php
 Router::group(['prefix' => '/api'], function () {
     Router::get('/users', function ($request, $response) {
-        $allUsers = User::all();
-        return $response->json([
-            'users' => $allUsers
-        ]);
+        $users = User::all();
+        return $response->json(['users' => $users]);
     });
 });
 ```
 
-## Rotas com Middlewares
-
-Protegas as suas rotas com os `Middlewares`
+### Middlewares
 
 ```php
-use Slenix\Http\Message\Router;
 use Slenix\Middlewares\AuthMiddleware;
 
 Router::get('/profile/{user_id}', function($request, $response, $param){
-    $user = $param['user_id'];
+    $user = User::find($param['user_id']);
 
-    $user_id = User::find($user);
+    if (!$user) {
+        return $response->status(404)->json(['message' => 'Usuário não encontrado']);
+    }
 
-    if(!$user_id):
-        $response->status(404)->json(['message' => 'User not Exist']);
-    endif;
-
-    $response->status(200)->json(['user' => $user_id]);
-
+    return $response->json(['user' => $user]);
 }, [AuthMiddleware::class]);
 ```
-## Usando o Motor de Templates
 
-O Slenix suporta um motor de templates com sintaxe inspirada no Blade. Crie views dinâmicas com facilidade.
+---
 
-**Exemplo de Rota com View:**
+## 🖼 Motor de Templates
+
+Crie views com sintaxe semelhante ao Blade:
 
 ```php
-
 Router::get('/users/{user_id}', function ($req, $res, $args) {
     $user = User::find($args['user_id']);
 
-    if (!$user):
-        $res->status(404)->json(['message' => 'Usuário não encontrado!']);
-    endif;
+    if (!$user) {
+        return $res->status(404)->json(['message' => 'Usuário não encontrado']);
+    }
 
     return view('pages.user', compact('user'));
 });
 ```
 
-Exemplo de View (`views/pages/user.php`):
+**Exemplo de View (`views/pages/user.php`):**
 
 ```php
-    
 <h1>Perfil do Usuário</h1>
 
 @if ($user)
@@ -154,79 +159,85 @@ Exemplo de View (`views/pages/user.php`):
         <p>{{ $post->content }}</p>
     </div>
 @endforeach
-
-```
-
-## Envio de E-mails
-O slenix oferece suporte a envios de e-mails personalizados e sem dependências. para enviar e-mails via Gmail, Outlook ou outros serviores SMTP. recomendamos as seguintes:
-
-- `msmtp` e `msmtp-mta`
-- `postfix`
-
-### Exemplo de como enviar um e-mail simples:
-
-```php
-
-$email = new Email();
-
-$sendEmail = $email
-    ->form('contato@slenix.com', 'Equipa Slenix')
-    ->to('user@example.com')
-    ->subject('Welcome Slenix!')
-    ->message('<h1>Olá!</h1><p>Bem-vindo ao Slenix</p>')
-    ->send();
-
-    if($sendEmail):
-        echo 'E-mail enviado com sucesso!';
-    else:
-        echo 'Erro ao enviar e-mail!';
-    endif;
-
 ```
 
 ---
-## Usando a Celestial CLI
 
-A **Celestial CLI** ajuda a agilizar o desenvolvimento com comandos úteis. Aqui estão alguns exemplos:
+## 📧 Envio de E-mails
 
-**Iniciar o Servidor**
-```bash
-php celestial serve
+O Slenix suporta envio de e-mails via SMTP (ex: Gmail, Outlook). Requisitos recomendados:
+
+- `msmtp` ou `postfix`
+
+### Exemplo de envio:
+
+```php
+$email = new Email();
+
+$enviado = $email
+    ->form('contato@slenix.com', 'Equipe Slenix')
+    ->to('user@example.com')
+    ->subject('Bem-vindo ao Slenix!')
+    ->message('<h1>Olá!</h1><p>Obrigado por escolher o Slenix.</p>')
+    ->send();
+
+if ($enviado) {
+    echo 'E-mail enviado com sucesso!';
+} else {
+    echo 'Erro ao enviar e-mail!';
+}
 ```
-**Crie um Controller**
-```bash
-php celestial make:controller UserController
-```
-**Crie um Model**
-```bash
-php celestial make:model User
-```
 
-**Ver Todos os Comandos Disponíveis**
-```bash
-php celestial list
-```
+---
 
-## Configuração do Banco de Dados
+## ⚙️ Usando a Celestial CLI
 
-O Slenix suporta um ORM integrado para facilitar o acesso ao banco de dados. Configure sua conexão editando o arquivo `.env` na raiz do projeto:
+Alguns comandos úteis:
+
+- **Iniciar servidor:**
+  ```bash
+  php celestial serve
+  ```
+
+- **Criar Controller:**
+  ```bash
+  php celestial make:controller UserController
+  ```
+
+- **Criar Model:**
+  ```bash
+  php celestial make:model User
+  ```
+
+- **Listar comandos:**
+  ```bash
+  php celestial list
+  ```
+
+---
+
+## 🗃 Configuração do Banco de Dados
+
+Edite o arquivo `.env`:
 
 ```env
-# Configurações Gerais
-APP_DEBUG=false
+APP_DEBUG=true
 APP_URL=http://localhost:8080
 
-# Conexão com Banco de Dados
 DB_CONNECTION=mysql
 DB_HOST=localhost
 DB_PORT=3306
 DB_NAME=slenix_db
-DB_USERNAME=seu_usuario
-DB_PASSWORD=sua_senha
+DB_USERNAME=root
+DB_PASSWORD=senha
 ```
-**Nota:** Configure o `APP_DEBUG` se estiver como `false` paçapara `true` para habilitar a tela de erros.
 
-## Licença
-Licenciado sob a MIT License (LICENSE).
+> 💡 Defina `APP_DEBUG=true` para exibir erros detalhados durante o desenvolvimento.
+
+---
+
+## 📄 Licença
+
+Distribuído sob a licença MIT. Consulte o arquivo [LICENSE](https://github.com/claudiovictors/slenix/blob/main/LICENSE) para mais informações.
+
 <p align="center">Feito com 🖤 por <a href="https://github.com/claudiovictors">Cláudio Victor</a></p>
-

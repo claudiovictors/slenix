@@ -8,7 +8,7 @@
 <p align="center">
   <a href="https://github.com/claudiovictors/slenix.git"><img src="https://img.shields.io/github/stars/claudiovictors/slenix?style=social" alt="GitHub Stars"></a>
   <a href="https://packagist.org/packages/slenix/slenix"><img src="https://img.shields.io/packagist/v/slenix/slenix" alt="Packagist Version"></a>
-  <a href="https://github.com/claudiovictors/slenix/blob/main/LICENSE"><img src="https://img.shields.io/github/license/claudiovictors/slenix" alt="License"></a>
+  <a href="https://github.com/claudiovictors/slenix?tab=MIT-1-ov-file"><img src="https://img.shields.io/github/license/claudiovictors/slenix" alt="License"></a>
   <img src="https://img.shields.io/badge/PHP-8.0%2B-blue" alt="PHP Version">
 </p>
 

@@ -156,6 +156,8 @@ EOT;
         $template = <<<EOT
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 use Slenix\Database\Model;
@@ -176,7 +178,8 @@ EOT;
      *
      * @return void
      */
-    private function makeBuild(): void {
+    private function makeBuild(): void
+    {
         if (count($this->args) < 3) {
             $this->showError("Nome da class é obrigatório.");
             echo "Exemplo: " . $this->colorize('php celestial make:build Test', 'cyan') . PHP_EOL;
@@ -190,6 +193,8 @@ EOT;
 
         $template = <<<EOT
         <?php
+
+        declare(strict_types=1);
 
         namespace Slenix\Builds;
 
@@ -222,6 +227,8 @@ EOT;
 
         $template = <<<EOT
 <?php
+
+declare(strict_types=1);
 
 namespace App\Controllers;
 

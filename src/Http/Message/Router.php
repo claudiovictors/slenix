@@ -1,14 +1,14 @@
 <?php
 /*
- |--------------------------------------------------------------------------
- | Classe Router
- |--------------------------------------------------------------------------
- |
- | Esta classe gerencia as rotas da aplicação, mapeando URIs para handlers
- | (funções ou métodos de classes) e aplicando middlewares. Suporta diferentes
- | verbos HTTP e agrupamento de rotas com prefixos e middlewares.
- |
- */
+|--------------------------------------------------------------------------
+| Classe Router
+|--------------------------------------------------------------------------
+|
+| Esta classe gerencia as rotas da aplicação, mapeando URIs para handlers
+| (funções ou métodos de classes) e aplicando middlewares. Suporta diferentes
+| verbos HTTP, agrupamento de rotas com prefixos e middlewares, e nomeação de rotas.
+|
+*/
 declare(strict_types=1);
 
 namespace Slenix\Http\Message;
@@ -31,16 +31,30 @@ class Router
     private static array $groupMiddlewares = [];
 
     /**
+     * Define o nome de uma rota com base no seu índice.
+     *
+     * @param int $routeIndex O índice da rota no array $routes.
+     * @param string $name O nome da rota.
+     * @return void
+     */
+    public static function setRouteName(int $routeIndex, string $name): void
+    {
+        if (isset(self::$routes[$routeIndex])) {
+            self::$routes[$routeIndex]['name'] = $name;
+        }
+    }
+
+    /**
      * Define uma rota para o método HTTP GET.
      *
      * @param string $path_uri A URI da rota.
      * @param callable|array $handle A função ou array [classe, método] a ser executado.
      * @param array $middleware Um array de classes de middlewares a serem aplicadas.
-     * @return void
+     * @return Route
      */
-    public static function get(string $path_uri, callable|array $handle, array $middleware = []): void
+    public static function get(string $path_uri, callable|array $handle, array $middleware = []): Route
     {
-        self::add('GET', $path_uri, $handle, $middleware);
+        return self::add('GET', $path_uri, $handle, $middleware);
     }
 
     /**
@@ -49,11 +63,11 @@ class Router
      * @param string $path_uri A URI da rota.
      * @param callable|array $handle A função ou array [classe, método] a ser executado.
      * @param array $middleware Um array de classes de middlewares a serem aplicadas.
-     * @return void
+     * @return Route
      */
-    public static function post(string $path_uri, callable|array $handle, array $middleware = []): void
+    public static function post(string $path_uri, callable|array $handle, array $middleware = []): Route
     {
-        self::add('POST', $path_uri, $handle, $middleware);
+        return self::add('POST', $path_uri, $handle, $middleware);
     }
 
     /**
@@ -62,11 +76,11 @@ class Router
      * @param string $path_uri A URI da rota.
      * @param callable|array $handle A função ou array [classe, método] a ser executado.
      * @param array $middleware Um array de classes de middlewares a serem aplicadas.
-     * @return void
+     * @return Route
      */
-    public static function put(string $path_uri, callable|array $handle, array $middleware = []): void
+    public static function put(string $path_uri, callable|array $handle, array $middleware = []): Route
     {
-        self::add('PUT', $path_uri, $handle, $middleware);
+        return self::add('PUT', $path_uri, $handle, $middleware);
     }
 
     /**
@@ -75,11 +89,11 @@ class Router
      * @param string $path_uri A URI da rota.
      * @param callable|array $handle A função ou array [classe, método] a ser executado.
      * @param array $middleware Um array de classes de middlewares a serem aplicadas.
-     * @return void
+     * @return Route
      */
-    public static function patch(string $path_uri, callable|array $handle, array $middleware = []): void
+    public static function patch(string $path_uri, callable|array $handle, array $middleware = []): Route
     {
-        self::add('PATCH', $path_uri, $handle, $middleware);
+        return self::add('PATCH', $path_uri, $handle, $middleware);
     }
 
     /**
@@ -88,11 +102,11 @@ class Router
      * @param string $path_uri A URI da rota.
      * @param callable|array $handle A função ou array [classe, método] a ser executado.
      * @param array $middleware Um array de classes de middlewares a serem aplicadas.
-     * @return void
+     * @return Route
      */
-    public static function delete(string $path_uri, callable|array $handle, array $middleware = []): void
+    public static function delete(string $path_uri, callable|array $handle, array $middleware = []): Route
     {
-        self::add('DELETE', $path_uri, $handle, $middleware);
+        return self::add('DELETE', $path_uri, $handle, $middleware);
     }
 
     /**
@@ -101,24 +115,24 @@ class Router
      * @param string $path_uri A URI da rota.
      * @param callable|array $handle A função ou array [classe, método] a ser executado.
      * @param array $middleware Um array de classes de middlewares a serem aplicadas.
-     * @return void
+     * @return Route
      */
-    public static function options(string $path_uri, callable|array $handle, array $middleware = []): void
+    public static function options(string $path_uri, callable|array $handle, array $middleware = []): Route
     {
-        self::add('OPTIONS', $path_uri, $handle, $middleware);
+        return self::add('OPTIONS', $path_uri, $handle, $middleware);
     }
 
     /**
-     * Define uma rota que responde a qualquer método HTTP.
+     * Define uma rota para qualquer método HTTP.
      *
      * @param string $path_uri A URI da rota.
      * @param callable|array $handle A função ou array [classe, método] a ser executado.
      * @param array $middleware Um array de classes de middlewares a serem aplicadas.
-     * @return void
+     * @return Route
      */
-    public static function any(string $path_uri, callable|array $handle, array $middleware = []): void
+    public static function any(string $path_uri, callable|array $handle, array $middleware = []): Route
     {
-        self::add($_SERVER['REQUEST_METHOD'] ?? 'GET', $path_uri, $handle, $middleware);
+        return self::add($_SERVER['REQUEST_METHOD'] ?? 'GET', $path_uri, $handle, $middleware);
     }
 
     /**
@@ -128,13 +142,15 @@ class Router
      * @param string $path_uri A URI da rota.
      * @param callable|array $handle A função ou array [classe, método] a ser executado.
      * @param array $middleware Um array de classes de middlewares a serem aplicadas.
-     * @return void
+     * @return Route
      */
-    public static function match(array $methods, string $path_uri, callable|array $handle, array $middleware = []): void
+    public static function match(array $methods, string $path_uri, callable|array $handle, array $middleware = []): Route
     {
+        $lastRoute = null;
         foreach ($methods as $method) {
-            self::add($method, $path_uri, $handle, $middleware);
+            $lastRoute = self::add($method, $path_uri, $handle, $middleware);
         }
+        return $lastRoute;
     }
 
     /**
@@ -144,18 +160,22 @@ class Router
      * @param string $path_uri A URI da rota.
      * @param callable|array $handle A função ou array [classe, método] a ser executado.
      * @param array $middleware Um array de classes de middlewares a serem aplicadas.
-     * @return void
+     * @return Route
      */
-    private static function add(string $method, string $path_uri, callable|array $handle, array $middleware = []): void
+    private static function add(string $method, string $path_uri, callable|array $handle, array $middleware = []): Route
     {
         $path = !empty(self::$prefix) ? implode('', self::$prefix) . ltrim($path_uri, '/') : $path_uri;
 
-        self::$routes[] = [
+        $routeIndex = array_key_last(self::$routes) !== null ? array_key_last(self::$routes) + 1 : 0;
+        self::$routes[$routeIndex] = [
             'method' => strtoupper($method),
             'pathUri' => $path,
             'handler' => $handle,
-            'middleware' => array_merge(self::$groupMiddlewares, $middleware)
+            'middleware' => array_merge(self::$groupMiddlewares, $middleware),
+            'name' => null, // Inicialmente, a rota não tem nome
         ];
+
+        return new Route($routeIndex);
     }
 
     /**
@@ -181,6 +201,35 @@ class Router
         $handle();
         self::$prefix = $previousPrefix;
         self::$groupMiddlewares = $previousMiddleware;
+    }
+
+    /**
+     * Gera a URL para uma rota com base no seu nome.
+     *
+     * @param string $name O nome da rota.
+     * @param array $params Parâmetros para substituir na URL.
+     * @return string|null A URL gerada ou null se a rota não for encontrada.
+     * @throws \Exception Se parâmetros obrigatórios estiverem faltando.
+     */
+    public static function route(string $name, array $params = []): ?string
+    {
+        foreach (self::$routes as $route) {
+            if (isset($route['name']) && $route['name'] === $name) {
+                $url = $route['pathUri'];
+                $matches = [];
+                if (preg_match_all('/\{([a-zA-Z0-9_]+)\}/', $url, $matches)) {
+                    $placeholders = $matches[1];
+                    foreach ($placeholders as $placeholder) {
+                        if (!isset($params[$placeholder])) {
+                            throw new \Exception("Parâmetro obrigatório '$placeholder' não fornecido para a rota '$name'.");
+                        }
+                        $url = str_replace('{' . $placeholder . '}', $params[$placeholder], $url);
+                    }
+                }
+                return $url;
+            }
+        }
+        return null;
     }
 
     /**

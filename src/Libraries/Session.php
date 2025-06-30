@@ -7,8 +7,7 @@
 | Esta classe fornece uma interface para gerenciar a sessão do usuário de
 | forma segura. Ela inclui métodos para iniciar, definir, obter, remover
 | e destruir a sessão, além de configurações de segurança para cookies.
-| Funcionalidades adicionais foram incluídas para verificar a existência
-| de chaves na sessão, obter todos os dados da sessão e regenerar o ID.
+| Suporta flash data para armazenar dados temporários (ex.: old input de formulários).
 |
 */
 
@@ -130,5 +129,48 @@ class Session
         }
 
         session_destroy();
+    }
+
+    /**
+     * Armazena dados na sessão como flash data (disponível apenas na próxima requisição).
+     *
+     * @param string $key A chave para armazenar o flash data.
+     * @param mixed $value O valor a ser armazenado.
+     * @return void
+     */
+    public static function flash(string $key, mixed $value): void
+    {
+        self::start();
+        $_SESSION['_flash'][$key] = $value;
+    }
+
+    /**
+     * Obtém um valor de flash data e o remove da sessão.
+     *
+     * @param string $key A chave do flash data a ser recuperado.
+     * @param mixed $default O valor padrão a ser retornado caso a chave não exista.
+     * @return mixed O valor do flash data ou o valor padrão.
+     */
+    public static function getFlash(string $key, mixed $default = null): mixed
+    {
+        self::start();
+        $value = $_SESSION['_flash'][$key] ?? $default;
+        unset($_SESSION['_flash'][$key]);
+        if (empty($_SESSION['_flash'])) {
+            unset($_SESSION['_flash']);
+        }
+        return $value;
+    }
+
+    /**
+     * Verifica se uma chave de flash data existe na sessão.
+     *
+     * @param string $key A chave a ser verificada.
+     * @return bool True se a chave de flash data existir, false caso contrário.
+     */
+    public static function hasFlash(string $key): bool
+    {
+        self::start();
+        return isset($_SESSION['_flash'][$key]);
     }
 }

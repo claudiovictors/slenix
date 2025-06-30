@@ -8,6 +8,7 @@
 | inclusão de templates e diretivas como @if, @foreach e @csrf.
 |
 */
+
 declare(strict_types=1);
 
 namespace Slenix\Libraries;
@@ -67,7 +68,7 @@ class Template
      */
     public function __construct(string $template, array $data = [])
     {
-        $this->viewpath = __DIR__ . '/../../views/' . str_replace('.', '/', $template) . '.php';
+        $this->viewpath = __DIR__ . '/../../views/' . str_replace('.', '/', $template) . '.luna.php';
         $this->data = array_merge(self::$globalData, $data);
     }
 
@@ -162,7 +163,13 @@ class Template
     private function compile(string $content): string
     {
         $patterns = [
-            '/\{\{\s*(.+?)\s*\}\}/' => '<?php echo htmlspecialchars($1, ENT_QUOTES, \'UTF-8\'); ?>',
+            '/\{\{\s*(.+?)\s*\}\}/' => function ($matches) {
+                $expression = trim($matches[1]);
+                if (preg_match('/^[a-zA-Z0-9\s,._-]+$/i', $expression) && !preg_match('/^\$|[()=+\-*\/<>]|\bfunction\b/i', $expression)) {
+                    return '<?php echo htmlspecialchars(\'' . addslashes($expression) . '\', ENT_QUOTES, \'UTF-8\'); ?>';
+                }
+                return '<?php echo htmlspecialchars(' . $expression . ', ENT_QUOTES, \'UTF-8\'); ?>';
+            },
             '/\{\!\!\s*(.+?)\s*\!\!\}/' => '<?php echo $1; ?>',
             '/@if\s*\(((?:[^()]*|\([^()]*\))*)\)/' => '<?php if($1): ?>',
             '/@elseif\s*\(((?:[^()]*|\([^()]*\))*)\)/' => '<?php elseif($1): ?>',
@@ -178,13 +185,21 @@ class Template
             '/@yield\s*\(\s*[\'"]?(.*?)[\'"]?(?:\s*,\s*[\'"]?(.*?)[\'"]?)?\s*\)/' => '<?php echo $this->renderYield(\'$1\', \'$2\'); ?>',
             '/@for\s*\(((?:[^()]*|\([^()]*\))*)\)/' => '<?php for($1): ?>',
             '/@endfor/' => '<?php endfor; ?>',
-            '/@while\s*\(((?:[^()]*|\([^()]*\))*)\)/' => '<?php while($1): ?>',
+            '/@while\s*\(((?:[^()]*|\[^()]*\))*)\)/' => '<?php while($1): ?>',
             '/@endwhile/' => '<?php endwhile; ?>',
             '/@csrf/' => '<?php $csrf = \Slenix\Http\Auth\Csrf::generateToken(); ?><input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, \'UTF-8\') ?>"><meta name="csrf-token" content="<?= htmlspecialchars($csrf, ENT_QUOTES, \'UTF-8\') ?>">',
-            '/@continue(\s*\(((?:[^()]*|\([^()]*\))*)\))?/' => '<?php if$1 continue; ?>',
-            '/@break(\s*\(((?:[^()]*|\([^()]*\))*)\))?/' => '<?php if$1 break; ?>',
+            '/@continue(\s*\(((?:[^()]*|\[^()]*\))*)\))?/' => '<?php if$1 continue; ?>',
+            '/@break(\s*\(((?:[^()]*|\[^()]*\))*)\))?/' => '<?php if$1 break; ?>',
         ];
 
-        return preg_replace(array_keys($patterns), array_values($patterns), $content);
+        foreach ($patterns as $pattern => $replacement) {
+            if (is_callable($replacement)) {
+                $content = preg_replace_callback($pattern, $replacement, $content);
+            } else {
+                $content = preg_replace($pattern, $replacement, $content);
+            }
+        }
+
+        return $content;
     }
 }

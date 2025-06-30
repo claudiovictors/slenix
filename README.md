@@ -18,7 +18,7 @@ O **Slenix Framework** é um micro framework PHP projetado para desenvolvedores 
 ### Recursos Principais
 - **Roteamento Simples**: Defina rotas com suporte a parâmetros dinâmicos e grupos.
 - **ORM Integrado**: Gerencie seu banco de dados com facilidade usando modelos intuitivos.
-- **Templates**: Crie views dinâmicas com uma sintaxe limpa e poderosa.
+- **Template Luna**: Crie views dinâmicas com uma sintaxe limpa e poderosa.
 - **Celestial CLI**: Crie Models, Controllers e inicie o servidor com um único comando.
 - **Leve e Rápido**: Sem dependências pesadas, ideal para projetos de pequeno a médio porte.
 - **Upload de Arquivos** Faça ulploads de arquivos com slenix de forma simples e fácil.
@@ -73,7 +73,7 @@ use Slenix\Http\Message\Router;
 
 Router::get('/', function($request, $response, $param){
     $response->write('Hello, Slenix');
-});
+})->name('page.home');
 
 Router::get('/user/{id}', function ($request, $response, $params) {
     $response->json(['id' => $params['id'], 'name' => 'Slenix']);
@@ -116,7 +116,7 @@ Router::get('/profile/{user_id}', function($request, $response, $param){
 
 }, [AuthMiddleware::class]);
 ```
-## Usando o Motor de Templates
+## Usando o Luna Templates
 
 O Slenix suporta um motor de templates com sintaxe inspirada no Blade. Crie views dinâmicas com facilidade.
 
@@ -135,7 +135,7 @@ Router::get('/users/{user_id}', function ($req, $res, $args) {
 });
 ```
 
-Exemplo de View (`views/pages/user.php`):
+Exemplo de View (`views/pages/user.luna.php`):
 
 ```php
     

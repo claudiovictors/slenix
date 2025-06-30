@@ -1,8 +1,10 @@
 <!DOCTYPE html>
 <html lang="pt-AO">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="/logo.svg" type="image/x-icon">
     <title>Welcome Slenix</title>
     <style>
         * {
@@ -53,9 +55,17 @@
             border: none;
         }
 
-        .btn-close { background: #ff5f57; }
-        .btn-minimize { background: #ffbd2e; }
-        .btn-maximize { background: #28ca42; }
+        .btn-close {
+            background: #ff5f57;
+        }
+
+        .btn-minimize {
+            background: #ffbd2e;
+        }
+
+        .btn-maximize {
+            background: #28ca42;
+        }
 
         .terminal-title {
             color: #8b949e;
@@ -147,8 +157,16 @@
         }
 
         @keyframes blink {
-            0%, 50% { opacity: 1; }
-            51%, 100% { opacity: 0; }
+
+            0%,
+            50% {
+                opacity: 1;
+            }
+
+            51%,
+            100% {
+                opacity: 0;
+            }
         }
 
         .version-badge {
@@ -165,27 +183,28 @@
                 width: 95%;
                 margin: 20px;
             }
-            
+
             .terminal-body {
                 padding: 16px;
             }
-            
+
             .logo-art {
                 font-size: 12px;
             }
-            
+
             .command-item {
                 flex-direction: column;
                 align-items: flex-start;
                 gap: 4px;
             }
-            
+
             .command-name {
                 min-width: auto;
             }
         }
     </style>
 </head>
+
 <body>
     <div class="terminal">
         <div class="terminal-header">
@@ -196,47 +215,49 @@
             </div>
             <div class="terminal-title">slenix — framework info</div>
         </div>
-        
+
         <div class="terminal-body">
             <div class="prompt-line">
                 <span class="prompt">$</span>
                 <span class="command">welcome {{ env('APP_NAME') }}</span>
             </div>
-            
-            <div class="logo-art">
-   _____ _            _     
-  / ____| |          (_)    
- | (___ | | ___ _ __  ___  __
-  \___ \| |/ _ \ '_ \| \ \/ /
-  ____) | |  __/ | | | |>  < 
- |_____/|_|\___|_| |_|_/_/\_\</div>
-            
-            <div class="info-section">
-                <div class="info-line">
-                    <span class="info-label">Framework:</span>
-                    <span class="info-value">Slenix MVC <span class="version-badge">v{{ env('APP_VERSION') }}</span></span>
-                </div>
-                <div class="info-line">
-                    <span class="info-label">Language:</span>
-                    <span class="info-value">PHP 7.4+</span>
-                </div>
-                <div class="info-line">
-                    <span class="info-label">Architecture: </span>
-                    <span class="info-value">Model-View-Controller</span>
-                </div>
-                <div class="info-line">
-                    <span class="info-label">Status: </span>
-                    <span class="status-indicator">●</span>
-                    <span class="info-value">Ready for development</span>
-                </div>
-            </div>
-            
-            <div class="prompt-line" style="margin-top: 24px;">
-                <span class="prompt">$</span>
-                <span class="command"></span>
-                <span class="cursor"></span>
+
+<div class="logo-art">
+ _____ _            _     
+/ ____| |          (_)    
+| (___| | ___ _ __  ___  __
+\___ \| |/ _ \ '_ \| \ \/ /
+____) | |  __/ | | | |>  < 
+|_____/|_|\___|_| |_|_/_/\_\</div>
+
+                    <div class="info-section">
+                        <div class="info-line">
+                            <span class="info-label">Framework:</span>
+                            <span class="info-value">Slenix MVC <span class="version-badge">v{{ env('APP_VERSION')
+                                    }}</span></span>
+                        </div>
+                        <div class="info-line">
+                            <span class="info-label">Language:</span>
+                            <span class="info-value">PHP 7.4+</span>
+                        </div>
+                        <div class="info-line">
+                            <span class="info-label">Architecture: </span>
+                            <span class="info-value">Model-View-Controller</span>
+                        </div>
+                        <div class="info-line">
+                            <span class="info-label">Status: </span>
+                            <span class="status-indicator">●</span>
+                            <span class="info-value">Ready for development</span>
+                        </div>
+                    </div>
+
+                    <div class="prompt-line" style="margin-top: 24px;">
+                        <span class="prompt">$</span>
+                        <span class="command"></span>
+                        <span class="cursor"></span>
+                    </div>
             </div>
         </div>
-    </div>
 </body>
+
 </html>

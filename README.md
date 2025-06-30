@@ -12,8 +12,6 @@
   <img src="https://img.shields.io/badge/PHP-8.0%2B-blue" alt="PHP Version">
 </p>
 
-<<<<<<< HEAD
-=======
 ## Sobre o Slenix
 
 O **Slenix Framework** é um micro framework PHP projetado para desenvolvedores que buscam simplicidade e desempenho. Com uma arquitetura MVC (Model-View-Controller), ele oferece ferramentas essenciais como roteamento dinâmico, ORM integrado, motor de templates personalizado e uma CLI chamada **Celestial** para agilizar o desenvolvimento de aplicações web e APIs.
@@ -25,7 +23,6 @@ O **Slenix Framework** é um micro framework PHP projetado para desenvolvedores 
 - **Celestial CLI**: Crie Models, Controllers e inicie o servidor com um único comando.
 - **Leve e Rápido**: Sem dependências pesadas, ideal para projetos de pequeno a médio porte.
 - **Upload de Arquivos** Faça ulploads de arquivos com slenix de forma simples e fácil.
->>>>>>> c99407a (Melhorando o sistema de Template, Routes e Session)
 ---
 
 ## 📦 Sobre o Slenix
@@ -136,14 +133,9 @@ Router::get('/profile/{user_id}', function($request, $response, $param){
     return $response->json(['user' => $user]);
 }, [AuthMiddleware::class]);
 ```
-<<<<<<< HEAD
-=======
-## Usando o Luna Templates
->>>>>>> c99407a (Melhorando o sistema de Template, Routes e Session)
 
----
+## 🖼 Usando o Luna Templates
 
-## 🖼 Motor de Templates
 
 Crie views com sintaxe semelhante ao Blade:
 
@@ -159,11 +151,7 @@ Router::get('/users/{user_id}', function ($req, $res, $args) {
 });
 ```
 
-<<<<<<< HEAD
-**Exemplo de View (`views/pages/user.php`):**
-=======
 Exemplo de View (`views/pages/user.luna.php`):
->>>>>>> c99407a (Melhorando o sistema de Template, Routes e Session)
 
 ```php
 <h1>Perfil do Usuário</h1>

@@ -12,19 +12,6 @@
   <img src="https://img.shields.io/badge/PHP-8.0%2B-blue" alt="PHP Version">
 </p>
 
-## Sobre o Slenix
-
-O **Slenix Framework** é um micro framework PHP projetado para desenvolvedores que buscam simplicidade e desempenho. Com uma arquitetura MVC (Model-View-Controller), ele oferece ferramentas essenciais como roteamento dinâmico, ORM integrado, motor de templates personalizado e uma CLI chamada **Celestial** para agilizar o desenvolvimento de aplicações web e APIs.
-
-### Recursos Principais
-- **Roteamento Simples**: Defina rotas com suporte a parâmetros dinâmicos e grupos.
-- **ORM Integrado**: Gerencie seu banco de dados com facilidade usando modelos intuitivos.
-- **Template Luna**: Crie views dinâmicas com uma sintaxe limpa e poderosa.
-- **Celestial CLI**: Crie Models, Controllers e inicie o servidor com um único comando.
-- **Leve e Rápido**: Sem dependências pesadas, ideal para projetos de pequeno a médio porte.
-- **Upload de Arquivos** Faça ulploads de arquivos com slenix de forma simples e fácil.
----
-
 ## 📦 Sobre o Slenix
 
 O **Slenix Framework** é um microframework PHP projetado para desenvolvedores que buscam simplicidade, desempenho e organização. Baseado na arquitetura MVC (Model-View-Controller), ele fornece recursos essenciais como roteamento dinâmico, ORM integrado, motor de templates, e uma poderosa CLI chamada **Celestial**.

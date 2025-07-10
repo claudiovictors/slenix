@@ -37,6 +37,7 @@ class AppFactory
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
+    class_alias(\Slenix\Libraries\Session::class, 'Session');
         // Carrega as variáveis de ambiente
         try {
             EnvLoad::load(__DIR__ . '/../../.env');

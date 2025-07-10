@@ -135,3 +135,14 @@ Template::share('route', function (string $name, array $params = []): ?string {
 Template::share('old', function (string $key, mixed $default = null, string $flashKey = '_old_input'): mixed {
     return Session::getFlash($flashKey . '.' . $key, $default);
 });
+
+Template::share('Session', [
+    'has' => function (string $key): bool { return Session::has($key); },
+    'get' => function (string $key, mixed $default = null): mixed { return Session::get($key, $default); },
+    'set' => function (string $key, mixed $value): void { Session::set($key, $value); },
+    'flash' => function (string $key, mixed $value): void { Session::flash($key, $value); },
+    'getFlash' => function (string $key, mixed $default = null): mixed { return Session::getFlash($key, $default); },
+    'hasFlash' => function (string $key): bool { return Session::hasFlash($key); },
+    'remove' => function (string $key): void { Session::remove($key); },
+    'destroy' => function (): void { Session::destroy(); }
+]);

@@ -1,0 +1,82 @@
+#!/usr/bin/env php
+<?php
+
+/*
+|--------------------------------------------------------------------------
+| SLENIX CLI - Ferramenta de Desenvolvimento
+|--------------------------------------------------------------------------
+|
+| Esta classe final representa a interface de linha de comando (CLI) do
+| framework Slenix. Ela fornece uma série de comandos úteis para auxiliar
+| no desenvolvimento, como a criação de models e controllers, e o
+| gerenciamento do servidor de desenvolvimento local.
+|
+*/
+
+declare(strict_types=1);
+
+// Carrega o autoloader do Composer
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Slenix\Commands\Command;
+use Slenix\Commands\MakeCommand;
+use Slenix\Commands\ServeCommand;
+
+final class SlenixCli
+{
+    private array $args;
+
+    public function __construct(array $args)
+    {
+        $this->args = $args;
+        $this->run();
+    }
+
+    private function run(): void
+    {
+        if (count($this->args) < 2) {
+            Command::help();
+            exit(1);
+        }
+
+        $command = $this->args[1];
+
+        try {
+            switch ($command) {
+                case 'make:model':
+                    (new MakeCommand($this->args))->makeModel();
+                    break;
+                case 'make:controller':
+                    (new MakeCommand($this->args))->makeController();
+                    break;
+                case 'serve':
+                    (new ServeCommand($this->args))->execute();
+                    break;
+                case 'help':
+                case '--help':
+                case '-h':
+                    Command::help();
+                    break;
+                case 'version':
+                case '--version':
+                case '-v':
+                    Command::version();
+                    break;
+                default:
+                    Command::error("Comando desconhecido: {$command}");
+                    Command::help();
+                    exit(1);
+            }
+        } catch (Exception $e) {
+            Command::error("Erro: {$e->getMessage()}");
+            exit(1);
+        }
+    }
+}
+
+try {
+    new SlenixCli($argv);
+} catch (Throwable $e) {
+    Command::error("Erro fatal: {$e->getMessage()}");
+    exit(1);
+}

@@ -1,0 +1,97 @@
+<IfModule mod_rewrite.c>
+    # Ativa o módulo de rewrite
+    RewriteEngine On
+    
+    # Força HTTPS (descomente se quiser)
+    # RewriteCond %{HTTPS} off
+    # RewriteRule ^(.*)$ https://%{HTTP_HOST}/$1 [L,R=301]
+    
+    # Remove trailing slash
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_URI} (.+)/$
+    RewriteRule ^ %1 [L,R=301]
+    
+    # Redireciona tudo para index.php se não for arquivo/diretório real
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.php [QSA,L]
+</IfModule>
+
+# Bloqueia acesso a arquivos sensíveis
+<FilesMatch "\.(env|gitignore|gitattributes|md|log|json|lock)$">
+    Require all denied
+</FilesMatch>
+
+# Bloqueia acesso ao diretório vendor
+<IfModule mod_rewrite.c>
+    RewriteRule ^vendor/ - [F,L]
+</IfModule>
+
+# Headers de segurança
+<IfModule mod_headers.c>
+    # Previne XSS
+    Header set X-XSS-Protection "1; mode=block"
+    
+    # Previne clickjacking
+    Header set X-Frame-Options "SAMEORIGIN"
+    
+    # Previne MIME sniffing
+    Header set X-Content-Type-Options "nosniff"
+    
+    # Referrer policy
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+    
+    # Remove server signature
+    Header unset Server
+    Header unset X-Powered-By
+</IfModule>
+
+# Compressão Gzip
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/plain
+    AddOutputFilterByType DEFLATE text/html
+    AddOutputFilterByType DEFLATE text/xml
+    AddOutputFilterByType DEFLATE text/css
+    AddOutputFilterByType DEFLATE text/javascript
+    AddOutputFilterByType DEFLATE application/xml
+    AddOutputFilterByType DEFLATE application/xhtml+xml
+    AddOutputFilterByType DEFLATE application/rss+xml
+    AddOutputFilterByType DEFLATE application/javascript
+    AddOutputFilterByType DEFLATE application/x-javascript
+    AddOutputFilterByType DEFLATE application/json
+</IfModule>
+
+# Cache de arquivos estáticos
+<IfModule mod_expires.c>
+    ExpiresActive On
+    
+    # Images
+    ExpiresByType image/jpeg "access plus 1 year"
+    ExpiresByType image/gif "access plus 1 year"
+    ExpiresByType image/png "access plus 1 year"
+    ExpiresByType image/webp "access plus 1 year"
+    ExpiresByType image/svg+xml "access plus 1 year"
+    ExpiresByType image/x-icon "access plus 1 year"
+    
+    # CSS e JavaScript
+    ExpiresByType text/css "access plus 1 month"
+    ExpiresByType text/javascript "access plus 1 month"
+    ExpiresByType application/javascript "access plus 1 month"
+    
+    # Fonts
+    ExpiresByType font/ttf "access plus 1 year"
+    ExpiresByType font/otf "access plus 1 year"
+    ExpiresByType font/woff "access plus 1 year"
+    ExpiresByType font/woff2 "access plus 1 year"
+    ExpiresByType application/font-woff "access plus 1 year"
+    
+    # Default
+    ExpiresDefault "access plus 2 days"
+</IfModule>
+
+# Desabilita listagem de diretórios
+Options -Indexes
+
+# Configura página de erro customizada (opcional)
+# ErrorDocument 404 /index.php
+# ErrorDocument 500 /index.php

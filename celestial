@@ -1,0 +1,168 @@
+#!/usr/bin/env php
+<?php
+
+/*
+|--------------------------------------------------------------------------
+| CELESTIAL CLI - Ferramenta de Desenvolvimento
+|--------------------------------------------------------------------------
+|
+| Esta classe final representa a interface de linha de comando (CLI) do
+| framework Slenix. Ela fornece uma série de comandos úteis para auxiliar
+| no desenvolvimento, como a criação de models, controllers, middlewares
+| e o gerenciamento do servidor de desenvolvimento local.
+|
+*/
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+
+use Slenix\Http\Routing\Router;
+use Slenix\Core\Console\Command;
+use Slenix\Core\Console\MakeCommand;
+use Slenix\Core\Console\ServeCommand;
+use Slenix\Supports\Template\Luna;
+
+final class Celestial
+{
+    private array $args;
+
+    public function __construct(array $args)
+    {
+        $this->args = $args;
+        $this->run();
+    }
+
+    private function run(): void
+    {
+        if (count($this->args) < 2) {
+            Command::help();
+            exit(1);
+        }
+
+        $command = $this->args[1];
+
+        try {
+            switch ($command) {
+                case 'key:generate':
+                    MakeCommand::generateKey();
+                    break;
+                case 'make:model':
+                    (new MakeCommand($this->args))->makeModel();
+                    break;
+                case 'make:controller':
+                    (new MakeCommand($this->args))->makeController();
+                    break;
+                case 'make:middleware':
+                    (new MakeCommand($this->args))->makeMiddleware();
+                    break;
+                case 'route:list':
+                    $this->listRoutes();
+                    break;
+                case 'serve':
+                    (new ServeCommand($this->args))->execute();
+                    break;
+                case 'view':
+                    Luna::clearCache();
+                    break;
+                case 'help':
+                case '--help':
+                case '-h':
+                    Command::help();
+                    break;
+                case 'version':
+                case '--version':
+                case '-v':
+                    Command::version();
+                    break;
+                default:
+                    Command::error("Comando desconhecido: {$command}");
+                    Command::help();
+                    exit(1);
+            }
+        } catch (\Exception $e) {
+            Command::error("Erro: {$e->getMessage()}");
+            exit(1);
+        }
+    }
+
+    /**
+     * Lista todas as rotas registradas.
+     */
+    private function listRoutes(): void
+    {
+        Command::info('Carregando rotas...');
+
+        // Incluir arquivo de rotas se existir
+        $routesFile = __DIR__ . '/routes/web.php';
+        if (file_exists($routesFile)) {
+            require_once $routesFile;
+        }
+
+        $routes = Router::getRoutes();
+
+        if (empty($routes)) {
+            Command::warning('Nenhuma rota encontrada.');
+            return;
+        }
+
+        echo PHP_EOL;
+        Command::info('Rotas registradas:');
+        echo str_repeat('-', 80) . PHP_EOL;
+        printf("%-8s %-30s %-25s %-15s%s", 'METHOD', 'URI', 'HANDLER', 'NAME', PHP_EOL);
+        echo str_repeat('-', 80) . PHP_EOL;
+
+        foreach ($routes as $route) {
+            $handler = $this->formatHandler($route['handler']);
+            $name = $route['name'] ?? '';
+            $middlewares = !empty($route['middleware']) ? ' [' . implode(', ', $route['middleware']) . ']' : '';
+
+            printf(
+                "%-8s %-30s %-25s %-15s%s",
+                $route['method'],
+                $route['pathUri'],
+                $handler,
+                $name,
+                PHP_EOL
+            );
+
+            if ($middlewares) {
+                printf(
+                    "%-8s %-30s %-25s %-15s%s",
+                    '',
+                    '',
+                    $middlewares,
+                    '',
+                    PHP_EOL
+                );
+            }
+        }
+
+        echo str_repeat('-', 80) . PHP_EOL;
+        Command::success('Total: ' . count($routes) . ' rotas');
+    }
+
+    /**
+     * Formata o handler para exibição.
+     */
+    private function formatHandler($handler): string
+    {
+        if (is_callable($handler) && !is_array($handler)) {
+            return 'Closure';
+        }
+
+        if (is_array($handler)) {
+            return $handler[0] . '@' . $handler[1];
+        }
+
+        return 'Unknown';
+    }
+}
+
+try {
+    new Celestial($argv);
+} catch (\Throwable $e) {
+    Command::error("Erro fatal: {$e->getMessage()}");
+    exit(1);
+}

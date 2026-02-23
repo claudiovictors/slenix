@@ -1,0 +1,25 @@
+<svg class="wordmark-gem" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="wg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%"  stop-color="#ff6b6f"/>
+            <stop offset="45%" stop-color="#e5484d"/>
+            <stop offset="100%" stop-color="#7d1a1d"/>
+          </linearGradient>
+          <linearGradient id="wt" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%"  stop-color="#ffadaf" stop-opacity=".9"/>
+            <stop offset="100%" stop-color="#e5484d" stop-opacity="0"/>
+          </linearGradient>
+          <filter id="wglow">
+            <feGaussianBlur stdDeviation="1.5" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <g transform="translate(28,28)" filter="url(#wglow)">
+          <polygon points="0,-24 17,-17 24,0 17,17 0,24 -17,17 -24,0 -17,-17" fill="url(#wg)"/>
+          <polygon points="0,-24 -17,-17 0,-6 17,-17" fill="url(#wt)" opacity=".85"/>
+          <polygon points="17,-17 24,0 9,0 0,-6"      fill="#c0282d" opacity=".65"/>
+          <polygon points="0,-6 9,0 0,6 -9,0"         fill="#ff6b6f" opacity=".45"/>
+          <polygon points="0,6 9,0 17,17 0,24 -17,17 -24,0 -9,0" fill="#7d1a1d" opacity=".22"/>
+          <line x1="-8" y1="-19" x2="3" y2="-10" stroke="#fff" stroke-width="1.2" stroke-opacity=".22" stroke-linecap="round"/>
+        </g>
+      </svg>

@@ -514,8 +514,6 @@ class HttpClient
         $error = curl_error($ch);
         $errno = curl_errno($ch);
         
-        curl_close($ch);
-
         if ($responseContent === false) {
             throw new RuntimeException("cURL error ($errno): $error");
         }

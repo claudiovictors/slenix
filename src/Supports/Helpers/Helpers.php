@@ -22,14 +22,14 @@ use Slenix\Supports\Security\Session;
 // =============================================================================
 
 defined('SLENIX_START') or define('SLENIX_START', microtime(true));
-defined('ROOT_PATH')    or define('ROOT_PATH',    dirname(__DIR__, 3));
-defined('APP_PATH')     or define('APP_PATH',     ROOT_PATH . '/app');
-defined('PUBLIC_PATH')  or define('PUBLIC_PATH',  ROOT_PATH . '/public');
-defined('SRC_PATH')     or define('SRC_PATH',     ROOT_PATH . '/src');
-defined('ROUTES_PATH')  or define('ROUTES_PATH',  ROOT_PATH . '/routes');
-defined('VIEWS_PATH')   or define('VIEWS_PATH',   ROOT_PATH . '/views');
+defined('ROOT_PATH') or define('ROOT_PATH', dirname(__DIR__, 3));
+defined('APP_PATH') or define('APP_PATH', ROOT_PATH . '/app');
+defined('PUBLIC_PATH') or define('PUBLIC_PATH', ROOT_PATH . '/public');
+defined('SRC_PATH') or define('SRC_PATH', ROOT_PATH . '/src');
+defined('ROUTES_PATH') or define('ROUTES_PATH', ROOT_PATH . '/routes');
+defined('VIEWS_PATH') or define('VIEWS_PATH', ROOT_PATH . '/views');
 defined('STORAGE_PATH') or define('STORAGE_PATH', ROOT_PATH . '/storage');
-defined('CONFIG_PATH')  or define('CONFIG_PATH',  ROOT_PATH . '/src/Config');
+defined('CONFIG_PATH') or define('CONFIG_PATH', ROOT_PATH . '/src/Config');
 
 // =============================================================================
 // AMBIENTE
@@ -49,11 +49,11 @@ if (!function_exists('env')) {
         }
 
         return match (strtolower((string) $value)) {
-            'true',  '(true)'  => true,
+            'true', '(true)' => true,
             'false', '(false)' => false,
-            'null',  '(null)'  => null,
+            'null', '(null)' => null,
             'empty', '(empty)' => '',
-            default            => $value,
+            default => $value,
         };
     }
 }
@@ -177,9 +177,9 @@ if (!function_exists('redirect')) {
  */
 class RedirectResponse
 {
-    private int     $status;
-    private ?string $url     = null;
-    private array   $flashData = [];
+    private int $status;
+    private ?string $url = null;
+    private array $flashData = [];
 
     public function __construct(int $status = 302)
     {
@@ -517,7 +517,7 @@ class SessionManager
     /** Empurra valor para um array na sessão */
     public function push(string $key, mixed $value): static
     {
-        $array   = (array) Session::get($key, []);
+        $array = (array) Session::get($key, []);
         $array[] = $value;
         Session::set($key, $array);
         return $this;
@@ -621,7 +621,7 @@ if (!function_exists('url')) {
     {
         $base = rtrim(env('APP_BASE_URL', ''), '/');
         $path = '/' . ltrim($path, '/');
-        $url  = $base . $path;
+        $url = $base . $path;
 
         if (!empty($query)) {
             $url .= '?' . http_build_query($query);
@@ -658,8 +658,8 @@ if (!function_exists('current_url')) {
     function current_url(): string
     {
         $scheme = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http';
-        $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
-        $uri    = $_SERVER['REQUEST_URI'] ?? '/';
+        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $uri = $_SERVER['REQUEST_URI'] ?? '/';
         return "{$scheme}://{$host}{$uri}";
     }
 }
@@ -687,7 +687,7 @@ if (!function_exists('is_active')) {
 
         if (str_ends_with($pattern, '*')) {
             $prefix = rtrim($pattern, '*');
-            $match  = str_starts_with($path, $prefix);
+            $match = str_starts_with($path, $prefix);
         } else {
             $match = ($path === $pattern);
         }
@@ -707,12 +707,18 @@ if (!function_exists('abort')) {
     function abort(int $code = 500, string $message = ''): never
     {
         $texts = [
-            400 => 'Bad Request',       401 => 'Unauthorized',
-            403 => 'Forbidden',         404 => 'Not Found',
-            405 => 'Method Not Allowed',408 => 'Request Timeout',
-            409 => 'Conflict',          422 => 'Unprocessable Entity',
-            429 => 'Too Many Requests', 500 => 'Internal Server Error',
-            502 => 'Bad Gateway',       503 => 'Service Unavailable',
+            400 => 'Bad Request',
+            401 => 'Unauthorized',
+            403 => 'Forbidden',
+            404 => 'Not Found',
+            405 => 'Method Not Allowed',
+            408 => 'Request Timeout',
+            409 => 'Conflict',
+            422 => 'Unprocessable Entity',
+            429 => 'Too Many Requests',
+            500 => 'Internal Server Error',
+            502 => 'Bad Gateway',
+            503 => 'Service Unavailable',
         ];
 
         $msg = $message ?: ($texts[$code] ?? 'Error');
@@ -884,7 +890,7 @@ if (!function_exists('mask')) {
      */
     function mask(string $string, string $char = '*', int $start = 0, ?int $length = null): string
     {
-        $len    = mb_strlen($string);
+        $len = mb_strlen($string);
         $length = $length ?? $len - $start;
         $masked = str_repeat($char, min($length, $len - $start));
         return mb_substr($string, 0, $start) . $masked . mb_substr($string, $start + $length);
@@ -915,7 +921,7 @@ if (!function_exists('array_get')) {
 
         // Dot-notation
         if (is_string($key) && str_contains($key, '.')) {
-            $keys    = explode('.', $key);
+            $keys = explode('.', $key);
             $current = $array;
             foreach ($keys as $k) {
                 if (!is_array($current) || !array_key_exists($k, $current)) {
@@ -936,7 +942,7 @@ if (!function_exists('array_set')) {
      */
     function array_set(array &$array, string $key, mixed $value): void
     {
-        $keys    = explode('.', $key);
+        $keys = explode('.', $key);
         $current = &$array;
         foreach ($keys as $k) {
             if (!isset($current[$k]) || !is_array($current[$k])) {
@@ -1014,14 +1020,38 @@ class Collection
         $this->items = $items;
     }
 
-    public function all(): array           { return $this->items; }
-    public function count(): int           { return count($this->items); }
-    public function isEmpty(): bool        { return empty($this->items); }
-    public function isNotEmpty(): bool     { return !empty($this->items); }
-    public function first(mixed $default = null): mixed { return $this->items[0] ?? $default; }
-    public function last(mixed $default = null): mixed  { return !empty($this->items) ? end($this->items) : $default; }
-    public function toArray(): array       { return $this->items; }
-    public function toJson(): string       { return json_encode($this->items, JSON_UNESCAPED_UNICODE); }
+    public function all(): array
+    {
+        return $this->items;
+    }
+    public function count(): int
+    {
+        return count($this->items);
+    }
+    public function isEmpty(): bool
+    {
+        return empty($this->items);
+    }
+    public function isNotEmpty(): bool
+    {
+        return !empty($this->items);
+    }
+    public function first(mixed $default = null): mixed
+    {
+        return $this->items[0] ?? $default;
+    }
+    public function last(mixed $default = null): mixed
+    {
+        return !empty($this->items) ? end($this->items) : $default;
+    }
+    public function toArray(): array
+    {
+        return $this->items;
+    }
+    public function toJson(): string
+    {
+        return json_encode($this->items, JSON_UNESCAPED_UNICODE);
+    }
 
     public function map(callable $callback): static
     {
@@ -1050,7 +1080,7 @@ class Collection
 
     public function where(string $key, mixed $value): static
     {
-        return $this->filter(fn ($item) => (is_array($item) ? $item[$key] : $item->$key ?? null) === $value);
+        return $this->filter(fn($item) => (is_array($item) ? $item[$key] : $item->$key ?? null) === $value);
     }
 
     public function sortBy(string $key, string $direction = 'asc'): static
@@ -1067,12 +1097,12 @@ class Collection
     public function unique(?string $key = null): static
     {
         if ($key) {
-            $seen  = [];
+            $seen = [];
             $items = [];
             foreach ($this->items as $item) {
                 $v = is_array($item) ? $item[$key] : $item->$key ?? null;
                 if (!in_array($v, $seen, true)) {
-                    $seen[]  = $v;
+                    $seen[] = $v;
                     $items[] = $item;
                 }
             }
@@ -1150,16 +1180,16 @@ class Collection
 
     public function paginate(int $perPage, int $page = 1): array
     {
-        $total  = $this->count();
-        $items  = array_slice($this->items, ($page - 1) * $perPage, $perPage);
+        $total = $this->count();
+        $items = array_slice($this->items, ($page - 1) * $perPage, $perPage);
         return [
-            'data'          => $items,
-            'total'         => $total,
-            'per_page'      => $perPage,
-            'current_page'  => $page,
-            'last_page'     => (int) ceil($total / $perPage),
-            'from'          => (($page - 1) * $perPage) + 1,
-            'to'            => min($page * $perPage, $total),
+            'data' => $items,
+            'total' => $total,
+            'per_page' => $perPage,
+            'current_page' => $page,
+            'last_page' => (int) ceil($total / $perPage),
+            'from' => (($page - 1) * $perPage) + 1,
+            'to' => min($page * $perPage, $total),
         ];
     }
 }
@@ -1210,14 +1240,19 @@ if (!function_exists('human_date')) {
      */
     function human_date(string|\DateTimeInterface $date): string
     {
-        $dt   = is_string($date) ? new \DateTimeImmutable($date) : $date;
+        $dt = is_string($date) ? new \DateTimeImmutable($date) : $date;
         $diff = (new \DateTimeImmutable())->diff($dt);
 
-        if ($diff->y > 0) return "há {$diff->y} " . ($diff->y === 1 ? 'ano' : 'anos');
-        if ($diff->m > 0) return "há {$diff->m} " . ($diff->m === 1 ? 'mês' : 'meses');
-        if ($diff->d > 0) return "há {$diff->d} " . ($diff->d === 1 ? 'dia' : 'dias');
-        if ($diff->h > 0) return "há {$diff->h} " . ($diff->h === 1 ? 'hora' : 'horas');
-        if ($diff->i > 0) return "há {$diff->i} " . ($diff->i === 1 ? 'minuto' : 'minutos');
+        if ($diff->y > 0)
+            return "há {$diff->y} " . ($diff->y === 1 ? 'ano' : 'anos');
+        if ($diff->m > 0)
+            return "há {$diff->m} " . ($diff->m === 1 ? 'mês' : 'meses');
+        if ($diff->d > 0)
+            return "há {$diff->d} " . ($diff->d === 1 ? 'dia' : 'dias');
+        if ($diff->h > 0)
+            return "há {$diff->h} " . ($diff->h === 1 ? 'hora' : 'horas');
+        if ($diff->i > 0)
+            return "há {$diff->i} " . ($diff->i === 1 ? 'minuto' : 'minutos');
         return 'agora mesmo';
     }
 }
@@ -1266,11 +1301,22 @@ if (!function_exists('encrypt')) {
      */
     function encrypt(string $value): string
     {
-        $key  = (string) env('APP_KEY', '');
-        $key  = base64_decode(str_replace('base64:', '', $key)) ?: $key;
-        $iv   = random_bytes(16);
-        $enc  = openssl_encrypt($value, 'AES-256-CBC', $key, 0, $iv);
-        return base64_encode($iv . '::' . $enc);
+        $key = (string) env('APP_KEY', '');
+        $key = base64_decode(str_replace('base64:', '', $key)) ?: $key;
+
+        $iv = random_bytes(12);
+        $tag = '';
+
+        $ciphertext = openssl_encrypt(
+            $value,
+            'aes-256-gcm',
+            $key,
+            OPENSSL_RAW_DATA,
+            $iv,
+            $tag
+        );
+
+        return base64_encode($iv . '::' . $tag . '::' . $ciphertext);
     }
 }
 
@@ -1280,11 +1326,27 @@ if (!function_exists('decrypt')) {
      */
     function decrypt(string $encrypted): string|false
     {
-        $key  = (string) env('APP_KEY', '');
-        $key  = base64_decode(str_replace('base64:', '', $key)) ?: $key;
+        $key = (string) env('APP_KEY', '');
+        $key = base64_decode(str_replace('base64:', '', $key)) ?: $key;
+
         $data = base64_decode($encrypted);
-        [$iv, $enc] = explode('::', $data, 2);
-        return openssl_decrypt($enc, 'AES-256-CBC', $key, 0, $iv);
+        if (!$data)
+            return false;
+
+        $parts = explode('::', $data, 3);
+        if (count($parts) !== 3)
+            return false;
+
+        [$iv, $tag, $ciphertext] = $parts;
+
+        return openssl_decrypt(
+            $ciphertext,
+            'aes-256-gcm',
+            $key,
+            OPENSSL_RAW_DATA,
+            $iv,
+            $tag
+        );
     }
 }
 
@@ -1350,25 +1412,25 @@ if (!function_exists('benchmark')) {
 // =============================================================================
 
 // Disponibiliza helpers diretamente nos templates Luna
-Luna::share('route', fn (string $name, array $params = []): ?string => Router::route($name, $params));
-Luna::share('csrf_token', fn (): string => csrf_token());
-Luna::share('csrf_field', fn (): string => csrf_field());
-Luna::share('old', fn (string $key, mixed $default = ''): mixed => old($key, $default));
-Luna::share('errors', fn (?string $field = null): mixed => errors($field));
-Luna::share('has_error', fn (string $field): bool => has_error($field));
-Luna::share('flash', fn (): FlashMessage => flash());
-Luna::share('is_active', fn (string $pattern, string $a = 'active', string $i = ''): string => is_active($pattern, $a, $i));
-Luna::share('asset', fn (string $path): string => asset($path));
-Luna::share('url', fn (string $path = '', array $q = []): string => url($path, $q));
+Luna::share('route', fn(string $name, array $params = []): ?string => Router::route($name, $params));
+Luna::share('csrf_token', fn(): string => csrf_token());
+Luna::share('csrf_field', fn(): string => csrf_field());
+Luna::share('old', fn(string $key, mixed $default = ''): mixed => old($key, $default));
+Luna::share('errors', fn(?string $field = null): mixed => errors($field));
+Luna::share('has_error', fn(string $field): bool => has_error($field));
+Luna::share('flash', fn(): FlashMessage => flash());
+Luna::share('is_active', fn(string $pattern, string $a = 'active', string $i = ''): string => is_active($pattern, $a, $i));
+Luna::share('asset', fn(string $path): string => asset($path));
+Luna::share('url', fn(string $path = '', array $q = []): string => url($path, $q));
 
 Luna::share('Session', [
-    'has'      => fn (string $key): bool          => Session::has($key),
-    'get'      => fn (string $key, mixed $d=null) => Session::get($key, $d),
-    'set'      => fn (string $key, mixed $value)  => Session::set($key, $value),
-    'flash'    => fn (string $key, mixed $value)  => Session::flash($key, $value),
-    'getFlash' => fn (string $key, mixed $d=null) => Session::getFlash($key, $d),
-    'hasFlash' => fn (string $key): bool          => Session::hasFlash($key),
-    'remove'   => fn (string $key)                => Session::remove($key),
-    'all'      => fn (): array                    => Session::all(),
-    'destroy'  => fn ()                           => Session::destroy(),
+    'has' => fn(string $key): bool => Session::has($key),
+    'get' => fn(string $key, mixed $d = null) => Session::get($key, $d),
+    'set' => fn(string $key, mixed $value) => Session::set($key, $value),
+    'flash' => fn(string $key, mixed $value) => Session::flash($key, $value),
+    'getFlash' => fn(string $key, mixed $d = null) => Session::getFlash($key, $d),
+    'hasFlash' => fn(string $key): bool => Session::hasFlash($key),
+    'remove' => fn(string $key) => Session::remove($key),
+    'all' => fn(): array => Session::all(),
+    'destroy' => fn() => Session::destroy(),
 ]);

@@ -37,7 +37,7 @@ Slenix is minimal, powerful, and designed to scale from small projects to struct
 
 Slenix documentation is available at:
 
-👉 **[https://slenix.vercel.org](https://slenix.vercel.org)**
+👉 **[https://slenix.vercel.app](https://slenix.vercel.app)**
 
 The documentation covers:
 

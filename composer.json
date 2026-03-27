@@ -2,7 +2,7 @@
     "name": "slenix/slenix",
     "description": "Slenix é um framework flexível rápido para construir APIs REST e aplicações web",
     "keywords": ["slenix", "framework"],
-    "homepage": "https://github.com/claudiovictors/slenix",
+    "homepage": "https://slenix.vercel.app",
     "type": "project",
     "license": "MIT",
     "authors": [
@@ -10,7 +10,7 @@
             "name": "Cláudio Victor",
             "email": "barrosclaudio147@gmail.com",
             "role": "Developer",
-            "homepage": "https://github.com/claudiovictors"
+            "homepage": "https://slenix.vercel.app"
         }
     ],
     "require": {

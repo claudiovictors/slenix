@@ -115,6 +115,7 @@ abstract class Command
             'key:generate'           => 'Gera e salva o APP_KEY no .env',
             'make:controller <name>' => 'Cria um novo controller',
             'make:model <name>'      => 'Cria um novo model',
+            'make:migration <name>'  => 'Criar uma nova migração',
             'serve [port]'           => 'Inicia servidor de desenvolvimento',
             'version'                => 'Exibe a versão da CLI',
             'help'                   => 'Exibe esta ajuda',

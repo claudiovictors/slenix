@@ -17,23 +17,46 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/vendor/autoload.php';
 
-
+use Slenix\Core\EnvLoader;
 use Slenix\Http\Routing\Router;
 use Slenix\Core\Console\Command;
+use Slenix\Supports\Template\Luna;
 use Slenix\Core\Console\MakeCommand;
 use Slenix\Core\Console\ServeCommand;
-use Slenix\Supports\Template\Luna;
+use Slenix\Core\Console\MigrateCommand;
+
+
+try {
+    EnvLoader::load(__DIR__ . '/.env');
+} catch (\Exception $e) {
+    // .env ausente é aceitável para comandos que não precisam de banco (make:*)
+}
 
 final class Celestial
 {
+    /**
+     * Argumentos recebidos via CLI.
+     *
+     * @var array
+     */
     private array $args;
 
+    /**
+     * Construtor da aplicação CLI.
+     *
+     * @param array $args Argumentos da linha de comando ($argv)
+     */
     public function __construct(array $args)
     {
         $this->args = $args;
         $this->run();
     }
 
+    /**
+     * Executa o comando baseado nos argumentos recebidos.
+     *
+     * @return void
+     */
     private function run(): void
     {
         if (count($this->args) < 2) {
@@ -45,9 +68,12 @@ final class Celestial
 
         try {
             switch ($command) {
+                // ── Chave da aplicação ─────────────────────────────────────
                 case 'key:generate':
                     MakeCommand::generateKey();
                     break;
+
+                // ── Geradores ─────────────────────────────────────────────
                 case 'make:model':
                     (new MakeCommand($this->args))->makeModel();
                     break;
@@ -57,15 +83,43 @@ final class Celestial
                 case 'make:middleware':
                     (new MakeCommand($this->args))->makeMiddleware();
                     break;
+                case 'make:migration':
+                    (new MigrateCommand($this->args))->makeMigration();
+                    break;
+
+                // ── Migrations ────────────────────────────────────────────
+                case 'migrate':
+                    (new MigrateCommand($this->args))->run();
+                    break;
+                case 'migrate:rollback':
+                    (new MigrateCommand($this->args))->rollback();
+                    break;
+                case 'migrate:reset':
+                    (new MigrateCommand($this->args))->reset();
+                    break;
+                case 'migrate:fresh':
+                    (new MigrateCommand($this->args))->fresh();
+                    break;
+                case 'migrate:status':
+                    (new MigrateCommand($this->args))->status();
+                    break;
+
+                // ── Rotas ─────────────────────────────────────────────────
                 case 'route:list':
                     $this->listRoutes();
                     break;
+
+                // ── Servidor ──────────────────────────────────────────────
                 case 'serve':
                     (new ServeCommand($this->args))->execute();
                     break;
+
+                // ── Views ─────────────────────────────────────────────────
                 case 'view':
                     Luna::clearCache();
                     break;
+
+                // ── Ajuda / Versão ────────────────────────────────────────
                 case 'help':
                 case '--help':
                 case '-h':
@@ -76,6 +130,7 @@ final class Celestial
                 case '-v':
                     Command::version();
                     break;
+
                 default:
                     Command::error("Comando desconhecido: {$command}");
                     Command::help();
@@ -88,13 +143,17 @@ final class Celestial
     }
 
     /**
-     * Lista todas as rotas registradas.
+     * Lista todas as rotas registradas na aplicação.
+     *
+     * Carrega o arquivo de rotas e exibe no terminal
+     * as informações formatadas.
+     *
+     * @return void
      */
     private function listRoutes(): void
     {
         Command::info('Carregando rotas...');
 
-        // Incluir arquivo de rotas se existir
         $routesFile = __DIR__ . '/routes/web.php';
         if (file_exists($routesFile)) {
             require_once $routesFile;
@@ -114,28 +173,19 @@ final class Celestial
         echo str_repeat('-', 80) . PHP_EOL;
 
         foreach ($routes as $route) {
-            $handler = $this->formatHandler($route['handler']);
-            $name = $route['name'] ?? '';
-            $middlewares = !empty($route['middleware']) ? ' [' . implode(', ', $route['middleware']) . ']' : '';
+            $handler     = $this->formatHandler($route['handler']);
+            $name        = $route['name'] ?? '';
+            $middlewares = !empty($route['middleware'])
+                ? ' [' . implode(', ', $route['middleware']) . ']'
+                : '';
 
             printf(
                 "%-8s %-30s %-25s %-15s%s",
-                $route['method'],
-                $route['pathUri'],
-                $handler,
-                $name,
-                PHP_EOL
+                $route['method'], $route['pathUri'], $handler, $name, PHP_EOL
             );
 
             if ($middlewares) {
-                printf(
-                    "%-8s %-30s %-25s %-15s%s",
-                    '',
-                    '',
-                    $middlewares,
-                    '',
-                    PHP_EOL
-                );
+                printf("%-8s %-30s %-25s %-15s%s", '', '', $middlewares, '', PHP_EOL);
             }
         }
 
@@ -144,18 +194,15 @@ final class Celestial
     }
 
     /**
-     * Formata o handler para exibição.
+     * Formata o handler da rota para exibição.
+     *
+     * @param mixed $handler
+     * @return string
      */
     private function formatHandler($handler): string
     {
-        if (is_callable($handler) && !is_array($handler)) {
-            return 'Closure';
-        }
-
-        if (is_array($handler)) {
-            return $handler[0] . '@' . $handler[1];
-        }
-
+        if (is_callable($handler) && !is_array($handler)) return 'Closure';
+        if (is_array($handler)) return $handler[0] . '@' . $handler[1];
         return 'Unknown';
     }
 }

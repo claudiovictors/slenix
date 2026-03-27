@@ -9,6 +9,5 @@ composer.lock
 .vscode/
 .phpunit.result.cache
 /storage/*.key
-test.md
 /storage/logs/*
 !/storage/logs/.gitkeep

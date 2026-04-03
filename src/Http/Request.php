@@ -20,50 +20,67 @@ use Slenix\Supports\Uploads\Upload;
 
 class Request
 {
+    // -------------------------------------------------------------------------
     // Propriedades principais
-    private array $params = [];
-    private array $server = [];
-    private array $headers = [];
-    private array $attributes = [];
-    private array $queryParams = [];
-    
-    // Cache para lazy loading
-    private ?array $parsedBody = null;
-    private ?array $uploadedFiles = null;
-    private ?string $rawBody = null;
-    private ?array $deviceInfo = null;
-    private ?array $acceptableLanguages = null;
-    
+    // -------------------------------------------------------------------------
+    private array   $params     = [];
+    private array   $server     = [];
+    private array   $headers    = [];
+    private array   $attributes = [];
+    private array   $queryParams = [];
+
+    // -------------------------------------------------------------------------
+    // Cache / lazy loading
+    // -------------------------------------------------------------------------
+    private ?array   $parsedBody          = null;
+    private ?array   $uploadedFiles       = null;
+    private ?string  $rawBody             = null;
+    private ?array   $deviceInfo          = null;
+    private ?array   $acceptableLanguages = null;
+    private ?string  $fingerprint         = null;
+    private mixed    $authenticatedUser   = null;
+    private bool     $userResolved        = false;
+
+    // -------------------------------------------------------------------------
     // Configurações
-    private int $maxInputSize = 8388608; // 8MB
+    // -------------------------------------------------------------------------
+    private int   $maxInputSize   = 8_388_608; // 8 MB
     private array $trustedProxies = [];
     private array $trustedHeaders = [
         'X-Forwarded-For',
         'X-Forwarded-Proto',
         'X-Forwarded-Host',
-        'X-Forwarded-Port'
+        'X-Forwarded-Port',
     ];
 
+    /** Resolver de autenticação (callable) */
+    private static mixed $authResolver = null;
+
+    /** Rate-limit store (em memória / APCu / sessão) */
+    private static array $rateLimitStore = [];
+
+    // =========================================================================
+    // CONSTRUTOR
+    // =========================================================================
+
     /**
-     * Construtor da classe Request.
-     *
-     * @param array<string, string> $params Array associativo contendo os parâmetros da rota.
-     * @param array $server Dados do servidor (padrão $_SERVER)
-     * @param array $query Dados da query string (padrão $_GET)
-     * @param array $cookies Dados dos cookies (padrão $_COOKIE)
-     * @param array $files Dados dos arquivos (padrão $_FILES)
+     * @param array $params   Parâmetros de rota
+     * @param array $server   Dados do servidor (padrão $_SERVER)
+     * @param array $query    Query string (padrão $_GET)
+     * @param array $cookies  Cookies (padrão $_COOKIE)
+     * @param array $files    Arquivos (padrão $_FILES)
      */
     public function __construct(
-        array $params = [],
-        array $server = [],
-        array $query = [],
+        array $params  = [],
+        array $server  = [],
+        array $query   = [],
         array $cookies = [],
-        array $files = []
+        array $files   = []
     ) {
-        $this->params = $params;
-        $this->server = $server ?: $_SERVER;
-        $this->queryParams = $query ?: ($_GET ?? []);
-        
+        $this->params      = $params;
+        $this->server      = $server ?: $_SERVER;
+        $this->queryParams = $query  ?: ($_GET ?? []);
+
         $this->parseHeaders();
     }
 
@@ -123,7 +140,7 @@ class Request
     {
         // Cache para evitar reprocessamento
         static $method = null;
-        
+
         if ($method !== null) {
             return $method;
         }
@@ -150,11 +167,11 @@ class Request
     public function uri(): string
     {
         static $uri = null;
-        
+
         if ($uri === null) {
             $uri = parse_url($this->server['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
         }
-        
+
         return $uri;
     }
 
@@ -176,7 +193,7 @@ class Request
     public function url(): string
     {
         static $url = null;
-        
+
         if ($url === null) {
             $scheme = $this->getScheme();
             $host = $this->getHost();
@@ -191,7 +208,7 @@ class Request
 
             $url = "{$scheme}://{$host}{$portString}{$uri}";
         }
-        
+
         return $url;
     }
 
@@ -214,11 +231,11 @@ class Request
     public function queryString(): ?string
     {
         static $queryString = null;
-        
+
         if ($queryString === null) {
             $queryString = parse_url($this->server['REQUEST_URI'] ?? '/', PHP_URL_QUERY);
         }
-        
+
         return $queryString;
     }
 
@@ -233,7 +250,7 @@ class Request
     {
         // Ordem de prioridade: JSON -> POST -> GET
         $parsedBody = $this->getParsedBody();
-        
+
         if (array_key_exists($key, $parsedBody)) {
             return $parsedBody[$key];
         }
@@ -321,7 +338,7 @@ class Request
     public function filled(string $key): bool
     {
         $value = $this->input($key);
-        
+
         if ($value === null) {
             return false;
         }
@@ -350,6 +367,64 @@ class Request
     public function missing(string $key): bool
     {
         return !$this->filled($key);
+    }
+
+    /**
+     * Retorna valor tipado como inteiro
+     * 
+     * @param string $key
+     * @param int $default
+     * @return int
+     */
+    public function integer(string $key, int $default = 0): int
+    {
+        return (int) $this->input($key, $default);
+    }
+
+    /**
+     * Retorna valor tipado como float
+     * @param string $key
+     * @param float $default
+     * @return float
+     */
+    public function float(string $key, float $default = 0.0): float
+    {
+        return (float) $this->input($key, $default);
+    }
+
+    /**
+     * Retorna valor tipado como bool
+     * @param string $key
+     * @param bool $default
+     * @return bool
+     */
+    public function boolean(string $key, bool $default = false): bool
+    {
+        $value = $this->input($key, $default);
+        return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? $default;
+    }
+
+    /**
+     * Retorna valor tipado como string
+     * @param string $key
+     * @param string $default
+     * @return string
+     */
+    public function string(string $key, string $default = ''): string
+    {
+        return (string) $this->input($key, $default);
+    }
+
+    /**
+     * Retorna valor tipado como array
+     * @param string $key
+     * @param array $default
+     * @return array
+     */
+    public function array(string $key, array $default = []): array
+    {
+        $value = $this->input($key, $default);
+        return is_array($value) ? $value : $default;
     }
 
     /**
@@ -424,8 +499,10 @@ class Request
         // Verifica chaves obrigatórias para um arquivo único
         $requiredKeys = ['name', 'tmp_name', 'size', 'error'];
         foreach ($requiredKeys as $requiredKey) {
-            if (!array_key_exists($requiredKey, $_FILES[$key]) || 
-                (is_array($_FILES[$key][$requiredKey]) && !isset($_FILES[$key]['name'][0]))) {
+            if (
+                !array_key_exists($requiredKey, $_FILES[$key]) ||
+                (is_array($_FILES[$key][$requiredKey]) && !isset($_FILES[$key]['name'][0]))
+            ) {
                 error_log("Erro no upload: Chave obrigatória '{$requiredKey}' ausente ou inválida para a chave '{$key}'.");
                 return false;
             }
@@ -501,9 +578,16 @@ class Request
      * @param mixed $default O valor padrão se a chave não existir.
      * @return mixed
      */
-    public function cookie(string $key, mixed $default = null): mixed
+    public function cookie(string $key, mixed $default = null, bool $decrypt = false): mixed
     {
-        return $_COOKIE[$key] ?? $default;
+        $value = $_COOKIE[$key] ?? $default;
+
+        if ($decrypt && $value !== null && $value !== $default && function_exists('decrypt')) {
+            $decrypted = decrypt((string) $value);
+            return $decrypted !== false ? $decrypted : $value;
+        }
+
+        return $value;
     }
 
     /**
@@ -517,6 +601,33 @@ class Request
     }
 
     /**
+     * Verifica se existe uma chave em uma cookie
+     * @param string $key
+     * @return bool
+     */
+    public function hasCookie(string $key): bool
+    {
+        return isset($_COOKIE[$key]);
+    }
+
+    /**
+     * Retorna todos os cookies como array sanitizado.
+     * @param bool $sanitize
+     * @return array
+     */
+    public function allCookies(bool $sanitize = true): array
+    {
+        if (!$sanitize) {
+            return $_COOKIE;
+        }
+
+        return array_map(
+            fn($v) => is_string($v) ? htmlspecialchars($v, ENT_QUOTES, 'UTF-8') : $v,
+            $_COOKIE
+        );
+    }
+
+    /**
      * Retorna o endereço IP do cliente (considerando proxies confiáveis).
      *
      * @return ?string O IP do cliente ou null.
@@ -524,7 +635,7 @@ class Request
     public function ip(): ?string
     {
         static $ip = null;
-        
+
         if ($ip !== null) {
             return $ip;
         }
@@ -631,7 +742,7 @@ class Request
     public function isSecure(): bool
     {
         static $isSecure = null;
-        
+
         if ($isSecure !== null) {
             return $isSecure;
         }
@@ -651,7 +762,7 @@ class Request
             (!empty($this->server['HTTP_X_FORWARDED_SSL']) && $this->server['HTTP_X_FORWARDED_SSL'] === 'on') ||
             $this->getPort() === 443
         );
-        
+
         return $isSecure;
     }
 
@@ -834,7 +945,7 @@ class Request
         if ($this->parsedBody === null) {
             $this->parsedBody();
         }
-        
+
         return $this->parsedBody ?? [];
     }
 
@@ -847,13 +958,13 @@ class Request
     {
         if ($this->rawBody === null) {
             $this->rawBody = file_get_contents('php://input');
-            
+
             // Verifica o tamanho do corpo
             if (strlen($this->rawBody) > $this->maxInputSize) {
                 throw new InvalidArgumentException('Corpo da requisição muito grande');
             }
         }
-        
+
         return $this->rawBody;
     }
 
@@ -942,11 +1053,11 @@ class Request
     public function sanitizeMultiple(array $rules): array
     {
         $sanitized = [];
-        
+
         foreach ($rules as $key => $filter) {
             $sanitized[$key] = $this->sanitize($key, $filter);
         }
-        
+
         return $sanitized;
     }
 
@@ -994,15 +1105,27 @@ class Request
     public function isBot(): bool
     {
         $userAgent = strtolower($this->userAgent() ?? '');
-        
+
         if (empty($userAgent)) {
             return false;
         }
 
         $botSignatures = [
-            'googlebot', 'bingbot', 'slurp', 'duckduckbot', 'baiduspider',
-            'yandexbot', 'facebookexternalhit', 'twitterbot', 'linkedinbot',
-            'whatsapp', 'telegram', 'crawler', 'spider', 'bot', 'scraper'
+            'googlebot',
+            'bingbot',
+            'slurp',
+            'duckduckbot',
+            'baiduspider',
+            'yandexbot',
+            'facebookexternalhit',
+            'twitterbot',
+            'linkedinbot',
+            'whatsapp',
+            'telegram',
+            'crawler',
+            'spider',
+            'bot',
+            'scraper'
         ];
 
         foreach ($botSignatures as $signature) {
@@ -1023,10 +1146,10 @@ class Request
     {
         if ($this->deviceInfo === null) {
             $userAgent = $this->userAgent() ?? '';
-            
+
             $isMobile = $this->detectMobile($userAgent);
             $isTablet = $this->detectTablet($userAgent);
-            
+
             $this->deviceInfo = [
                 'is_mobile' => $isMobile,
                 'is_tablet' => $isTablet,
@@ -1037,7 +1160,7 @@ class Request
                 'user_agent' => $userAgent,
             ];
         }
-        
+
         return $this->deviceInfo;
     }
 
@@ -1099,7 +1222,7 @@ class Request
                 $this->acceptableLanguages = array_keys($languages);
             }
         }
-        
+
         return $this->acceptableLanguages;
     }
 
@@ -1297,6 +1420,44 @@ class Request
     }
 
     /**
+     * Gera um fingerprint único da requisição com base em IP, User-Agent e outros sinais.
+     *
+     * @param bool $includeSession Inclui o ID de sessão no fingerprint
+     * @return string Hash SHA-256
+     */
+    public function fingerprint(bool $includeSession = false): string
+    {
+        if ($this->fingerprint !== null) {
+            return $this->fingerprint;
+        }
+
+        $components = [
+            $this->ip() ?? '',
+            $this->userAgent() ?? '',
+            $this->getHeader('Accept-Language', ''),
+            $this->getHeader('Accept-Encoding', ''),
+            $this->getScheme(),
+        ];
+
+        if ($includeSession && session_status() === PHP_SESSION_ACTIVE) {
+            $components[] = session_id();
+        }
+
+        $this->fingerprint = hash('sha256', implode('|', $components));
+
+        return $this->fingerprint;
+    }
+
+    /**
+     * Gera fingerprint parcial (mais leve, apenas IP + UA).
+     * @return string
+     */
+    public function lightFingerprint(): string
+    {
+        return hash('sha256', ($this->ip() ?? '') . '|' . ($this->userAgent() ?? ''));
+    }
+
+    /**
      * Parse dos cabeçalhos HTTP.
      *
      * @return void
@@ -1304,7 +1465,7 @@ class Request
     private function parseHeaders(): void
     {
         $this->headers = [];
-        
+
         foreach ($this->server as $key => $value) {
             if (str_starts_with($key, 'HTTP_')) {
                 $headerName = str_replace('_', '-', substr($key, 5));
@@ -1421,7 +1582,7 @@ class Request
         // Valida método HTTP
         $method = $this->method();
         $allowedMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
-        
+
         if (!in_array($method, $allowedMethods)) {
             throw new InvalidArgumentException("Método HTTP inválido: {$method}");
         }
@@ -1457,7 +1618,7 @@ class Request
     private function getForwardedIp(): ?string
     {
         $remoteAddr = $this->server['REMOTE_ADDR'] ?? '';
-        
+
         if (!$this->isTrustedProxy($remoteAddr)) {
             return null;
         }
@@ -1467,7 +1628,7 @@ class Request
             if ($headerValue) {
                 $ips = explode(',', $headerValue);
                 $cleanIp = trim($ips[0]);
-                
+
                 if ($this->isValidIp($cleanIp)) {
                     return $cleanIp;
                 }
@@ -1512,7 +1673,7 @@ class Request
         }
 
         list($subnet, $mask) = explode('/', $range);
-        
+
         if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
             return $this->ipv4InRange($ip, $subnet, (int) $mask);
         } elseif (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
@@ -1551,7 +1712,7 @@ class Request
     {
         $ipBin = inet_pton($ip);
         $subnetBin = inet_pton($subnet);
-        
+
         if ($ipBin === false || $subnetBin === false) {
             return false;
         }
@@ -1560,7 +1721,7 @@ class Request
         $bits = $mask & 7;
 
         return substr($ipBin, 0, $bytes) === substr($subnetBin, 0, $bytes) &&
-               (($bits === 0) || (ord($ipBin[$bytes]) >> (8 - $bits)) === (ord($subnetBin[$bytes]) >> (8 - $bits)));
+            (($bits === 0) || (ord($ipBin[$bytes]) >> (8 - $bits)) === (ord($subnetBin[$bytes]) >> (8 - $bits)));
     }
 
     /**
@@ -1572,8 +1733,15 @@ class Request
     private function detectMobile(string $userAgent): bool
     {
         $mobilePatterns = [
-            'Mobile', 'Android', 'iPhone', 'iPod', 'BlackBerry', 
-            'IEMobile', 'Opera Mini', 'webOS', 'Windows Phone'
+            'Mobile',
+            'Android',
+            'iPhone',
+            'iPod',
+            'BlackBerry',
+            'IEMobile',
+            'Opera Mini',
+            'webOS',
+            'Windows Phone'
         ];
 
         foreach ($mobilePatterns as $pattern) {

@@ -13,7 +13,7 @@
 
 declare(strict_types=1);
 
-namespace Slenix\Supports\Database;
+namespace Slenix\Database;
 
 use PDO;
 use PDOException;
@@ -42,7 +42,7 @@ class Connection extends ErrorHandler {
      */
     public function __construct(array $config = null) {
         if ($config === null) {
-            $configFile = __DIR__ . '/../../Config/app.php';
+            $configFile = __DIR__ . '/../Config/app.php';
             if (!file_exists($configFile)) {
                 throw new \Exception('Arquivo de configuração não encontrado: ' . $configFile);
             }

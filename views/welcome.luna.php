@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-br">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -28,7 +29,7 @@
     body {
       font-family: 'Inter', sans-serif;
       /* Gradiente aprimorado com dois focos de luz */
-      background: 
+      background:
         radial-gradient(circle at 15% 15%, rgba(229, 72, 77, 0.15), transparent 35%),
         radial-gradient(circle at 85% 85%, rgba(110, 44, 242, 0.1), transparent 35%),
         var(--bg);
@@ -56,15 +57,22 @@
       text-transform: uppercase;
       letter-spacing: -1rem;
       /* Efeito de Profundidade 3D */
-      text-shadow: 
+      text-shadow:
         1px 1px 0px rgba(229, 72, 77, 0.1),
         4px 4px 20px rgba(0, 0, 0, 0.5);
       animation: float 6s ease-in-out infinite;
     }
 
     @keyframes float {
-      0%, 100% { transform: translate(-50%, -52%); }
-      50% { transform: translate(-50%, -48%); }
+
+      0%,
+      100% {
+        transform: translate(-50%, -52%);
+      }
+
+      50% {
+        transform: translate(-50%, -48%);
+      }
     }
 
     .wrapper {
@@ -125,7 +133,10 @@
     .card::before {
       content: "";
       position: absolute;
-      top: 0; left: 0; width: 100%; height: 100%;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
       background: linear-gradient(45deg, transparent, rgba(229, 72, 77, 0.05), transparent);
       transform: translateX(-100%);
       transition: 0.5s;
@@ -139,7 +150,7 @@
       border-color: var(--primary);
       background: rgba(25, 25, 25, 0.8);
       transform: translateY(-5px) scale(1.01);
-      box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
     }
 
     .big-card {
@@ -199,12 +210,22 @@
     }
 
     @media (max-width: 900px) {
-      .grid { grid-template-columns: 1fr; }
-      .version-3d { font-size: 40vw; opacity: 0.02; }
-      .title { font-size: 2.2rem; }
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .version-3d {
+        font-size: 40vw;
+        opacity: 0.02;
+      }
+
+      .title {
+        font-size: 2.2rem;
+      }
     }
   </style>
 </head>
+
 <body>
 
   <div class="version-3d">
@@ -227,7 +248,7 @@
             <span style="color: var(--primary)">#</span> Documentation
           </div>
           <div class="card-desc">
-            Explore the full ecosystem of {{ env('APP_NAME') }}. 
+            Explore the full ecosystem of {{ env('APP_NAME') }}.
             From routing and controllers to advanced dependency injection.
             Everything is designed to be intuitive and clean.
           </div>
@@ -241,12 +262,12 @@
           <div class="card-desc">Open source core. Star us to support the project.</div>
         </a>
 
-        <a href="https://slenix.vercel.app/docs" target="_blank" class="card">
+        <a href="https://slenix.vercel.app/docs/installation" target="_blank" class="card">
           <div class="card-title">Core Guides</div>
           <div class="card-desc">Master the framework lifecycle and architecture.</div>
         </a>
 
-        <a href="https://slenix.vercel.app" target="_blank" class="card">
+        <a href="https://slenix.vercel.app/docs/celestial-cli" target="_blank" class="card">
           <div class="card-title">Slenix CLI</div>
           <div class="card-desc">Supercharge your productivity with our command line tool.</div>
         </a>
@@ -254,10 +275,11 @@
     </div>
 
     <div class="footer">
-      RELEASE V{{ env('APP_VERSION') }} • DESIGNED BY 
+      RELEASE V{{ env('APP_VERSION') }} • DESIGNED BY
       <a href="https://github.com/claudiovictors" target="_blank">CLÁUDIO VICTOR</a>
     </div>
   </div>
 
 </body>
+
 </html>

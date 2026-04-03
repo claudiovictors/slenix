@@ -15,10 +15,11 @@
 
 declare(strict_types=1);
 
-namespace Slenix\Supports\Database\Relations;
+namespace Slenix\Database\Relations;
 
 use PDO;
-use Slenix\Supports\Database\Collection;
+use Slenix\Database\Connection;
+use Slenix\Database\Collection;
 
 class BelongsToMany extends Relation
 {
@@ -38,8 +39,8 @@ class BelongsToMany extends Relation
     protected bool $withTimestamps = false;
 
     /**
-     * @param \Slenix\Supports\Database\Model $related        Modelo relacionado
-     * @param \Slenix\Supports\Database\Model $parent         Modelo pai
+     * @param \Slenix\Database\Model $related        Modelo relacionado
+     * @param \Slenix\Database\Model $parent         Modelo pai
      * @param string                           $pivotTable     Tabela pivot
      * @param string                           $pivotForeignKey FK do pai na pivot
      * @param string                           $pivotRelatedKey FK do relacionado na pivot
@@ -47,8 +48,8 @@ class BelongsToMany extends Relation
      * @param string                           $localKey       PK do relacionado (ownerKey)
      */
     public function __construct(
-        \Slenix\Supports\Database\Model $related,
-        \Slenix\Supports\Database\Model $parent,
+        \Slenix\Database\Model $related,
+        \Slenix\Database\Model $parent,
         string $pivotTable,
         string $pivotForeignKey,
         string $pivotRelatedKey,
@@ -350,6 +351,6 @@ class BelongsToMany extends Relation
      */
     protected function getPdo(): PDO
     {
-        return \Slenix\Supports\Database\Connection::getInstance();
+        return Connection::getInstance();
     }
 }

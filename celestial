@@ -21,42 +21,27 @@ use Slenix\Core\EnvLoader;
 use Slenix\Http\Routing\Router;
 use Slenix\Core\Console\Command;
 use Slenix\Supports\Template\Luna;
+use Slenix\Core\Console\SeedCommand;
 use Slenix\Core\Console\MakeCommand;
 use Slenix\Core\Console\ServeCommand;
 use Slenix\Core\Console\MigrateCommand;
 
-
 try {
     EnvLoader::load(__DIR__ . '/.env');
 } catch (\Exception $e) {
-    // .env ausente é aceitável para comandos que não precisam de banco (make:*)
+    // .env ausente é ok para make:*
 }
 
 final class Celestial
 {
-    /**
-     * Argumentos recebidos via CLI.
-     *
-     * @var array
-     */
     private array $args;
 
-    /**
-     * Construtor da aplicação CLI.
-     *
-     * @param array $args Argumentos da linha de comando ($argv)
-     */
     public function __construct(array $args)
     {
         $this->args = $args;
         $this->run();
     }
 
-    /**
-     * Executa o comando baseado nos argumentos recebidos.
-     *
-     * @return void
-     */
     private function run(): void
     {
         if (count($this->args) < 2) {
@@ -68,26 +53,74 @@ final class Celestial
 
         try {
             switch ($command) {
-                // ── Chave da aplicação ─────────────────────────────────────
+                /*
+                |--------------------------------------------------------------------------
+                | Chave da aplicação
+                |--------------------------------------------------------------------------
+                */
                 case 'key:generate':
                     MakeCommand::generateKey();
                     break;
 
-                // ── Geradores ─────────────────────────────────────────────
+                /*
+                |--------------------------------------------------------------------------
+                | Geradores Model
+                |--------------------------------------------------------------------------
+                */
                 case 'make:model':
                     (new MakeCommand($this->args))->makeModel();
                     break;
+
+                /*
+                |--------------------------------------------------------------------------
+                | Geradores Controller
+                |--------------------------------------------------------------------------
+                */
                 case 'make:controller':
                     (new MakeCommand($this->args))->makeController();
                     break;
+
+                /*
+                |--------------------------------------------------------------------------
+                | Geradores Middleware
+                |--------------------------------------------------------------------------
+                */
                 case 'make:middleware':
                     (new MakeCommand($this->args))->makeMiddleware();
                     break;
+
+                /*
+                |--------------------------------------------------------------------------
+                | Geradores Migration
+                |--------------------------------------------------------------------------
+                */
                 case 'make:migration':
                     (new MigrateCommand($this->args))->makeMigration();
                     break;
 
-                // ── Migrations ────────────────────────────────────────────
+                /*
+                |--------------------------------------------------------------------------
+                | Geradores Seeds
+                |--------------------------------------------------------------------------
+                */
+                case 'make:seeder':
+                    (new SeedCommand($this->args))->makeSeeder();
+                    break;
+
+                /*
+                |--------------------------------------------------------------------------
+                | Geradores Factory
+                |--------------------------------------------------------------------------
+                */
+                case 'make:factory':
+                    (new SeedCommand($this->args))->makeFactory();
+                    break;
+
+                /*
+                |--------------------------------------------------------------------------
+                | Geradores Migrations
+                |--------------------------------------------------------------------------
+                */
                 case 'migrate':
                     (new MigrateCommand($this->args))->run();
                     break;
@@ -99,9 +132,18 @@ final class Celestial
                     break;
                 case 'migrate:fresh':
                     (new MigrateCommand($this->args))->fresh();
+                    if (in_array('--seed', $this->args)) {
+                        echo PHP_EOL;
+                        (new SeedCommand($this->args))->run();
+                    }
                     break;
                 case 'migrate:status':
                     (new MigrateCommand($this->args))->status();
+                    break;
+
+                // ── Seeds ─────────────────────────────────────────────────
+                case 'db:seed':
+                    (new SeedCommand($this->args))->run();
                     break;
 
                 // ── Rotas ─────────────────────────────────────────────────
@@ -142,14 +184,6 @@ final class Celestial
         }
     }
 
-    /**
-     * Lista todas as rotas registradas na aplicação.
-     *
-     * Carrega o arquivo de rotas e exibe no terminal
-     * as informações formatadas.
-     *
-     * @return void
-     */
     private function listRoutes(): void
     {
         Command::info('Carregando rotas...');
@@ -193,12 +227,6 @@ final class Celestial
         Command::success('Total: ' . count($routes) . ' rotas');
     }
 
-    /**
-     * Formata o handler da rota para exibição.
-     *
-     * @param mixed $handler
-     * @return string
-     */
     private function formatHandler($handler): string
     {
         if (is_callable($handler) && !is_array($handler)) return 'Closure';

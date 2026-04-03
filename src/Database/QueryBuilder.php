@@ -14,7 +14,7 @@
 
 declare(strict_types=1);
 
-namespace Slenix\Supports\Database;
+namespace Slenix\Database;
 
 use PDO;
 
@@ -602,7 +602,7 @@ class QueryBuilder
 
             $relation = $instance->$name();
 
-            if (!($relation instanceof \Slenix\Supports\Database\Relations\Relation)) {
+            if (!($relation instanceof \Slenix\Database\Relations\Relation)) {
                 continue;
             }
 

@@ -12,7 +12,7 @@
 
 declare(strict_types=1);
 
-namespace Slenix\Supports\Database\Migrations;
+namespace Slenix\Database\Migrations;
 
 abstract class Migration
 {

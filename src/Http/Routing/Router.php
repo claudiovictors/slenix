@@ -17,8 +17,8 @@ namespace Slenix\Http\Routing;
 
 use Slenix\Http\Request;
 use Slenix\Http\Response;
-use Slenix\Http\Middlewares\Middleware;
 use Slenix\Supports\Security\CSRF;
+use Slenix\Http\Middlewares\Middleware;
 
 class Router
 {
@@ -491,6 +491,7 @@ class Router
         $errorPaths = [
             __DIR__ . '/../../../views/errors/404.php',
             __DIR__ . '/../../../views/error/404.php',
+            __DIR__ . '/../../../views/erro/404.php',
             __DIR__ . '/../../Core/Exceptions/errors/404.php'
         ];
 

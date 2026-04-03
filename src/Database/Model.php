@@ -15,16 +15,16 @@
 
 declare(strict_types=1);
 
-namespace Slenix\Supports\Database;
+namespace Slenix\Database;
 
 use PDO;
 use DateTime;
-use Slenix\Supports\Database\Connection;
-use Slenix\Supports\Database\Collection;
-use Slenix\Supports\Database\Relations\BelongsTo;
-use Slenix\Supports\Database\Relations\BelongsToMany;
-use Slenix\Supports\Database\Relations\HasMany;
-use Slenix\Supports\Database\Relations\HasOne;
+use Slenix\Database\Connection;
+use Slenix\Database\Collection;
+use Slenix\Database\Relations\BelongsTo;
+use Slenix\Database\Relations\BelongsToMany;
+use Slenix\Database\Relations\HasMany;
+use Slenix\Database\Relations\HasOne;
 
 abstract class Model implements \JsonSerializable
 {

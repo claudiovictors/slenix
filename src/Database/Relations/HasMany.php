@@ -13,9 +13,9 @@
 
 declare(strict_types=1);
 
-namespace Slenix\Supports\Database\Relations;
+namespace Slenix\Database\Relations;
 
-use Slenix\Supports\Database\Collection;
+use Slenix\Database\Collection;
 
 class HasMany extends Relation
 {

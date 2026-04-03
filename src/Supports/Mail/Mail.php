@@ -68,10 +68,10 @@ class Mail
      * @var array Configurações SMTP
      */
     protected array $smtpConfig = [
-        'host' => 'localhost',
-        'port' => 587,
-        'username' => '',
-        'password' => '',
+        'host' => env('APP_DOMAIN'),
+        'port' => env('MAIL_PORT'),
+        'username' => env('MAIL_USERNAME'),
+        'password' => env('MAIL_PASSWORD'),
         'encryption' => 'tls', // tls, ssl ou none
         'auth' => true,
         'timeout' => 30

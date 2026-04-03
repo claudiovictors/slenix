@@ -17,10 +17,10 @@
 
 declare(strict_types=1);
 
-namespace Slenix\Supports\Database\Migrations;
+namespace Slenix\Database\Migrations;
 
 use PDO;
-use Slenix\Supports\Database\Connection;
+use Slenix\Database\Connection;
 
 class Migrator
 {

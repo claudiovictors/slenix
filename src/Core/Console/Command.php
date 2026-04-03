@@ -17,114 +17,156 @@ namespace Slenix\Core\Console;
 
 abstract class Command
 {
-    /**
-     * Versão atual da CLI.
-     */
-    protected static string $version = '2.2';
+    protected static string $version = '2.4';
 
-    /**
-     * Retorna instância do helper de console.
-     * @return Console
-     */
     protected static function console(): Console
     {
         return new Console();
     }
 
-    /**
-     * Formata e imprime uma linha padronizada.
-     * @param string $symbol
-     * @param string $message
-     * @param string $color
-     * @return void
-     */
     protected static function line(string $symbol, string $message, string $color): void
     {
         $c = self::console();
-
         echo $c->colorize("[$symbol] ", $color, true)
             . $c->colorize($message, $color)
             . PHP_EOL;
     }
 
-    /**
-     * Exibe mensagem informativa.
-     * @param string $message
-     * @return void
-     */
     public static function info(string $message): void
     {
         self::line('ℹ', $message, 'cyan');
     }
 
-    /**
-     * Exibe mensagem de sucesso.
-     * @param string $message
-     * @return void
-     */
     public static function success(string $message): void
     {
         self::line('✔', $message, 'green');
     }
 
-    /**
-     * Exibe mensagem de aviso.
-     * @param string $message
-     * @return void
-     */
     public static function warning(string $message): void
     {
         self::line('!', $message, 'yellow');
     }
 
-    /**
-     * Exibe mensagem de erro.
-     * @param string $message
-     * @return void
-     */
     public static function error(string $message): void
     {
         self::line('✗', $message, 'red');
     }
 
-    /**
-     * Exibe a versão da CLI.
-     * @return void
-     */
     public static function version(): void
     {
         self::info("Celestial CLI v" . self::$version);
     }
 
     /**
-     * Exibe ajuda da CLI.
-     * @return void
+     * Exibe uma tabela formatada no terminal.
+     *
+     * @param array $headers Cabeçalhos da tabela
+     * @param array $rows    Linhas da tabela (arrays indexados)
+     */
+    public static function table(array $headers, array $rows): void
+    {
+        $c = self::console();
+
+        // Calcula largura de cada coluna
+        $widths = array_map('strlen', $headers);
+        foreach ($rows as $row) {
+            foreach (array_values($row) as $i => $cell) {
+                $widths[$i] = max($widths[$i] ?? 0, strlen((string) $cell));
+            }
+        }
+
+        // Linha separadora
+        $separator = '+' . implode('+', array_map(fn($w) => str_repeat('-', $w + 2), $widths)) . '+';
+
+        echo $separator . PHP_EOL;
+
+        // Cabeçalho
+        $headerRow = '|';
+        foreach ($headers as $i => $header) {
+            $headerRow .= ' ' . $c->colorize(str_pad($header, $widths[$i]), 'cyan', true) . ' |';
+        }
+        echo $headerRow . PHP_EOL;
+        echo $separator . PHP_EOL;
+
+        // Linhas
+        foreach ($rows as $row) {
+            $line = '|';
+            foreach (array_values($row) as $i => $cell) {
+                $line .= ' ' . str_pad((string) $cell, $widths[$i]) . ' |';
+            }
+            echo $line . PHP_EOL;
+        }
+
+        echo $separator . PHP_EOL;
+    }
+
+    /**
+     * Exibe uma linha em branco.
+     */
+    public static function newLine(int $count = 1): void
+    {
+        echo str_repeat(PHP_EOL, $count);
+    }
+
+    /**
+     * Exibe ajuda da CLI com todos os comandos disponíveis.
      */
     public static function help(): void
     {
+        $c = self::console();
+        $version = self::$version;
+
         echo PHP_EOL;
-        self::info("Celestial CLI v" . self::$version);
+
+        // Título simples
+        echo $c->colorize("Celestial CLI {$version}", 'green') . PHP_EOL;
+
         echo PHP_EOL;
 
-        echo "Usage:" . PHP_EOL;
-        echo "  php celestial <command> [arguments]" . PHP_EOL . PHP_EOL;
+        // Usage
+        echo $c->colorize("Usage:", 'yellow') . PHP_EOL;
+        echo "  command [options] [arguments]" . PHP_EOL;
 
-        echo "Available commands:" . PHP_EOL;
+        echo PHP_EOL;
 
-        $commands = [
-            'key:generate'           => 'Gera e salva o APP_KEY no .env',
-            'make:controller <name>' => 'Cria um novo controller',
-            'make:model <name>'      => 'Cria um novo model',
-            'make:migration <name>'  => 'Criar uma nova migração',
-            'serve [port]'           => 'Inicia servidor de desenvolvimento',
-            'version'                => 'Exibe a versão da CLI',
-            'help'                   => 'Exibe esta ajuda',
+        $groups = [
+            'Application' => [
+                'key:generate' => 'Generate the application key',
+                'serve' => 'Serve the application',
+            ],
+            'Generators' => [
+                'make:controller' => 'Create a new controller class',
+                'make:model' => 'Create a new model class',
+                'make:middleware' => 'Create a new middleware class',
+                'make:migration' => 'Create a new migration file',
+                'make:seeder' => 'Create a new seeder class',
+                'make:factory' => 'Create a new factory',
+            ],
+            'Database' => [
+                'migrate' => 'Run the database migrations',
+                'migrate:rollback' => 'Rollback the last migration',
+                'migrate:reset' => 'Rollback all migrations',
+                'migrate:fresh' => 'Drop all tables and re-run migrations',
+                'migrate:status' => 'Show migration status',
+                'db:seed' => 'Seed the database',
+            ],
+            'Other' => [
+                'route:list' => 'List all registered routes',
+                'view:clear' => 'Clear compiled views',
+                'version' => 'Display CLI version',
+                'help' => 'Display this help message',
+            ],
         ];
 
-        foreach ($commands as $cmd => $desc) {
-            echo "  " . str_pad($cmd, 24) . $desc . PHP_EOL;
-        }
+        foreach ($groups as $group => $commands) {
+            echo $c->colorize($group . ":", 'yellow') . PHP_EOL;
 
-        echo PHP_EOL;
+            foreach ($commands as $cmd => $desc) {
+                $cmdFormatted = str_pad($cmd, 25);
+                echo "  " . $c->colorize($cmdFormatted, 'green') . "  " . $desc . PHP_EOL;
+            }
+
+            echo PHP_EOL;
+        }
     }
 }

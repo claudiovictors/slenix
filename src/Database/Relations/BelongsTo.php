@@ -14,7 +14,7 @@
 
 declare(strict_types=1);
 
-namespace Slenix\Supports\Database\Relations;
+namespace Slenix\Database\Relations;
 
 class BelongsTo extends Relation
 {

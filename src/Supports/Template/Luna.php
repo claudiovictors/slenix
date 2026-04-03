@@ -541,13 +541,6 @@ class Luna
      *
      * Distingue expressão PHP de texto literal.
      *
-     * ✅ {{ $variavel }}           → PHP expression
-     * ✅ {{ strtoupper($nome) }}   → PHP expression
-     * ✅ {{ Olá, Mundo! }}         → texto literal
-     * ✅ {{ Login - Form }}        → texto literal
-     * ✅ {{ "string literal" }}    → string PHP quoted
-     * ✅ {{ 'string literal' }}    → string PHP quoted
-     * ✅ {{-- comentário --}}      → removido (já tratado antes)
      */
     private function compileEscapedEchos(string $source): string
     {
@@ -1164,6 +1157,9 @@ class Luna
 
         // @csrf
         $source = str_replace('@csrf', '<?php echo csrf_field(); ?>', $source);
+
+         // @csrf meta
+        $source = str_replace('@csrf_meta', '<?php echo csrf_meta(); ?>', $source);
 
         // @method('PUT')
         $source = preg_replace_callback(

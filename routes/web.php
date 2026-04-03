@@ -11,12 +11,10 @@
 |
 */
 
-declare(strict_types = 1);
+declare(strict_types=1);
 
-use Slenix\Http\Request;
-use Slenix\Http\Response;
 use Slenix\Http\Routing\Router;
 
-Router::get("/", function (Request $req, Response $res) {
-      return view("welcome");
+Router::get('/', function(){
+      return view('welcome');
 });

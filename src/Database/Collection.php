@@ -12,7 +12,7 @@
 
 declare(strict_types=1);
 
-namespace Slenix\Supports\Database;
+namespace Slenix\Database;
 
 use ArrayAccess;
 use ArrayIterator;

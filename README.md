@@ -25,6 +25,7 @@ Slenix removes unnecessary complexity by providing essential tools used in moder
 * Built-in CLI (Celestial)
 * Environment configuration support
 * Simple ORM with relationships
+* Migration & Seeds
 * CSRF protection and session handling
 * Template engine (Luna)
 * Structured error handling
@@ -44,7 +45,7 @@ The documentation covers:
 * Installation
 * Routing
 * Controllers
-* Models & Database
+* Models & Database & Migration & Seeds
 * Middleware
 * Security
 * CLI Commands

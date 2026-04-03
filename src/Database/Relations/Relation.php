@@ -14,10 +14,10 @@
 
 declare(strict_types=1);
 
-namespace Slenix\Supports\Database\Relations;
+namespace Slenix\Database\Relations;
 
-use Slenix\Supports\Database\QueryBuilder;
-use Slenix\Supports\Database\Model;
+use Slenix\Database\Model;
+use Slenix\Database\QueryBuilder;
 
 abstract class Relation
 {

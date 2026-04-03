@@ -18,6 +18,7 @@ namespace Slenix\Core\Exceptions;
 
 use Slenix\Http\Request;
 use Slenix\Http\Response;
+use Slenix\Supports\Logging\Log;
 
 class ErrorHandler
 {
@@ -29,21 +30,21 @@ class ErrorHandler
 
     /** @var array<int, string> */
     private static array $errorTypes = [
-        E_ERROR             => 'Fatal Error',
-        E_WARNING           => 'Warning',
-        E_PARSE             => 'Parse Error',
-        E_NOTICE            => 'Notice',
-        E_CORE_ERROR        => 'Core Error',
-        E_CORE_WARNING      => 'Core Warning',
-        E_COMPILE_ERROR     => 'Compile Error',
-        E_COMPILE_WARNING   => 'Compile Warning',
-        E_USER_ERROR        => 'User Error',
-        E_USER_WARNING      => 'User Warning',
-        E_USER_NOTICE       => 'User Notice',
-        E_STRICT            => 'Strict Standards',
+        E_ERROR => 'Fatal Error',
+        E_WARNING => 'Warning',
+        E_PARSE => 'Parse Error',
+        E_NOTICE => 'Notice',
+        E_CORE_ERROR => 'Core Error',
+        E_CORE_WARNING => 'Core Warning',
+        E_COMPILE_ERROR => 'Compile Error',
+        E_COMPILE_WARNING => 'Compile Warning',
+        E_USER_ERROR => 'User Error',
+        E_USER_WARNING => 'User Warning',
+        E_USER_NOTICE => 'User Notice',
+        E_STRICT => 'Strict Standards',
         E_RECOVERABLE_ERROR => 'Recoverable Error',
-        E_DEPRECATED        => 'Deprecated',
-        E_USER_DEPRECATED   => 'User Deprecated',
+        E_DEPRECATED => 'Deprecated',
+        E_USER_DEPRECATED => 'User Deprecated',
     ];
 
     public function __construct()
@@ -100,11 +101,11 @@ class ErrorHandler
     public function handleException(\Throwable $exception): void
     {
         $statusCode = $this->resolveStatusCode($exception);
-        $errorData  = $this->buildErrorData($exception, $statusCode);
+        $errorData = $this->buildErrorData($exception, $statusCode);
 
         $this->logException($exception);
 
-        $request  = new Request();
+        $request = new Request();
         $response = new Response();
 
         $response->withoutCache();
@@ -125,7 +126,7 @@ class ErrorHandler
     {
         $response = new Response();
         $response->status(500)->json([
-            'error'   => 'Configuration Error',
+            'error' => 'Configuration Error',
             'message' => $exception->getMessage(),
         ]);
 
@@ -144,18 +145,18 @@ class ErrorHandler
     {
         return match (true) {
             $exception instanceof \InvalidArgumentException => 400,
-            $exception instanceof \RuntimeException        => 500,
-            default                                        => 500,
+            $exception instanceof \RuntimeException => 500,
+            default => 500,
         };
     }
 
     private function buildErrorData(\Throwable $exception, int $statusCode): array
     {
         $base = [
-            'success'     => false,
-            'error'       => true,
+            'success' => false,
+            'error' => true,
             'status_code' => $statusCode,
-            'message'     => $this->isDebug()
+            'message' => $this->isDebug()
                 ? $exception->getMessage()
                 : 'An unexpected error occurred.',
         ];
@@ -163,9 +164,9 @@ class ErrorHandler
         if ($this->isDebug()) {
             $base['debug'] = [
                 'exception' => get_class($exception),
-                'file'      => $exception->getFile(),
-                'line'      => $exception->getLine(),
-                'trace'     => $exception->getTraceAsString(),
+                'file' => $exception->getFile(),
+                'line' => $exception->getLine(),
+                'trace' => $exception->getTraceAsString(),
             ];
         }
 
@@ -174,7 +175,7 @@ class ErrorHandler
 
     private function logException(\Throwable $exception): void
     {
-        error_log(sprintf(
+        Log::error(sprintf(
             "[%s] [%s] %s in %s:%d\n%s",
             date('Y-m-d H:i:s'),
             get_class($exception),
@@ -194,10 +195,10 @@ class ErrorHandler
             return ['lines' => [], 'start_line' => 0];
         }
 
-        $allLines  = file($file, FILE_IGNORE_NEW_LINES) ?: [];
+        $allLines = file($file, FILE_IGNORE_NEW_LINES) ?: [];
         $startLine = max(1, $errorLine - $context);
-        $endLine   = min(count($allLines), $errorLine + $context);
-        $snippet   = [];
+        $endLine = min(count($allLines), $errorLine + $context);
+        $snippet = [];
 
         for ($i = $startLine - 1; $i < $endLine; $i++) {
             if (!isset($allLines[$i])) {
@@ -205,8 +206,8 @@ class ErrorHandler
             }
 
             $snippet[] = [
-                'number'   => $i + 1,
-                'code'     => $allLines[$i],
+                'number' => $i + 1,
+                'code' => $allLines[$i],
                 'is_error' => ($i + 1 === $errorLine),
             ];
         }
@@ -237,13 +238,54 @@ class ErrorHandler
 
         // Palavras-chave
         $keywords = [
-            'function','return','if','else','elseif','foreach','while','for',
-            'do','switch','case','break','continue','try','catch','finally',
-            'throw','new','class','interface','trait','extends','implements',
-            'namespace','use','public','private','protected','static','abstract',
-            'final','readonly','match','fn','echo','print','require','include',
-            'require_once','include_once','true','false','null','self','parent',
-            'declare','default','void',
+            'function',
+            'return',
+            'if',
+            'else',
+            'elseif',
+            'foreach',
+            'while',
+            'for',
+            'do',
+            'switch',
+            'case',
+            'break',
+            'continue',
+            'try',
+            'catch',
+            'finally',
+            'throw',
+            'new',
+            'class',
+            'interface',
+            'trait',
+            'extends',
+            'implements',
+            'namespace',
+            'use',
+            'public',
+            'private',
+            'protected',
+            'static',
+            'abstract',
+            'final',
+            'readonly',
+            'match',
+            'fn',
+            'echo',
+            'print',
+            'require',
+            'include',
+            'require_once',
+            'include_once',
+            'true',
+            'false',
+            'null',
+            'self',
+            'parent',
+            'declare',
+            'default',
+            'void',
         ];
         $code = preg_replace(
             '/\b(' . implode('|', $keywords) . ')\b(?![^<]*<\/span>)/',
@@ -287,22 +329,22 @@ class ErrorHandler
     private function buildCodeRows(string $file, int $line, int $context = 5): string
     {
         $snippet = $this->getCodeSnippet($file, $line, $context);
-        $html    = '';
+        $html = '';
 
         foreach ($snippet['lines'] as $ln) {
-            $isErr    = $ln['is_error'];
-            $rowCls   = $isErr ? ' row-error' : '';
-            $arrow    = $isErr
+            $isErr = $ln['is_error'];
+            $rowCls = $isErr ? ' row-error' : '';
+            $arrow = $isErr
                 ? '<span class="arrow-icon">&gt;</span>'
                 : '<span class="arrow-icon"></span>';
-            $code     = $this->highlight($ln['code']);
-            $num      = $ln['number'];
+            $code = $this->highlight($ln['code']);
+            $num = $ln['number'];
 
             $html .= "<div class=\"code-row{$rowCls}\">"
-                   . "<span class=\"col-arrow\">{$arrow}</span>"
-                   . "<span class=\"col-ln\">{$num}</span>"
-                   . "<span class=\"col-code\">{$code}</span>"
-                   . "</div>";
+                . "<span class=\"col-arrow\">{$arrow}</span>"
+                . "<span class=\"col-ln\">{$num}</span>"
+                . "<span class=\"col-code\">{$code}</span>"
+                . "</div>";
         }
 
         return $html;
@@ -314,17 +356,15 @@ class ErrorHandler
             return $this->renderProductionPage();
         }
 
-        $appName  = htmlspecialchars(env('APP_NAME', 'Slenix'), ENT_QUOTES, 'UTF-8');
-        $exClass  = htmlspecialchars(get_class($exception), ENT_QUOTES, 'UTF-8');
-        $message  = htmlspecialchars($exception->getMessage(), ENT_QUOTES, 'UTF-8');
-        $file     = $exception->getFile();
-        $line     = $exception->getLine();
-        $short    = htmlspecialchars($this->shortenPath($file), ENT_QUOTES, 'UTF-8');
+        $appName = htmlspecialchars(env('APP_NAME', 'Slenix'), ENT_QUOTES, 'UTF-8');
+        $exClass = htmlspecialchars(get_class($exception), ENT_QUOTES, 'UTF-8');
+        $message = htmlspecialchars($exception->getMessage(), ENT_QUOTES, 'UTF-8');
+        $file = $exception->getFile();
+        $line = $exception->getLine();
+        $short = htmlspecialchars($this->shortenPath($file), ENT_QUOTES, 'UTF-8');
 
         // Source code block
         $sourceRows = $this->buildCodeRows($file, $line, 6);
-
-        $logosvg = public_path('logo.svg');
 
         // Raw trace
         $rawTrace = htmlspecialchars($exception->getTraceAsString(), ENT_QUOTES, 'UTF-8');
@@ -335,7 +375,7 @@ class ErrorHandler
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <link rel="shortcut icon" href={$logosvg} type="image/x-icon">
+            <link rel="shortcut icon" href="/logo.svg" type="image/x-icon">
             <title>Unhandled Error — {$appName}</title>
             <style>
                 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -517,10 +557,10 @@ class ErrorHandler
      */
     private function renderFrames(\Throwable $exception): string
     {
-        $html    = '';
+        $html = '';
         $exClass = get_class($exception);
-        $file    = $exception->getFile();
-        $line    = $exception->getLine();
+        $file = $exception->getFile();
+        $line = $exception->getLine();
 
         // Frame 0 — ponto exato do erro (aberto por padrão)
         $html .= $this->makeFrame(
@@ -532,9 +572,9 @@ class ErrorHandler
         );
 
         foreach (array_slice($exception->getTrace(), 0, 10) as $frame) {
-            $fn   = trim(($frame['class'] ?? '') . ($frame['type'] ?? '') . ($frame['function'] ?? ''));
-            $f    = $frame['file'] ?? '';
-            $l    = (int) ($frame['line'] ?? 0);
+            $fn = trim(($frame['class'] ?? '') . ($frame['type'] ?? '') . ($frame['function'] ?? ''));
+            $f = $frame['file'] ?? '';
+            $l = (int) ($frame['line'] ?? 0);
             $rows = ($f && $l) ? $this->buildCodeRows($f, $l, 3) : '';
 
             $html .= $this->makeFrame(
@@ -551,11 +591,11 @@ class ErrorHandler
 
     private function makeFrame(string $fn, string $file, int $line, string $rows, bool $open): string
     {
-        $cls      = $open ? ' open' : '';
-        $fnE      = htmlspecialchars($fn,   ENT_QUOTES, 'UTF-8');
-        $fileE    = htmlspecialchars($file, ENT_QUOTES, 'UTF-8');
-        $lineStr  = $line > 0 ? ":{$line}" : '';
-        $body     = $rows
+        $cls = $open ? ' open' : '';
+        $fnE = htmlspecialchars($fn, ENT_QUOTES, 'UTF-8');
+        $fileE = htmlspecialchars($file, ENT_QUOTES, 'UTF-8');
+        $lineStr = $line > 0 ? ":{$line}" : '';
+        $body = $rows
             ? "<div class=\"code-body\">{$rows}</div>"
             : '<div style="padding:.6rem 1rem;font-size:.72rem;color:var(--muted)">[internal PHP function]</div>';
 
@@ -584,6 +624,7 @@ class ErrorHandler
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width,initial-scale=1">
+            <link rel="shortcut icon" href="/logo.svg" type="image/x-icon">
             <title>500 — {$appName}</title>
             <style>
                 *{box-sizing:border-box;margin:0;padding:0}

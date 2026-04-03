@@ -171,6 +171,249 @@ class Response
     }
 
     /**
+     * Resposta 201 Created com Location header.
+     * @param mixed $data
+     * @param mixed $location
+     * @param string $message
+     * @return void
+     */
+    public function created(mixed $data = null, ?string $location = null, string $message = 'Criado com sucesso.'): void
+    {
+        if ($location) {
+            $this->withHeader('Location', $location);
+        }
+        $this->success($data, $message, 201);
+    }
+
+    /**
+     * Resposta 204 No Content.
+     * @return void
+     */
+    public function noContent(): void
+    {
+        $this->status(204)->send('');
+    }
+
+    /**
+     * Resposta 401 Unauthorized.
+     * @param string $message
+     * @return void
+     */
+    public function unauthorized(string $message = 'Unauthorized.'): void
+    {
+        $this->error($message, 401);
+    }
+
+    /**
+     * Resposta 403 Forbidden.
+     * @param string $message
+     * @return void
+     */
+    public function forbidden(string $message = 'Forbidden.'): void
+    {
+        $this->error($message, 403);
+    }
+
+    /**
+     * Resposta 404 Not Found
+     * @param string $message
+     * @return void
+     */
+    public function notFound(string $message = 'Not Found.'): void
+    {
+        $this->error($message, 404);
+    }
+
+    /**
+     * Resposta 422 Unprocessable Entity com erros de validação.
+     * @param array $errors
+     * @param string $message
+     * @return void
+     */
+    public function validationError(array $errors, string $message = 'Dados inválidos.'): void
+    {
+        $this->json([
+            'success' => false,
+            'message' => $message,
+            'errors'  => $errors,
+        ], 422);
+    }
+
+    /**
+     * Resposta 429 Too Many Requests.
+     * @param int $retryAfter
+     * @param string $message
+     * @return void
+     */
+    public function tooManyRequests(int $retryAfter = 60, string $message = 'Muitas requisições.'): void
+    {
+        $this->withHeader('Retry-After', (string) $retryAfter);
+        $this->error($message, 429, ['retry_after' => $retryAfter]);
+    }
+
+    /**
+     * Envia resposta JSON com metadados de paginação.
+     *
+     * @param array|iterable $items       Itens da página atual
+     * @param int            $total       Total de registros
+     * @param int            $perPage     Itens por página
+     * @param int            $currentPage Página atual
+     * @param array          $meta        Metadados extras
+     */
+    public function paginate(
+        mixed $items,
+        int            $total,
+        int            $perPage     = 15,
+        int            $currentPage = 1,
+        array          $meta        = []
+    ): void {
+        $items     = is_array($items) ? $items : iterator_to_array($items);
+        $lastPage  = (int) ceil($total / max(1, $perPage));
+        $from      = $total > 0 ? (($currentPage - 1) * $perPage) + 1 : null;
+        $to        = $total > 0 ? min($currentPage * $perPage, $total) : null;
+
+        $pagination = [
+            'success' => true,
+            'data'    => $items,
+            'meta'    => array_merge([
+                'total'        => $total,
+                'per_page'     => $perPage,
+                'current_page' => $currentPage,
+                'last_page'    => $lastPage,
+                'from'         => $from,
+                'to'           => $to,
+                'has_more'     => $currentPage < $lastPage,
+            ], $meta),
+            'links'   => [
+                'first' => $this->paginationUrl(1),
+                'last'  => $this->paginationUrl($lastPage),
+                'prev'  => $currentPage > 1 ? $this->paginationUrl($currentPage - 1) : null,
+                'next'  => $currentPage < $lastPage ? $this->paginationUrl($currentPage + 1) : null,
+            ],
+        ];
+
+        $this->json($pagination, 200);
+    }
+
+    
+
+    /**
+     * Paginação a partir de um array completo (sem DB — pagina em memória).
+     * @param array $allItems
+     * @param int $perPage
+     * @param mixed $currentPage
+     * @return void
+     */
+    public function paginateArray(array $allItems, int $perPage = 15, ?int $currentPage = null): void
+    {
+        $currentPage = $currentPage ?? max(1, (int) ($_GET['page'] ?? 1));
+        $total  = count($allItems);
+        $offset = ($currentPage - 1) * $perPage;
+        $items  = array_slice($allItems, $offset, $perPage);
+
+        $this->paginate($items, $total, $perPage, $currentPage);
+    }
+
+    /**
+     * Aplica headers de segurança automáticos (recomendados para produção).
+     * @param array $options
+     * @return Response
+     */
+    public function withSecurityHeaders(array $options = []): self
+    {
+        $defaults = [
+            'csp'              => true,
+            'hsts'             => true,
+            'hsts_max_age'     => 31_536_000,
+            'hsts_subdomains'  => true,
+            'hsts_preload'     => false,
+            'xfo'              => 'SAMEORIGIN',    // X-Frame-Options
+            'xcto'             => true,            // X-Content-Type-Options
+            'referrer'         => 'strict-origin-when-cross-origin',
+            'permissions'      => true,
+            'xss_protection'   => true,
+        ];
+
+        $opts = array_merge($defaults, $options);
+
+        // Content-Security-Policy
+        if ($opts['csp']) {
+            $csp = $opts['csp_value'] ?? "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self';";
+            $this->withHeader('Content-Security-Policy', $csp);
+        }
+
+        // HTTP Strict Transport Security
+        if ($opts['hsts']) {
+            $hsts = "max-age={$opts['hsts_max_age']}";
+            if ($opts['hsts_subdomains']) $hsts .= '; includeSubDomains';
+            if ($opts['hsts_preload'])    $hsts .= '; preload';
+            $this->withHeader('Strict-Transport-Security', $hsts);
+        }
+
+        // X-Frame-Options
+        if ($opts['xfo']) {
+            $this->withHeader('X-Frame-Options', $opts['xfo']);
+        }
+
+        // X-Content-Type-Options
+        if ($opts['xcto']) {
+            $this->withHeader('X-Content-Type-Options', 'nosniff');
+        }
+
+        // Referrer-Policy
+        if ($opts['referrer']) {
+            $this->withHeader('Referrer-Policy', $opts['referrer']);
+        }
+
+        // Permissions-Policy
+        if ($opts['permissions']) {
+            $pp = $opts['permissions_value']
+                ?? 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)';
+            $this->withHeader('Permissions-Policy', $pp);
+        }
+
+        // X-XSS-Protection (legado, mas ainda útil)
+        if ($opts['xss_protection']) {
+            $this->withHeader('X-XSS-Protection', '1; mode=block');
+        }
+
+        // Remove headers que expõem informações do servidor
+        $this->withoutHeader('X-Powered-By');
+        $this->withoutHeader('Server');
+
+        return $this;
+    }
+
+    /**
+     * Headers mínimos de segurança (mais leve, para APIs).
+     * @return Response
+     */
+    public function withBasicSecurityHeaders(): self
+    {
+        return $this->withHeaders([
+            'X-Content-Type-Options' => 'nosniff',
+            'X-Frame-Options'        => 'DENY',
+            'Referrer-Policy'        => 'no-referrer',
+        ])->withoutHeader('X-Powered-By');
+    }
+
+    /**
+     * Configura headers CSP customizados.
+     * @param array $directives
+     * @return Response
+     */
+    public function withCsp(array $directives): self
+    {
+        $csp = implode('; ', array_map(
+            fn($dir, $val) => trim("{$dir} {$val}"),
+            array_keys($directives),
+            $directives
+        ));
+
+        return $this->withHeader('Content-Security-Policy', $csp);
+    }
+
+    /**
      * Envia arquivo para download (leitura em chunks para economia de memória).
      */
     public function download(
@@ -243,8 +486,10 @@ class Response
 
     /**
      * Redireciona para outra URL.
-     *
-     * @throws InvalidArgumentException Para código de status inválido.
+     * @param string $url
+     * @param int $statusCode
+     * @throws InvalidArgumentException
+     * @return void
      */
     public function redirect(string $url, int $statusCode = 302): void
     {
@@ -265,6 +510,9 @@ class Response
 
     /**
      * Redireciona de volta usando HTTP_REFERER.
+     * @param string $fallback
+     * @param int $statusCode
+     * @return void
      */
     public function redirectBack(string $fallback = '/', int $statusCode = 302): void
     {
@@ -344,6 +592,11 @@ class Response
 
     /**
      * Define um cookie.
+     * @param string $name
+     * @param string $value
+     * @param int $expire
+     * @param array $options
+     * @return Response
      */
     public function withCookie(
         string $name,
@@ -379,6 +632,11 @@ class Response
 
     /**
      * Define um cookie com configurações de segurança máxima.
+     * @param string $name
+     * @param string $value
+     * @param int $expire
+     * @param array $options
+     * @return Response
      */
     public function withSecureCookie(
         string $name,
@@ -445,6 +703,19 @@ class Response
             'Pragma'        => 'no-cache',
             'Expires'       => '0',
         ]);
+    }
+
+    /**
+     * Cache imutável (para assets com hash no nome).
+     * @param int $maxAge
+     * @return Response
+     */
+    public function withImmutableCache(int $maxAge = 31_536_000): self
+    {
+        return $this->withHeader(
+            'Cache-Control',
+            "public, max-age={$maxAge}, immutable"
+        );
     }
 
     /**
@@ -570,7 +841,53 @@ class Response
     }
 
     /**
+     * Envia resposta como CSV para download.
+     *
+     * @param array  $rows     Array de arrays (linhas)
+     * @param array  $headers  Cabeçalho das colunas
+     * @param string $filename Nome do arquivo
+     */
+    public function csv(array $rows, array $headers = [], string $filename = 'export.csv'): void
+    {
+        $this->withHeaders([
+            'Content-Type'        => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control'       => 'no-store',
+            'Pragma'              => 'no-cache',
+        ]);
+
+        $this->sendHeaders();
+
+        $output = fopen('php://output', 'w');
+
+        // BOM para Excel reconhecer UTF-8
+        fwrite($output, "\xEF\xBB\xBF");
+
+        if (!empty($headers)) {
+            fputcsv($output, $headers);
+        }
+
+        foreach ($rows as $row) {
+            fputcsv($output, (array) $row);
+        }
+
+        fclose($output);
+
+        $this->sent = true;
+        exit;
+    }
+
+    private function paginationUrl(int $page): string
+    {
+        $query = array_merge($_GET, ['page' => $page]);
+        $uri   = strtok($_SERVER['REQUEST_URI'] ?? '/', '?') ?? '/';
+        return $uri . '?' . http_build_query($query);
+    }
+
+    /**
      * Localiza um arquivo de template nas pastas configuradas.
+     * @param string $template
+     * @return string|null
      */
     private function resolveTemplate(string $template): ?string
     {

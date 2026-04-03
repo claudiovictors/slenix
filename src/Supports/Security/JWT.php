@@ -9,7 +9,7 @@ class Jwt {
     private string $secret;
 
     public function __construct(?string $secret = null) {
-        $this->secret = $secret ?? getenv('JWT_SECRET_TOKEN') ?: 'sua_chave_secreta_aqui';
+        $this->secret = $secret ?? env('JWT_SECRET_TOKEN') ?: 'sua_chave_secreta_aqui';
     }
 
     /**

@@ -20,7 +20,7 @@ declare(strict_types=1);
 
 namespace Slenix\Core\Console;
 
-use Slenix\Supports\Database\Migrations\Migrator;
+use Slenix\Database\Migrations\Migrator;
 
 class MigrateCommand extends Command
 {
@@ -369,9 +369,9 @@ class MigrateCommand extends Command
 
 declare(strict_types=1);
 
-use Slenix\Supports\Database\Migrations\Migration;
-use Slenix\Supports\Database\Migrations\Schema;
-use Slenix\Supports\Database\Migrations\Blueprint;
+use Slenix\Database\Migrations\Migration;
+use Slenix\Database\Migrations\Schema;
+use Slenix\Database\Migrations\Blueprint;
 
 return new class extends Migration
 {
@@ -411,9 +411,9 @@ PHP;
 
 declare(strict_types=1);
 
-use Slenix\Supports\Database\Migrations\Migration;
-use Slenix\Supports\Database\Migrations\Schema;
-use Slenix\Supports\Database\Migrations\Blueprint;
+use Slenix\Database\Migrations\Migration;
+use Slenix\Database\Migrations\Schema;
+use Slenix\Database\Migrations\Blueprint;
 
 return new class extends Migration
 {
@@ -453,9 +453,9 @@ PHP;
 
 declare(strict_types=1);
 
-use Slenix\Supports\Database\Migrations\Migration;
-use Slenix\Supports\Database\Migrations\Schema;
-use Slenix\Supports\Database\Migrations\Blueprint;
+use Slenix\Database\Migrations\Migration;
+use Slenix\Database\Migrations\Schema;
+use Slenix\Database\Migrations\Blueprint;
 
 return new class extends Migration
 {
@@ -493,9 +493,9 @@ PHP;
 
 declare(strict_types=1);
 
-use Slenix\Supports\Database\Migrations\Migration;
-use Slenix\Supports\Database\Migrations\Schema;
-use Slenix\Supports\Database\Migrations\Blueprint;
+use Slenix\Database\Migrations\Migration;
+use Slenix\Database\Migrations\Schema;
+use Slenix\Database\Migrations\Blueprint;
 
 return new class extends Migration
 {

@@ -16,8 +16,11 @@ namespace Slenix\Core;
 
 use Slenix\Core\EnvLoader;
 use Slenix\Http\Routing\Router;
-use Slenix\Supports\Security\Session;
+use Slenix\Supports\Logging\Log;
+use Slenix\Supports\Cache\Cache;
 use Slenix\Supports\Security\CSRF;
+use Slenix\Supports\Storage\Storage;
+use Slenix\Supports\Security\Session;
 use Slenix\Core\Exceptions\ErrorHandler;
 
 class Kernel
@@ -56,7 +59,10 @@ class Kernel
             $this->startSession();
             $this->verifyCsrf();
             $this->dispatch();
+            $this->bootServices();
         } catch (\Throwable $e) {
+            // Loga a exceção antes de passar ao handler
+            try { Log::exception($e); } catch (\Throwable) {}
             $this->errorHandler->handleException($e);
         }
     }
@@ -68,16 +74,9 @@ class Kernel
     public function handleShutdown(): void
     {
         $error = error_get_last();
-
         if ($error && in_array($error['type'], [E_ERROR, E_CORE_ERROR, E_COMPILE_ERROR, E_PARSE], true)) {
             $this->errorHandler->handleException(
-                new \ErrorException(
-                    $error['message'],
-                    0,
-                    $error['type'],
-                    $error['file'],
-                    $error['line']
-                )
+                new \ErrorException($error['message'], 0, $error['type'], $error['file'], $error['line'])
             );
         }
     }
@@ -93,6 +92,28 @@ class Kernel
         } catch (\Exception $e) {
             $this->errorHandler->handleEnvError($e);
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Boot dos serviços (Log, Cache, Storage)
+    // -------------------------------------------------------------------------
+ 
+    private function bootServices(): void
+    {
+        $storagePath = $this->basePath('storage');
+ 
+        // Log
+        Log::setPath($storagePath . '/logs');
+        Log::setChannel($_ENV['LOG_CHANNEL'] ?? 'slenix');
+ 
+        // Cache
+        Cache::setPath($storagePath . '/cache');
+        Cache::setPrefix($_ENV['CACHE_PREFIX'] ?? 'slenix_');
+ 
+        // Storage
+        Storage::setDisk('public',  $storagePath . '/app/public');
+        Storage::setDisk('local',   $storagePath . '/app/private');
+        Storage::setDefaultDisk($_ENV['STORAGE_DISK'] ?? 'public');
     }
 
     // -------------------------------------------------------------------------

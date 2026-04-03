@@ -8,20 +8,16 @@
 | Utilitários estáticos para manipulação de strings, inspirados no
 | Illuminate\Support\Str do Laravel. Suporte completo a UTF-8/multibyte.
 |
-| Uso:
-|   Str::slug('Olá Mundo!')           → 'ola-mundo'
-|   Str::camel('foo_bar')             → 'fooBar'
-|   Str::limit('texto longo', 10)     → 'texto l...'
-|   Str::uuid()                       → 'f47ac10b-58cc-...'
 |
 */
 
 declare(strict_types=1);
 
-namespace Slenix\Supports\Helpers;
+namespace Slenix\Supports\Libraries;
 
 class Str
 {
+    
     // -------------------------------------------------------------------------
     // CACHE interno (memoization para conversões repetidas)
     // -------------------------------------------------------------------------

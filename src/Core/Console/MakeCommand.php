@@ -97,7 +97,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use Slenix\Supports\Database\Model;
+use Slenix\Database\Model;
 
 class {$modelName} extends Model
 {

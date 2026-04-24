@@ -1,284 +1,260 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="{{ env('APP_LOCALE') }}">
 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="shortcut icon" href="/logo.svg" type="image/x-icon">
-  <title>{{ env('APP_NAME') }} PHP Framework</title>
+  <title>Slenix - v{{ env('APP_VERSION') }}</title>
 
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@800&display=swap');
 
     :root {
       --bg: #050505;
-      --card: rgba(17, 17, 17, 0.7);
+      --accent: #FF2D20; 
+      --glass: rgba(255, 255, 255, 0.03);
       --border: rgba(255, 255, 255, 0.08);
-      --text: #ffffff;
-      --muted: #a0a0a0;
-      --primary: #e5484d;
-      --secondary: #6e2cf2;
+      --text-main: #e2e8f0;
+      --text-dim: #64748b;
     }
 
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
       font-family: 'Inter', sans-serif;
-      /* Gradiente aprimorado com dois focos de luz */
-      background:
-        radial-gradient(circle at 15% 15%, rgba(229, 72, 77, 0.15), transparent 35%),
-        radial-gradient(circle at 85% 85%, rgba(110, 44, 242, 0.1), transparent 35%),
-        var(--bg);
-      color: var(--text);
+      background-color: var(--bg);
+      color: var(--text-main);
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 2rem;
-      overflow-x: hidden;
-    }
-
-    /* Versão 3D Grande no Fundo */
-    .version-3d {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      font-size: 25vw;
-      font-weight: 800;
-      color: rgba(255, 255, 255, 0.03);
-      z-index: -1;
-      pointer-events: none;
-      user-select: none;
-      text-transform: uppercase;
-      letter-spacing: -1rem;
-      /* Efeito de Profundidade 3D */
-      text-shadow:
-        1px 1px 0px rgba(229, 72, 77, 0.1),
-        4px 4px 20px rgba(0, 0, 0, 0.5);
-      animation: float 6s ease-in-out infinite;
-    }
-
-    @keyframes float {
-
-      0%,
-      100% {
-        transform: translate(-50%, -52%);
-      }
-
-      50% {
-        transform: translate(-50%, -48%);
-      }
-    }
-
-    .wrapper {
-      width: 100%;
-      max-width: 1050px;
-      backdrop-filter: blur(5px);
-    }
-
-    .top {
-      text-align: center;
-      margin-bottom: 3.5rem;
-    }
-
-    .logo {
-      width: 90px;
-      margin-bottom: 1.5rem;
-      filter: drop-shadow(0 0 25px rgba(229, 72, 77, 0.4));
-    }
-
-    .title {
-      font-size: 2.8rem;
-      font-weight: 800;
-      letter-spacing: -1.5px;
-      background: linear-gradient(to bottom, #fff, #888);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    .subtitle {
-      color: var(--muted);
-      font-size: 1.1rem;
-      margin-top: 0.6rem;
-      max-width: 500px;
-      margin-left: auto;
-      margin-right: auto;
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: 1.2fr 1fr;
-      gap: 1.5rem;
-    }
-
-    .card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 1.8rem;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      text-decoration: none;
-      color: inherit;
-      display: block;
-      backdrop-filter: blur(12px);
+      overflow: hidden; /* Importante para o bg 3D não criar scroll */
       position: relative;
-      overflow: hidden;
     }
 
-    .card::before {
-      content: "";
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(45deg, transparent, rgba(229, 72, 77, 0.05), transparent);
-      transform: translateX(-100%);
-      transition: 0.5s;
-    }
-
-    .card:hover::before {
-      transform: translateX(100%);
-    }
-
-    .card:hover {
-      border-color: var(--primary);
-      background: rgba(25, 25, 25, 0.8);
-      transform: translateY(-5px) scale(1.01);
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-    }
-
-    .big-card {
-      min-height: 350px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      border-width: 1.5px;
-    }
-
-    .card-title {
-      font-size: 1.2rem;
-      font-weight: 700;
-      margin-bottom: 0.8rem;
+    /* --- BACKGROUND VERSION 3D EFFECT --- */
+    .bg-version-3d {
+      position: fixed;
+      inset: 0;
+      left: -20%;
       display: flex;
       align-items: center;
-      gap: 0.5rem;
+      justify-content: center;
+      z-index: -2;
+      perspective: 1000px;
+      overflow: hidden;
+      pointer-events: none;
     }
 
-    .card-desc {
-      font-size: 0.95rem;
-      color: var(--muted);
-      line-height: 1.7;
+    .version-text-3d {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 800;
+      font-size: 20vw; /* Se ainda não aparecer, tente 400px */
+      line-height: 1;
+      color: rgba(255, 45, 32, 0.03); /* Cor sólida bem clarinha */
+      -webkit-text-stroke: 2px rgba(255, 45, 32, 0.15); /* Contorno mais grosso */
+      
+      /* Transformação fixa para teste inicial */
+      transform: rotateX(25deg) rotateY(-20deg);
+      opacity: 0.8;
+      white-space: nowrap;
+      user-select: none;
     }
 
-    .arrow {
-      margin-top: 1.2rem;
-      text-align: right;
-      color: var(--primary);
-      font-size: 1.5rem;
-      font-weight: 300;
+    @keyframes float3D {
+      0%, 100% { transform: rotateX(20deg) rotateY(-30deg) translateZ(-200px) translateY(0px); }
+      50% { transform: rotateX(25deg) rotateY(-25deg) translateZ(-150px) translateY(-30px); }
     }
 
-    .stack {
-      display: flex;
-      flex-direction: column;
-      gap: 1.2rem;
+    /* Grid de fundo sutil (sobre o texto 3D) */
+    .bg-grid {
+      position: fixed;
+      inset: 0;
+      background-image: radial-gradient(var(--border) 1px, transparent 1px);
+      background-size: 50px 50px;
+      mask-image: radial-gradient(circle at 50% 50%, black, transparent 90%);
+      z-index: -1;
+      pointer-events: none;
     }
 
-    .footer {
-      text-align: center;
-      margin-top: 4rem;
-      font-size: 0.85rem;
-      color: #444;
+    /* --- CONTEÚDO PRINCIPAL (Sem alterações) --- */
+    .main-container {
+      width: 90%;
+      max-width: 1200px;
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 2rem;
+      position: relative;
+      z-index: 10; /* Garante que fique acima do background */
+    }
+
+    .hero-section {
+      padding: 2rem;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      background: rgba(255, 45, 32, 0.1);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      border-radius: 20px;
+      margin-bottom: 1.5rem;
+      text-transform: uppercase;
       letter-spacing: 1px;
     }
 
-    .footer a {
-      color: #777;
+    h1 {
+      font-size: clamp(3rem, 8vw, 5.5rem);
+      font-weight: 800;
+      line-height: 0.9;
+      margin-bottom: 1.5rem;
+      letter-spacing: -3px;
+      color: #fff;
+    }
+
+    .description {
+      font-size: 1.1rem;
+      color: var(--text-dim);
+      max-width: 500px;
+      line-height: 1.6;
+      margin-bottom: 3rem;
+    }
+
+    .action-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+
+    .nav-card {
+      background: var(--glass);
+      border: 1px solid var(--border);
+      padding: 1.5rem;
+      border-radius: 12px;
       text-decoration: none;
-      transition: 0.2s;
-      font-weight: 600;
+      color: inherit;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    .footer a:hover {
-      color: var(--primary);
+    .nav-card:hover {
+      border-color: var(--accent);
+      background: rgba(255, 45, 32, 0.03);
+      transform: translateY(-5px);
+      box-shadow: 0 10px 30px -10px rgba(255, 45, 32, 0.2);
     }
 
-    @media (max-width: 900px) {
-      .grid {
-        grid-template-columns: 1fr;
-      }
+    .nav-card h3 {
+      font-size: 0.9rem;
+      color: var(--accent);
+      font-family: 'JetBrains Mono', monospace;
+      margin-bottom: 0.5rem;
+    }
 
-      .version-3d {
-        font-size: 40vw;
-        opacity: 0.02;
-      }
+    .nav-card p {
+      font-size: 0.85rem;
+      color: var(--text-dim);
+    }
 
-      .title {
-        font-size: 2.2rem;
-      }
+    .visual-stack {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .core-sphere {
+      width: 280px;
+      height: 280px;
+      border: 1px solid rgba(255, 45, 32, 0.3);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      background: radial-gradient(circle, rgba(255, 45, 32, 0.05) 0%, transparent 70%);
+      animation: pulse 4s infinite ease-in-out;
+    }
+
+    .core-sphere img {
+      width: 120px;
+      height: 120px;
+      filter: drop-shadow(0 0 15px rgba(255, 45, 32, 0.5));
+    }
+
+    .orbit {
+      position: absolute;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      animation: rotate 25s linear infinite;
+    }
+
+    .orbit-1 { width: 400px; height: 400px; }
+    .orbit-2 { width: 520px; height: 520px; border-style: dashed; animation-duration: 40s; animation-direction: reverse; }
+
+    @keyframes rotate {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); box-shadow: 0 0 40px rgba(255, 45, 32, 0.1); }
+      50% { transform: scale(1.05); box-shadow: 0 0 80px rgba(255, 45, 32, 0.2); }
+    }
+
+    @media (max-width: 968px) {
+      .main-container { grid-template-columns: 1fr; text-align: center; margin-top: 2rem; }
+      .description { margin-left: auto; margin-right: auto; }
+      .visual-stack { display: none; }
+      .action-grid { justify-content: center; }
+      .version-text-3d { font-size: 60vw; } /* Aumenta o bg no mobile */
     }
   </style>
 </head>
 
 <body>
 
-  <div class="version-3d">
-    {{ env('APP_VERSION') }}
+  <div class="bg-version-3d">
+    <div class="version-text-3d">v{{ env('APP_VERSION') ?: 'v2.5' }}</div>
   </div>
 
-  <div class="wrapper">
-    <div class="top">
-      <img src="/logo.svg" class="logo" alt="Slenix Logo">
-      <h1 class="title">{{ env('APP_NAME') }}</h1>
-      <p class="subtitle">
-        A modern, lightweight PHP framework for building fast and scalable applications.
+  <div class="bg-grid"></div>
+
+  <main class="main-container">
+    
+    <section class="hero-section">
+      <div class="badge">Slenix Core Engine</div>
+      <h1>Slenix.</h1>
+      <p class="description">
+        A minimalist PHP framework engineered for developers who demand peak performance and architectural clarity.
       </p>
-    </div>
 
-    <div class="grid">
-      <a href="https://slenix.vercel.app" target="_blank" class="card big-card">
-        <div>
-          <div class="card-title">
-            <span style="color: var(--primary)">#</span> Documentation
-          </div>
-          <div class="card-desc">
-            Explore the full ecosystem of {{ env('APP_NAME') }}.
-            From routing and controllers to advanced dependency injection.
-            Everything is designed to be intuitive and clean.
-          </div>
-        </div>
-        <div class="arrow">view docs —</div>
-      </a>
-
-      <div class="stack">
-        <a href="https://github.com/claudiovictors/slenix" target="_blank" class="card">
-          <div class="card-title">GitHub Repository</div>
-          <div class="card-desc">Open source core. Star us to support the project.</div>
+      <div class="action-grid">
+        <a href="https://slenix.vercel.app/" target="_blank" class="nav-card">
+          <h3>// Documentation</h3>
+          <p>Learn how to build lightning-fast APIs and web applications.</p>
         </a>
 
-        <a href="https://slenix.vercel.app/docs/installation" target="_blank" class="card">
-          <div class="card-title">Core Guides</div>
-          <div class="card-desc">Master the framework lifecycle and architecture.</div>
-        </a>
-
-        <a href="https://slenix.vercel.app/docs/celestial-cli" target="_blank" class="card">
-          <div class="card-title">Slenix CLI</div>
-          <div class="card-desc">Supercharge your productivity with our command line tool.</div>
+        <a href="http://github.com/claudiovictors/slenix" target="_blank" class="nav-card">
+          <h3>// GitHub</h3>
+          <p>Explore the source code and contribute to the core project.</p>
         </a>
       </div>
-    </div>
+    </section>
 
-    <div class="footer">
-      RELEASE V{{ env('APP_VERSION') }} • DESIGNED BY
-      <a href="https://github.com/claudiovictors" target="_blank">CLÁUDIO VICTOR</a>
-    </div>
-  </div>
+    <section class="visual-stack">
+      <div class="orbit orbit-1"></div>
+      <div class="orbit orbit-2"></div>
+      
+      <div class="core-sphere">
+        <img src="/logo.svg" alt="Slenix Logo">
+      </div>
+    </section>
+
+  </main>
 
 </body>
 

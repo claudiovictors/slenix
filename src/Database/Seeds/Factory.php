@@ -2,12 +2,12 @@
 
 /*
 |--------------------------------------------------------------------------
-| Classe Factory (Base)
+| Factory Class (Base)
 |--------------------------------------------------------------------------
 |
-| Classe abstrata base para factories de modelos (geração de dados falsos).
-| Permite criar registros em massa para testes e seeds de desenvolvimento.
-| Integra-se com o Faker (se disponível) ou usa geração interna.
+| Abstract base class for model factories (fake data generation).
+| Allows mass-creating records for tests and development seeds.
+| Integrates with Faker (if available) or uses internal generation.
 |
 */
 
@@ -17,29 +17,25 @@ namespace Slenix\Database\Seeds;
 
 abstract class Factory
 {
-    /** @var string Classe do modelo que este factory gera */
+    /** @var string \Model class this factory generates */
     protected string $model = '';
 
-    /** @var int Quantidade padrão a criar */
+    /** @var int Default number of records to create */
     protected int $count = 1;
 
-    /** @var array Overrides de atributos */
+    /** @var array Attribute overrides */
     protected array $states = [];
 
     /**
-     * Define a estrutura de atributos padrão.
-     * Deve retornar um array com os campos e valores (pode usar Fake::*).
+     * Defines the default attribute structure.
+     * Must return an array with fields and values (may use Fake::*).
      *
      * @example return ['name' => Fake::name(), 'email' => Fake::email()]
      */
     abstract public function definition(): array;
 
-    // =========================================================
-    // FLUENT API
-    // =========================================================
-
     /**
-     * Define a quantidade de registros a criar.
+     * Sets the number of records to create.
      *
      * @example UserFactory::new()->count(10)->create()
      */
@@ -51,7 +47,7 @@ abstract class Factory
     }
 
     /**
-     * Aplica overrides de atributos.
+     * Applies attribute overrides.
      *
      * @example UserFactory::new()->state(['role' => 'admin'])->create()
      */
@@ -63,7 +59,7 @@ abstract class Factory
     }
 
     /**
-     * Instancia o factory.
+     * Instantiates the factory.
      *
      * @example UserFactory::new()
      */
@@ -72,17 +68,13 @@ abstract class Factory
         return new static();
     }
 
-    // =========================================================
-    // CRIAÇÃO
-    // =========================================================
-
     /**
-     * Cria e persiste modelos no banco de dados.
+     * Creates and persists models in the database.
      *
      * @example UserFactory::new()->count(5)->create()
      * @example UserFactory::new()->create(['role' => 'admin'])
      *
-     * @return object|array Modelo único ou array de modelos
+     * @return object|array Single model or array of models
      */
     public function create(array $overrides = []): mixed
     {
@@ -97,7 +89,7 @@ abstract class Factory
 
             if (empty($this->model) || !class_exists($this->model)) {
                 throw new \RuntimeException(
-                    "Propriedade \$model não definida ou inválida em " . static::class
+                    "Property \$model is not defined or invalid in " . static::class
                 );
             }
 
@@ -110,7 +102,7 @@ abstract class Factory
     }
 
     /**
-     * Cria instâncias do modelo SEM persistir no banco.
+     * Creates model instances WITHOUT persisting to the database.
      *
      * @example UserFactory::new()->make()
      */
@@ -135,7 +127,7 @@ abstract class Factory
     }
 
     /**
-     * Retorna apenas o array de atributos (sem criar modelo).
+     * Returns only the attribute array (without creating a model).
      *
      * @example UserFactory::new()->raw()
      */

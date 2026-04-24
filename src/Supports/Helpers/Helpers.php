@@ -3498,6 +3498,48 @@ if (!function_exists('logger')) {
         };
     }
 }
+
+// ============================================================
+// PATCH — add to src/Supports/Helpers/Helpers.php
+// ============================================================
+ 
+if (!function_exists('dispatch')) {
+    /**
+     * Dispatches a job to the queue.
+     *
+     * dispatch(new SendWelcomeEmailJob($user));
+     * dispatch(new SendWelcomeEmailJob($user), queue: 'emails', delay: 30);
+     *
+     * @param \Slenix\Supports\Queue\Job $job
+     * @param string $queue  Optional queue channel override
+     * @param int    $delay  Optional delay in seconds
+     * @return string        Job ID
+     */
+    function dispatch(\Slenix\Supports\Queue\Job $job, string $queue = '', int $delay = 0): string
+    {
+        // Boot storage path from environment
+        $basePath = (defined('STORAGE_PATH') ? STORAGE_PATH : dirname(__DIR__, 3) . '/storage') . '/queue';
+        \Slenix\Supports\Queue\Queue::setBasePath($basePath);
+ 
+        return \Slenix\Supports\Queue\Queue::push($job, $queue, $delay);
+    }
+}
+ 
+if (!function_exists('queue')) {
+    /**
+     * Returns the Queue facade for direct interaction.
+     *
+     * queue()->size('emails');
+     * queue()->clear('emails');
+     *
+     * @return \Slenix\Supports\Queue\Queue
+     */
+    function queue(): string
+    {
+        return \Slenix\Supports\Queue\Queue::class;
+    }
+}
+
  
 // =============================================================================
 // STORAGE

@@ -2,12 +2,12 @@
 
 /*
 |--------------------------------------------------------------------------
-| Classe HasMany
+| HasMany Class
 |--------------------------------------------------------------------------
 |
-| Representa a relação "tem muitos" (1:N) entre dois modelos.
-| Exemplo: Um User tem muitos Posts. A FK (user_id) fica na tabela posts.
-| Suporta lazy loading (retorna Collection) e eager loading via match().
+| Represents the "has many" (1:N) relationship between two models.
+| Example: A User has many Posts. The FK (user_id) lives in the posts table.
+| Supports lazy loading (returns Collection) and eager loading via match().
 |
 */
 
@@ -20,7 +20,7 @@ use Slenix\Database\Collection;
 class HasMany extends Relation
 {
     /**
-     * Aplica a constraint padrão: WHERE foreign_key = local_key_value
+     * Applies the default constraint: WHERE foreign_key = local_key_value
      */
     public function addConstraints(): void
     {
@@ -32,16 +32,16 @@ class HasMany extends Relation
     }
 
     /**
-     * Associa os resultados do eager load a cada modelo pai (1:N)
+     * Associates eager load results to each parent model (1:N)
      *
-     * @param array  $models   Array de modelos pais
-     * @param array  $results  Resultados do banco (array de modelos relacionados)
-     * @param string $relation Nome da relação
-     * @return array Modelos com a relação definida (Collection por pai)
+     * @param array  $models   Array of parent models
+     * @param array  $results  Database results (array of related models)
+     * @param string $relation Relation name
+     * @return array Models with the relation set (Collection per parent)
      */
     public function match(array $models, array $results, string $relation): array
     {
-        // Monta dicionário: localKeyValue => [modelos relacionados]
+        // Build dictionary: localKeyValue => [related models]
         $dictionary = [];
         foreach ($results as $result) {
             $key = $result->{$this->foreignKey};
@@ -50,7 +50,7 @@ class HasMany extends Relation
             }
         }
 
-        // Associa a Collection (ou Collection vazia) a cada modelo pai
+        // Assign the Collection (or empty Collection) to each parent model
         foreach ($models as $model) {
             $localValue = $model->{$this->localKey} ?? $model->getKey();
             $related    = $dictionary[$localValue] ?? [];
@@ -61,7 +61,7 @@ class HasMany extends Relation
     }
 
     /**
-     * Executa a query e retorna uma Collection dos relacionados (lazy loading)
+     * Executes the query and returns a Collection of related models (lazy loading)
      */
     public function getResults(array $columns = ['*']): Collection
     {
@@ -74,12 +74,8 @@ class HasMany extends Relation
         return $this->query->select($columns)->get();
     }
 
-    // =========================================================
-    // HELPERS DE ENCADEAMENTO
-    // =========================================================
-
     /**
-     * Adiciona WHERE à query da relação
+     * Adds a WHERE clause to the relation query
      *
      * @example $user->posts()->where('active', 1)->get()
      */
@@ -90,7 +86,7 @@ class HasMany extends Relation
     }
 
     /**
-     * Adiciona ORDER BY à query da relação
+     * Adds an ORDER BY clause to the relation query
      *
      * @example $user->posts()->orderBy('created_at', 'DESC')->get()
      */
@@ -101,7 +97,7 @@ class HasMany extends Relation
     }
 
     /**
-     * Limita os resultados da relação
+     * Limits the relation results
      *
      * @example $user->posts()->limit(5)->get()
      */
@@ -112,7 +108,7 @@ class HasMany extends Relation
     }
 
     /**
-     * Executa e retorna a Collection (alias para getResults)
+     * Executes and returns the Collection (alias for getResults)
      */
     public function get(): Collection
     {
@@ -120,7 +116,7 @@ class HasMany extends Relation
     }
 
     /**
-     * Conta os registros relacionados
+     * Counts the related records
      */
     public function count(): int
     {
@@ -128,9 +124,9 @@ class HasMany extends Relation
     }
 
     /**
-     * Cria um novo registro associado ao pai
+     * Creates a new record associated with the parent
      *
-     * @example $user->posts()->create(['title' => 'Novo Post'])
+     * @example $user->posts()->create(['title' => 'New Post'])
      */
     public function create(array $data): mixed
     {

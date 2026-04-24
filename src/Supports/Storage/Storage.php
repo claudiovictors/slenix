@@ -2,14 +2,14 @@
 
 /*
 |--------------------------------------------------------------------------
-| Classe Storage
+| Storage Class
 |--------------------------------------------------------------------------
 |
-| Abstração para sistema de ficheiros local do Slenix.
-| Discos disponíveis: local (storage/app/private) e public (storage/app/public)
+| Slenix local filesystem abstraction.
+| Available disks: local (storage/app/private) and public (storage/app/public).
 |
-| Os ficheiros do disco 'public' são servidos via public/storage/ (symlink
-| ou cópia). Os do disco 'local' nunca são acessíveis via browser.
+| 'public' disk files are served via public/storage/ (symlink or copy).
+| 'local' disk files are never accessible via browser.
 |
 */
 
@@ -19,95 +19,161 @@ namespace Slenix\Supports\Storage;
 
 class Storage
 {
+    /** @var string The default disk name to be used */
     protected static string $defaultDisk = 'public';
+
+    /** @var array Registered custom disk paths */
     protected static array $disks = [];
 
-    // =========================================================
-    // CONFIGURAÇÃO
-    // =========================================================
-
+    /**
+     * Registers a custom disk path.
+     * @param string $name
+     * @param string $path
+     * @return void
+     */
     public static function setDisk(string $name, string $path): void
     {
         static::$disks[$name] = rtrim($path, '/\\');
     }
 
+    /**
+     * Sets the default disk name.
+     * @param string $disk
+     * @return void
+     */
     public static function setDefaultDisk(string $disk): void
     {
         static::$defaultDisk = $disk;
     }
 
     /**
-     * Muda de disco temporariamente.
-     * @example Storage::disk('local')->put('file.txt', 'content')
+     * Returns an instance of a specific storage disk.
+     * @param string $disk
+     * @return StorageDisk
      */
     public static function disk(string $disk): StorageDisk
     {
         return new StorageDisk(static::resolvePath($disk), $disk);
     }
 
-    // =========================================================
-    // API ESTÁTICA (usa o disco padrão)
-    // =========================================================
-
+    /**
+     * Stores content into a file on the default disk.
+     * @param string $path
+     * @param mixed $contents
+     * @return bool
+     */
     public static function put(string $path, mixed $contents): bool
     {
         return static::disk(static::$defaultDisk)->put($path, $contents);
     }
 
+    /**
+     * Retrieves the contents of a file.
+     * @param string $path
+     * @return string|false
+     */
     public static function get(string $path): string|false
     {
         return static::disk(static::$defaultDisk)->get($path);
     }
 
+    /**
+     * Checks if a file exists.
+     * @param string $path
+     * @return bool
+     */
     public static function exists(string $path): bool
     {
         return static::disk(static::$defaultDisk)->exists($path);
     }
 
+    /**
+     * Deletes a file from the default disk.
+     * @param string $path
+     * @return bool
+     */
     public static function delete(string $path): bool
     {
         return static::disk(static::$defaultDisk)->delete($path);
     }
 
+    /**
+     * Generates a public URL for the given path (Public disk only).
+     * @param string $path
+     * @return string
+     */
     public static function url(string $path): string
     {
         return static::disk(static::$defaultDisk)->url($path);
     }
 
+    /**
+     * Returns the absolute path of a file.
+     * @param string $path
+     * @return string
+     */
     public static function path(string $path): string
     {
         return static::disk(static::$defaultDisk)->path($path);
     }
 
+    /**
+     * Lists files in a directory on the default disk.
+     * @param string|null $directory
+     * @return array
+     */
     public static function files(?string $directory = null): array
     {
         return static::disk(static::$defaultDisk)->files($directory);
     }
 
+    /**
+     * Creates a directory recursively.
+     * @param string $path
+     * @return bool
+     */
     public static function makeDirectory(string $path): bool
     {
         return static::disk(static::$defaultDisk)->makeDirectory($path);
     }
 
+    /**
+     * Returns the size of a file in bytes.
+     * @param string $path
+     * @return int
+     */
     public static function size(string $path): int
     {
         return static::disk(static::$defaultDisk)->size($path);
     }
 
+    /**
+     * Copies a file to a new location.
+     * @param string $from
+     * @param string $to
+     * @return bool
+     */
     public static function copy(string $from, string $to): bool
     {
         return static::disk(static::$defaultDisk)->copy($from, $to);
     }
 
+    /**
+     * Moves a file to a new location.
+     * @param string $from
+     * @param string $to
+     * @return bool
+     */
     public static function move(string $from, string $to): bool
     {
         return static::disk(static::$defaultDisk)->move($from, $to);
     }
 
-    // =========================================================
-    // HELPER INTERNO
-    // =========================================================
-
+    /**
+     * Internal helper to resolve the absolute root path of a given disk.
+     * @param string $disk
+     * @return string
+     */
     public static function resolvePath(string $disk): string
     {
         if (isset(static::$disks[$disk])) {
@@ -123,169 +189,5 @@ class Storage
             'cache'   => $base . '/cache',
             default   => $base . '/app/' . $disk,
         };
-    }
-}
-
-// =========================================================
-// StorageDisk — instância com disco específico
-// =========================================================
-
-class StorageDisk
-{
-    public function __construct(
-        protected string $root,
-        protected string $diskName = 'public'
-    ) {}
-
-    public function put(string $path, mixed $contents): bool
-    {
-        $full = $this->fullPath($path);
-        $this->ensureDir(dirname($full));
-
-        if (is_resource($contents)) {
-            $target = fopen($full, 'wb');
-            if (!$target) return false;
-            stream_copy_to_stream($contents, $target);
-            fclose($target);
-            return true;
-        }
-
-        return file_put_contents($full, $contents, LOCK_EX) !== false;
-    }
-
-    public function get(string $path): string|false
-    {
-        $full = $this->fullPath($path);
-        return file_exists($full) ? file_get_contents($full) : false;
-    }
-
-    public function exists(string $path): bool
-    {
-        return file_exists($this->fullPath($path));
-    }
-
-    public function missing(string $path): bool
-    {
-        return !$this->exists($path);
-    }
-
-    public function delete(string $path): bool
-    {
-        $full = $this->fullPath($path);
-        return file_exists($full) && unlink($full);
-    }
-
-    public function path(string $path): string
-    {
-        return $this->fullPath($path);
-    }
-
-    public function url(string $path): string
-    {
-        if ($this->diskName === 'public') {
-            $baseUrl = rtrim(env('APP_BASE_URL', ''), '/');
-            $path    = ltrim(str_replace('\\', '/', $path), '/');
-            return "{$baseUrl}/storage/{$path}";
-        }
-
-        // Disco privado não tem URL pública
-        throw new \RuntimeException("O disco '{$this->diskName}' não é acessível publicamente.");
-    }
-
-    public function size(string $path): int
-    {
-        $full = $this->fullPath($path);
-        return file_exists($full) ? (int) filesize($full) : 0;
-    }
-
-    public function lastModified(string $path): int
-    {
-        $full = $this->fullPath($path);
-        return file_exists($full) ? (int) filemtime($full) : 0;
-    }
-
-    public function mimeType(string $path): string
-    {
-        $full  = $this->fullPath($path);
-        $finfo = finfo_open(FILEINFO_MIME_TYPE);
-        $mime  = finfo_file($finfo, $full);
-        finfo_close($finfo);
-        return $mime ?: 'application/octet-stream';
-    }
-
-    public function copy(string $from, string $to): bool
-    {
-        $fullFrom = $this->fullPath($from);
-        $fullTo   = $this->fullPath($to);
-        $this->ensureDir(dirname($fullTo));
-        return copy($fullFrom, $fullTo);
-    }
-
-    public function move(string $from, string $to): bool
-    {
-        $fullFrom = $this->fullPath($from);
-        $fullTo   = $this->fullPath($to);
-        $this->ensureDir(dirname($fullTo));
-        return rename($fullFrom, $fullTo);
-    }
-
-    public function makeDirectory(string $path): bool
-    {
-        $full = $this->fullPath($path);
-        if (is_dir($full)) return true;
-        return mkdir($full, 0755, true);
-    }
-
-    public function deleteDirectory(string $path): bool
-    {
-        $full = $this->fullPath($path);
-        if (!is_dir($full)) return false;
-        $files = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($full, \RecursiveDirectoryIterator::SKIP_DOTS),
-            \RecursiveIteratorIterator::CHILD_FIRST
-        );
-        foreach ($files as $file) {
-            $file->isDir() ? rmdir($file->getRealPath()) : unlink($file->getRealPath());
-        }
-        return rmdir($full);
-    }
-
-    public function files(?string $directory = null): array
-    {
-        $dir   = $directory ? $this->fullPath($directory) : $this->root;
-        $files = glob($dir . '/*') ?: [];
-        return array_values(array_filter($files, 'is_file'));
-    }
-
-    public function allFiles(?string $directory = null): array
-    {
-        $dir    = $directory ? $this->fullPath($directory) : $this->root;
-        $result = [];
-        $it     = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \RecursiveDirectoryIterator::SKIP_DOTS));
-        foreach ($it as $file) {
-            if ($file->isFile()) $result[] = $file->getPathname();
-        }
-        return $result;
-    }
-
-    public function directories(?string $directory = null): array
-    {
-        $dir  = $directory ? $this->fullPath($directory) : $this->root;
-        $dirs = glob($dir . '/*', GLOB_ONLYDIR) ?: [];
-        return array_values($dirs);
-    }
-
-    // =========================================================
-    // INTERNOS
-    // =========================================================
-
-    protected function fullPath(string $path): string
-    {
-        return $this->root . DIRECTORY_SEPARATOR . ltrim(str_replace(['../', './', '..\\'], '', $path), '/\\');
-    }
-
-    protected function ensureDir(string $dir): void
-    {
-        if (!is_dir($dir)) mkdir($dir, 0755, true);
     }
 }

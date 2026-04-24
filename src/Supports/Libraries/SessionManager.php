@@ -2,16 +2,12 @@
 
 /*
 |--------------------------------------------------------------------------
-| SessionManager — Slenix Framework
+| SessionManager Class — Slenix Framework
 |--------------------------------------------------------------------------
 |
-| Esta classe fornece uma interface orientada a objetos e fluente sobre
-| a camada de sessão baixo nível do framework (Session). Expõe operações
-| de leitura, escrita, remoção, flash e controlo do ciclo de vida da sessão
-| de forma encadeável e expressiva.
-|
-| É instanciada automaticamente pelo helper global session() quando chamado
-| sem argumentos, e pode ser injetada diretamente em serviços ou controllers.
+| Object-oriented interface for the native session layer. Provides 
+| methods for reading, writing, removing, and flashing session data 
+| with a fluent API.
 |
 */
 
@@ -23,13 +19,11 @@ use Slenix\Supports\Security\Session;
 
 class SessionManager
 {
-
     /**
-     * Define um valor na sessão sob a chave especificada.
-     *
-     * @param  string $key   Chave de identificação do valor.
-     * @param  mixed  $value Valor a ser armazenado na sessão.
-     * @return static        Instância atual para encadeamento fluente.
+     * Set a value in the session.
+     * @param string $key
+     * @param mixed $value
+     * @return static
      */
     public function set(string $key, mixed $value): static
     {
@@ -38,11 +32,10 @@ class SessionManager
     }
 
     /**
-     * Recupera um valor da sessão pela chave.
-     *
-     * @param  string $key     Chave do valor a ser recuperado.
-     * @param  mixed  $default Valor retornado caso a chave não exista.
-     * @return mixed           Valor armazenado ou o padrão definido.
+     * Get a value from the session.
+     * @param string $key
+     * @param mixed $default
+     * @return mixed
      */
     public function get(string $key, mixed $default = null): mixed
     {
@@ -50,10 +43,9 @@ class SessionManager
     }
 
     /**
-     * Verifica se uma chave existe na sessão.
-     *
-     * @param  string $key Chave a ser verificada.
-     * @return bool        True se a chave existir, false caso contrário.
+     * Check if key exists.
+     * @param string $key
+     * @return bool
      */
     public function has(string $key): bool
     {
@@ -61,72 +53,47 @@ class SessionManager
     }
 
     /**
-     * Verifica se uma chave NÃO existe na sessão.
-     *
-     * @param  string $key Chave a ser verificada.
-     * @return bool        True se a chave não existir, false se existir.
+     * Check if key is missing.
+     * @param string $key
+     * @return bool
      */
     public function missing(string $key): bool
     {
         return !Session::has($key);
     }
 
-    /**
-     * Retorna todos os dados presentes na sessão.
-     *
-     * @return array<string, mixed> Mapa associativo com todos os valores da sessão.
-     */
+    /** @return array All session data. */
     public function all(): array
     {
         return Session::all();
     }
 
     /**
-     * Define um ou múltiplos valores na sessão.
-     *
-     * Aceita uma chave e valor individuais ou um array associativo para
-     * definir múltiplos valores de uma só vez.
-     *
-     * @param  string|array<string, mixed> $key   Chave ou array de chave/valor.
-     * @param  mixed                       $value Valor (usado apenas se $key for string).
-     * @return static                             Instância atual para encadeamento fluente.
+     * Put one or many items into the session.
      */
     public function put(string|array $key, mixed $value = null): static
     {
         if (is_array($key)) {
-            foreach ($key as $k => $v) {
-                Session::set((string) $k, $v);
-            }
+            foreach ($key as $k => $v) Session::set((string)$k, $v);
         } else {
             Session::set($key, $value);
         }
-
         return $this;
     }
 
     /**
-     * Adiciona um valor ao final de um array armazenado na sessão.
-     *
-     * Se a chave não existir ou não for um array, é inicializada como array vazio.
-     *
-     * @param  string $key   Chave do array na sessão.
-     * @param  mixed  $value Valor a ser adicionado ao array.
-     * @return static        Instância atual para encadeamento fluente.
+     * Push a value onto a session array.
      */
     public function push(string $key, mixed $value): static
     {
-        $arr   = (array) Session::get($key, []);
+        $arr = (array) Session::get($key, []);
         $arr[] = $value;
         Session::set($key, $arr);
         return $this;
     }
 
     /**
-     * Recupera um valor da sessão e o remove imediatamente após a leitura.
-     *
-     * @param  string $key     Chave do valor a ser recuperado e removido.
-     * @param  mixed  $default Valor retornado caso a chave não exista.
-     * @return mixed           Valor armazenado ou o padrão definido.
+     * Get an item and remove it.
      */
     public function pull(string $key, mixed $default = null): mixed
     {
@@ -136,26 +103,16 @@ class SessionManager
     }
 
     /**
-     * Remove uma ou múltiplas chaves da sessão.
-     *
-     * @param  string|string[] $keys Chave ou array de chaves a serem removidas.
-     * @return static                Instância atual para encadeamento fluente.
+     * Remove one or many items.
      */
     public function forget(string|array $keys): static
     {
-        foreach ((array) $keys as $key) {
-            Session::remove($key);
-        }
-
+        foreach ((array) $keys as $key) Session::remove($key);
         return $this;
     }
 
     /**
-     * Remove todos os dados da sessão sem destruí-la.
-     *
-     * Mantém a sessão ativa mas limpa todo o seu conteúdo.
-     *
-     * @return static Instância atual para encadeamento fluente.
+     * Clear all session data without destroying it.
      */
     public function flush(): static
     {
@@ -164,13 +121,7 @@ class SessionManager
         return $this;
     }
 
-    /**
-     * Retorna o ID da sessão atual.
-     *
-     * Inicia a sessão automaticamente caso ainda não esteja ativa.
-     *
-     * @return string ID único da sessão atual.
-     */
+    /** @return string Current session ID. */
     public function id(): string
     {
         Session::start();
@@ -178,9 +129,7 @@ class SessionManager
     }
 
     /**
-     * Destrói completamente a sessão atual e todos os seus dados.
-     *
-     * @return static Instância atual para encadeamento fluente.
+     * Completely destroy the session.
      */
     public function invalidate(): static
     {
@@ -189,10 +138,7 @@ class SessionManager
     }
 
     /**
-     * Regenera o ID da sessão para mitigar ataques de session fixation.
-     *
-     * @param  bool   $deleteOld Se true, destrói a sessão com o ID antigo (padrão: true).
-     * @return static            Instância atual para encadeamento fluente.
+     * Regenerate the session ID.
      */
     public function regenerate(bool $deleteOld = true): static
     {
@@ -201,11 +147,7 @@ class SessionManager
     }
 
     /**
-     * Armazena um valor flash que persiste apenas até a próxima requisição.
-     *
-     * @param  string $key   Chave do valor flash.
-     * @param  mixed  $value Valor a ser armazenado temporariamente.
-     * @return static        Instância atual para encadeamento fluente.
+     * Store a temporary flash value.
      */
     public function flash(string $key, mixed $value): static
     {
@@ -213,36 +155,18 @@ class SessionManager
         return $this;
     }
 
-    /**
-     * Recupera um valor flash da sessão.
-     *
-     * @param  string $key     Chave do valor flash.
-     * @param  mixed  $default Valor retornado caso a chave não exista.
-     * @return mixed           Valor flash armazenado ou o padrão definido.
-     */
     public function getFlash(string $key, mixed $default = null): mixed
     {
         return Session::getFlash($key, $default);
     }
 
-    /**
-     * Verifica se existe um valor flash para a chave informada.
-     *
-     * @param  string $key Chave do valor flash.
-     * @return bool        True se existir, false caso contrário.
-     */
     public function hasFlash(string $key): bool
     {
         return Session::hasFlash($key);
     }
 
     /**
-     * Armazena os dados de input do formulário como flash para repopulação.
-     *
-     * Remove automaticamente campos sensíveis antes de armazenar.
-     *
-     * @param  array<string, mixed> $data Dados do formulário a serem preservados.
-     * @return static                     Instância atual para encadeamento fluente.
+     * Store input as flash data.
      */
     public function flashInput(array $data): static
     {
@@ -251,15 +175,8 @@ class SessionManager
         return $this;
     }
 
-
     /**
-     * Incrementa um valor numérico armazenado na sessão.
-     *
-     * Se a chave não existir, é inicializada em zero antes do incremento.
-     *
-     * @param  string $key    Chave do contador na sessão.
-     * @param  int    $amount Quantidade a incrementar (padrão: 1).
-     * @return int            Novo valor após o incremento.
+     * Increment a numeric value in the session.
      */
     public function increment(string $key, int $amount = 1): int
     {
@@ -269,13 +186,7 @@ class SessionManager
     }
 
     /**
-     * Decrementa um valor numérico armazenado na sessão.
-     *
-     * Se a chave não existir, é inicializada em zero antes do decremento.
-     *
-     * @param  string $key    Chave do contador na sessão.
-     * @param  int    $amount Quantidade a decrementar (padrão: 1).
-     * @return int            Novo valor após o decremento.
+     * Decrement a numeric value in the session.
      */
     public function decrement(string $key, int $amount = 1): int
     {

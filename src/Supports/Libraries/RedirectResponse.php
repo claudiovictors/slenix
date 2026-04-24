@@ -2,15 +2,12 @@
 
 /*
 |--------------------------------------------------------------------------
-| RedirectResponse — Slenix Framework
+| RedirectResponse Class — Slenix Framework
 |--------------------------------------------------------------------------
 |
-| Esta classe implementa respostas de redirecionamento HTTP de forma fluente.
-| Fornece métodos encadeáveis para redirecionar o utilizador para URLs
-| absolutas, rotas nomeadas ou para a página anterior, com suporte nativo
-| a mensagens flash, dados de formulário antigo e erros de validação.
-|
-| É instanciada automaticamente pelo helper global redirect().
+| Handles HTTP redirection responses fluently. It provides methods to redirect 
+| to URLs, named routes, or previous pages while carrying flash messages, 
+| validation errors, and old input data.
 |
 */
 
@@ -23,25 +20,14 @@ use Slenix\Supports\Security\Session;
 
 class RedirectResponse
 {
-
-    /**
-     * Código de status HTTP do redirecionamento.
-     *
-     * @var int
-     */
+    /** @var int HTTP status code */
     private int $status;
 
-    /**
-     * Dados flash a serem enviados para a sessão antes do redirecionamento.
-     *
-     * @var array<string, mixed>
-     */
+    /** @var array<string, mixed> Pending flash data to be sent */
     private array $flashData = [];
 
     /**
-     * Inicializa a resposta de redirecionamento com o código de status HTTP.
-     *
-     * @param int $status Código HTTP do redirecionamento (padrão: 302 Found).
+     * @param int $status HTTP status code (default 302).
      */
     public function __construct(int $status = 302)
     {
@@ -49,13 +35,8 @@ class RedirectResponse
     }
 
     /**
-     * Executa o redirecionamento para a URL fornecida.
-     *
-     * Sanitiza a URL removendo caracteres de controle antes de emitir o
-     * cabeçalho Location. Envia os dados flash para a sessão previamente.
-     * Esta operação encerra a execução do script.
-     *
-     * @param  string $url URL de destino do redirecionamento.
+     * Redirect to a specific URL.
+     * * @param string $url
      * @return never
      */
     public function to(string $url): never
@@ -67,12 +48,8 @@ class RedirectResponse
     }
 
     /**
-     * Redireciona o utilizador de volta à página anterior (HTTP_REFERER).
-     *
-     * Caso o cabeçalho Referer não esteja disponível, utiliza a URL de
-     * fallback fornecida como destino alternativo.
-     *
-     * @param  string $fallback URL de fallback caso o Referer não exista (padrão: '/').
+     * Redirect back to the previous page.
+     * * @param string $fallback URL if HTTP_REFERER is missing.
      * @return never
      */
     public function back(string $fallback = '/'): never
@@ -81,12 +58,9 @@ class RedirectResponse
     }
 
     /**
-     * Redireciona para uma rota nomeada registada no Router.
-     *
-     * Caso a rota não seja encontrada, redireciona para a raiz '/'.
-     *
-     * @param  string              $name   Nome da rota registada.
-     * @param  array<string,mixed> $params Parâmetros da rota (ex: ['id' => 42]).
+     * Redirect to a named route.
+     * * @param string $name
+     * @param array  $params
      * @return never
      */
     public function route(string $name, array $params = []): never
@@ -95,11 +69,10 @@ class RedirectResponse
     }
 
     /**
-     * Adiciona um único valor flash a ser enviado com o redirecionamento.
-     *
-     * @param  string $key   Chave do valor flash.
-     * @param  mixed  $value Valor a ser armazenado na sessão.
-     * @return static        Instância atual para encadeamento fluente.
+     * Attach a flash message to the redirect.
+     * * @param string $key
+     * @param mixed  $value
+     * @return static
      */
     public function with(string $key, mixed $value): static
     {
@@ -108,10 +81,7 @@ class RedirectResponse
     }
 
     /**
-     * Adiciona múltiplos valores flash de uma só vez.
-     *
-     * @param  array<string, mixed> $data Mapa associativo de chave/valor.
-     * @return static                     Instância atual para encadeamento fluente.
+     * Attach multiple flash values.
      */
     public function withMany(array $data): static
     {
@@ -122,14 +92,7 @@ class RedirectResponse
     }
 
     /**
-     * Adiciona erros de validação ao flash data, organizados por bag.
-     *
-     * Os erros ficam disponíveis na próxima requisição através do helper
-     * global errors() e da variável de template $errors.
-     *
-     * @param  array<string, string|string[]> $errors Erros indexados por nome de campo.
-     * @param  string                         $bag    Nome do bag de erros (padrão: 'default').
-     * @return static                                 Instância atual para encadeamento fluente.
+     * Attach validation errors to the session.
      */
     public function withErrors(array $errors, string $bag = 'default'): static
     {
@@ -138,13 +101,7 @@ class RedirectResponse
     }
 
     /**
-     * Preserva os dados do formulário atual na sessão para repopulação.
-     *
-     * Remove automaticamente campos sensíveis como password, password_confirmation
-     * e _token antes de armazenar os dados na sessão. Disponível via old().
-     *
-     * @param  array<string, mixed>|null $input Dados do formulário (padrão: $_POST).
-     * @return static                           Instância atual para encadeamento fluente.
+     * Flash current input data to the session for repopulation.
      */
     public function withInput(?array $input = null): static
     {
@@ -155,11 +112,7 @@ class RedirectResponse
     }
 
     /**
-     * Envia todos os dados flash acumulados para a sessão.
-     *
-     * Chamado internamente imediatamente antes de executar o redirecionamento.
-     *
-     * @return void
+     * Internal: Commit flash data to the session before redirecting.
      */
     private function sendFlash(): void
     {

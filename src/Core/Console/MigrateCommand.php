@@ -2,17 +2,12 @@
 
 /*
 |--------------------------------------------------------------------------
-| Classe MigrateCommand
+| MigrateCommand — Celestial CLI
 |--------------------------------------------------------------------------
 |
-| Integra o sistema de migrations ao CLI Celestial.
-| Comandos disponíveis:
-|   migrate              — executa migrations pendentes
-|   migrate:rollback     — reverte o último batch
-|   migrate:reset        — reverte todas
-|   migrate:fresh        — reset + migrate
-|   migrate:status       — exibe o status de cada migration
-|   make:migration       — cria um novo arquivo de migration
+| Integrates the migration system into the Celestial CLI.
+| Works with MySQL, PostgreSQL and SQLite through the Grammar-aware
+| Migrator and Schema classes.
 |
 */
 
@@ -24,52 +19,43 @@ use Slenix\Database\Migrations\Migrator;
 
 class MigrateCommand extends Command
 {
-    /**
-     * Argumentos recebidos via CLI.
-     *
-     * @var array
-     */
+
+    /** @var array<int, string> CLI arguments received from argv. */
     private array $args;
 
-    /**
-     * Instância do migrator responsável pelas migrations.
-     *
-     * @var Migrator
-     */
+    /** @var Migrator Migrator service instance. */
     private Migrator $migrator;
 
     /**
-     * Construtor da classe.
+     * Initialises the command with the CLI argument list and configures
+     * the Migrator with the correct migrations directory path.
      *
-     * Define os argumentos e inicializa o migrator com o caminho das migrations.
-     *
-     * @param array $args
+     * @param array<int, string> $args CLI argument list (argv).
      */
     public function __construct(array $args)
     {
-        $this->args = $args;
-
-        // Raiz do projeto: src/Core/Console/ → sobe 3 níveis
-        $projectRoot = dirname(__DIR__, 3);
-
+        $this->args     = $args;
+        $projectRoot    = dirname(__DIR__, 3);
         $this->migrator = new Migrator($projectRoot . '/database/migrations');
     }
 
     /**
-     * Executa as migrations pendentes.
+     * Runs all pending migrations in chronological order.
+     *
+     * Outputs the name of each executed migration and a final count.
      *
      * @return void
      */
     public function run(): void
     {
-        self::info('Executando migrations pendentes...');
+        self::info('Running pending migrations...');
         echo PHP_EOL;
 
         try {
             $executed = $this->migrator->run();
 
             if (empty($executed)) {
-                self::warning('Nenhuma migration pendente.');
+                self::warning('No pending migrations.');
                 return;
             }
 
@@ -78,7 +64,8 @@ class MigrateCommand extends Command
             }
 
             echo PHP_EOL;
-            self::success(count($executed) . ' migration(s) executada(s) com sucesso.');
+            self::success(count($executed) . ' migration(s) executed successfully.');
+
         } catch (\Throwable $e) {
             self::error($e->getMessage());
             exit(1);
@@ -86,30 +73,30 @@ class MigrateCommand extends Command
     }
 
     /**
-     * Reverte o último batch de migrations.
+     * Rolls back the last migration batch.
      *
-     * Suporta o parâmetro opcional --step=N.
+     * Supports --step=N to roll back N batches at once.
      *
      * @return void
      */
     public function rollback(): void
     {
-        // Suporte a --step=N
         $steps = 1;
+
         foreach ($this->args as $arg) {
             if (str_starts_with($arg, '--step=')) {
                 $steps = max(1, (int) substr($arg, 7));
             }
         }
 
-        self::info("Revertendo {$steps} batch(es)...");
+        self::info("Rolling back {$steps} batch(es)...");
         echo PHP_EOL;
 
         try {
             $reverted = $this->migrator->rollback($steps);
 
             if (empty($reverted)) {
-                self::warning('Nenhuma migration para reverter.');
+                self::warning('Nothing to rollback.');
                 return;
             }
 
@@ -118,7 +105,8 @@ class MigrateCommand extends Command
             }
 
             echo PHP_EOL;
-            self::success(count($reverted) . ' migration(s) revertida(s).');
+            self::success(count($reverted) . ' migration(s) rolled back.');
+
         } catch (\Throwable $e) {
             self::error($e->getMessage());
             exit(1);
@@ -126,20 +114,20 @@ class MigrateCommand extends Command
     }
 
     /**
-     * Reverte todas as migrations executadas.
+     * Reverts every migration that has been executed.
      *
      * @return void
      */
     public function reset(): void
     {
-        self::warning('Revertendo TODAS as migrations...');
+        self::warning('Reverting ALL migrations...');
         echo PHP_EOL;
 
         try {
             $reverted = $this->migrator->reset();
 
             if (empty($reverted)) {
-                self::warning('Nenhuma migration para reverter.');
+                self::warning('Nothing to revert.');
                 return;
             }
 
@@ -148,7 +136,8 @@ class MigrateCommand extends Command
             }
 
             echo PHP_EOL;
-            self::success(count($reverted) . ' migration(s) revertida(s).');
+            self::success(count($reverted) . ' migration(s) reverted.');
+
         } catch (\Throwable $e) {
             self::error($e->getMessage());
             exit(1);
@@ -156,20 +145,21 @@ class MigrateCommand extends Command
     }
 
     /**
-     * Executa um reset completo e roda novamente todas as migrations.
+     * Performs a full database reset followed by a fresh migration run.
+     * Equivalent to migrate:reset + migrate.
      *
      * @return void
      */
     public function fresh(): void
     {
-        self::warning('Executando migrate:fresh (reset + migrate)...');
+        self::warning('Running migrate:fresh (reset + migrate)...');
         echo PHP_EOL;
 
         try {
             $result = $this->migrator->fresh();
 
             if (!empty($result['reverted'])) {
-                self::info('Migrations revertidas:');
+                self::info('Reverted:');
                 foreach ($result['reverted'] as $name) {
                     self::warning("  ✖  {$name}");
                 }
@@ -177,16 +167,17 @@ class MigrateCommand extends Command
             }
 
             if (!empty($result['executed'])) {
-                self::info('Migrations executadas:');
+                self::info('Executed:');
                 foreach ($result['executed'] as $name) {
                     self::success("  ✔  {$name}");
                 }
             } else {
-                self::warning('Nenhuma migration para executar.');
+                self::warning('No migrations to execute.');
             }
 
             echo PHP_EOL;
-            self::success('migrate:fresh concluído.');
+            self::success('migrate:fresh completed.');
+
         } catch (\Throwable $e) {
             self::error($e->getMessage());
             exit(1);
@@ -194,13 +185,15 @@ class MigrateCommand extends Command
     }
 
     /**
-     * Exibe o status das migrations em formato de tabela.
+     * Renders the migration status as a formatted ASCII table in the terminal.
+     *
+     * Columns: STATUS | BATCH | MIGRATION
      *
      * @return void
      */
     public function status(): void
     {
-        self::info('Status das Migrations:');
+        self::info('Migration Status:');
         echo PHP_EOL;
 
         try {
@@ -208,66 +201,48 @@ class MigrateCommand extends Command
 
             if (empty($rows)) {
                 self::warning(
-                    'Nenhuma migration encontrada em: ' . dirname(__DIR__, 3) . '/database/migrations'
+                    'No migrations found in: '
+                    . dirname(__DIR__, 3) . '/database/migrations'
                 );
                 return;
             }
 
-            // Cabeçalhos
-            $headers = ['STATUS', 'BATCH', 'MIGRATION'];
-
-            // Calcula largura dinâmica
-            $statusWidth = 10;
-            $batchWidth = 8;
+            // ── Column widths ────────────────────────────────────────────────
+            $statusWidth    = 10;
+            $batchWidth     = 8;
             $migrationWidth = 60;
 
             foreach ($rows as $row) {
                 $migrationWidth = max($migrationWidth, strlen($row['migration']) + 2);
             }
 
-            // Função para linha separadora
+            // ── Separator ────────────────────────────────────────────────────
             $separator = '+'
-                . str_repeat('-', $statusWidth + 2) . '+'
-                . str_repeat('-', $batchWidth + 2) . '+'
+                . str_repeat('-', $statusWidth    + 2) . '+'
+                . str_repeat('-', $batchWidth     + 2) . '+'
                 . str_repeat('-', $migrationWidth + 2) . '+';
 
+            // ── Header ───────────────────────────────────────────────────────
             echo $separator . PHP_EOL;
-
-            // Cabeçalho
             printf(
                 "| %-{$statusWidth}s | %-{$batchWidth}s | %-{$migrationWidth}s |\n",
-                $headers[0],
-                $headers[1],
-                $headers[2]
+                'STATUS', 'BATCH', 'MIGRATION'
             );
-
             echo $separator . PHP_EOL;
 
-            // Linhas
+            // ── Rows ─────────────────────────────────────────────────────────
             foreach ($rows as $row) {
-                $isRan = $row['status'] === 'Ran';
-
-                $status = $isRan
-                    ? "\033[32mRan\033[0m"
-                    : "\033[33mPending\033[0m";
-
-                $batch = $row['batch'] ?? '-';
-
-                // Texto puro (sem cor)
-                $statusText = $isRan ? 'Ran' : 'Pending';
-
-                // Aplica padding ANTES da cor
+                $isRan        = $row['status'] === 'Ran';
+                $batch        = $row['batch'] ?? '-';
+                $statusText   = $isRan ? 'Ran' : 'Pending';
                 $statusPadded = str_pad($statusText, $statusWidth);
+                $statusColor  = $isRan
+                    ? "\033[32m{$statusPadded}\033[0m"  // green
+                    : "\033[33m{$statusPadded}\033[0m"; // yellow
 
-                // Agora aplica cor
-                $statusColored = $isRan
-                    ? "\033[32m{$statusPadded}\033[0m"
-                    : "\033[33m{$statusPadded}\033[0m";
-
-                // Render
                 printf(
                     "| %s | %-{$batchWidth}s | %-{$migrationWidth}s |\n",
-                    $statusColored,
+                    $statusColor,
                     $batch,
                     $row['migration']
                 );
@@ -282,74 +257,74 @@ class MigrateCommand extends Command
     }
 
     /**
-     * Cria um novo arquivo de migration.
+     * Generates a new migration file stub in the migrations directory.
+     * The file name is automatically prefixed with the current timestamp.
      *
-     * Espera o nome da migration como argumento.
+     * @example php celestial make:migration create_users_table
+     * @example php celestial make:migration add_phone_to_users
+     * @example php celestial make:migration drop_legacy_table
      *
      * @return void
      */
     public function makeMigration(): void
     {
         if (count($this->args) < 3) {
-            self::error('Nome da migration é obrigatório.');
-            self::info('Exemplo: php celestial make:migration create_users_table');
+            self::error('Migration name is required.');
+            self::info('Example: php celestial make:migration create_users_table');
             exit(1);
         }
 
-        $rawName = $this->args[2];
-        $name = Migrator::generateName($rawName);
-        $stub = $this->resolveStub($rawName);
-
-        // Raiz do projeto → database/migrations/
-        $dir = dirname(__DIR__, 3) . '/database/migrations';
+        $rawName  = $this->args[2];
+        $name     = Migrator::generateName($rawName);
+        $stub     = $this->resolveStub($rawName);
+        $dir      = dirname(__DIR__, 3) . '/database/migrations';
 
         if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
-            self::error("Não foi possível criar o diretório: {$dir}");
+            self::error("Could not create directory: {$dir}");
             exit(1);
         }
 
         $filePath = "{$dir}/{$name}.php";
 
         if (file_exists($filePath)) {
-            self::error("Migration '{$name}' já existe.");
+            self::error("Migration '{$name}' already exists.");
             exit(1);
         }
 
         if (file_put_contents($filePath, $stub) === false) {
-            self::error("Não foi possível criar o arquivo da migration.");
+            self::error('Could not write migration file.');
             exit(1);
         }
 
-        self::success("Migration criada com sucesso:");
+        self::success('Migration created successfully:');
         echo "  {$filePath}" . PHP_EOL;
     }
 
     /**
-     * Resolve qual stub usar com base no nome da migration.
+     * Selects the appropriate migration stub based on naming conventions.
      *
-     * @param string $name
-     * @return string
+     * @param string $name Raw migration name (snake_case, no timestamp).
+     * @return string PHP source code for the migration file.
      */
     protected function resolveStub(string $name): string
     {
         if (str_starts_with($name, 'create_') && str_ends_with($name, '_table')) {
-            $table = substr($name, 7, -6);
+            $table = substr($name, 7, -6); // strip 'create_' and '_table'
             return $this->stubCreate($table);
         }
 
         if (
-            str_starts_with($name, 'add_') ||
+            str_starts_with($name, 'add_')    ||
             str_starts_with($name, 'remove_') ||
-            str_contains($name, '_to_') ||
+            str_contains($name, '_to_')       ||
             str_contains($name, '_from_')
         ) {
             preg_match('/_(?:to|from)_(\w+)$/', $name, $matches);
-            $table = $matches[1] ?? 'table_name';
-            return $this->stubAlter($table);
+            return $this->stubAlter($matches[1] ?? 'table_name');
         }
 
         if (str_starts_with($name, 'drop_') && str_ends_with($name, '_table')) {
-            $table = substr($name, 5, -6);
+            $table = substr($name, 5, -6); // strip 'drop_' and '_table'
             return $this->stubDrop($table);
         }
 
@@ -357,10 +332,13 @@ class MigrateCommand extends Command
     }
 
     /**
-     * Stub para criação de tabela.
+     * Returns a CREATE TABLE migration stub.
      *
-     * @param string $table
-     * @return string
+     * The stub uses Schema::create() which is fully driver-aware
+     * (MySQL, PostgreSQL, SQLite).
+     *
+     * @param string $table Inferred table name.
+     * @return string PHP source code.
      */
     protected function stubCreate(string $table): string
     {
@@ -376,19 +354,23 @@ use Slenix\Database\Migrations\Blueprint;
 return new class extends Migration
 {
     /**
-     * Executa a migration.
+     * Run the migration — creates the {$table} table.
+     *
+     * Compatible with MySQL, PostgreSQL and SQLite.
+     * Column types are automatically translated by Schema/Grammar.
      */
     public function up(): void
     {
         Schema::create('{$table}', function (Blueprint \$table) {
             \$table->id();
             // \$table->string('name');
+            // \$table->string('email')->unique();
             \$table->timestamps();
         });
     }
 
     /**
-     * Reverte a migration.
+     * Reverse the migration — drops the {$table} table.
      */
     public function down(): void
     {
@@ -399,10 +381,10 @@ PHP;
     }
 
     /**
-     * Stub para alteração de tabela.
+     * Returns an ALTER TABLE migration stub.
      *
-     * @param string $table
-     * @return string
+     * @param string $table Inferred table name.
+     * @return string PHP source code.
      */
     protected function stubAlter(string $table): string
     {
@@ -418,7 +400,10 @@ use Slenix\Database\Migrations\Blueprint;
 return new class extends Migration
 {
     /**
-     * Executa a migration.
+     * Run the migration — alters the {$table} table.
+     *
+     * Note: SQLite only supports ADD COLUMN and RENAME COLUMN.
+     * MODIFY / CHANGE COLUMN requires table recreation on SQLite.
      */
     public function up(): void
     {
@@ -428,7 +413,7 @@ return new class extends Migration
     }
 
     /**
-     * Reverte a migration.
+     * Reverse the migration.
      */
     public function down(): void
     {
@@ -441,10 +426,10 @@ PHP;
     }
 
     /**
-     * Stub para remoção de tabela.
+     * Returns a DROP TABLE migration stub.
      *
-     * @param string $table
-     * @return string
+     * @param string $table Inferred table name.
+     * @return string PHP source code.
      */
     protected function stubDrop(string $table): string
     {
@@ -460,7 +445,10 @@ use Slenix\Database\Migrations\Blueprint;
 return new class extends Migration
 {
     /**
-     * Executa a migration.
+     * Run the migration — drops the {$table} table.
+     *
+     * Uses Schema::dropIfExists() which automatically handles
+     * FK-check disabling (MySQL) and CASCADE (PostgreSQL).
      */
     public function up(): void
     {
@@ -468,7 +456,7 @@ return new class extends Migration
     }
 
     /**
-     * Reverte a migration.
+     * Reverse the migration — recreates the {$table} table.
      */
     public function down(): void
     {
@@ -482,9 +470,9 @@ PHP;
     }
 
     /**
-     * Stub padrão vazio.
+     * Returns a blank migration stub with empty up() and down() methods.
      *
-     * @return string
+     * @return string PHP source code.
      */
     protected function stubBlank(): string
     {
@@ -500,7 +488,7 @@ use Slenix\Database\Migrations\Blueprint;
 return new class extends Migration
 {
     /**
-     * Executa a migration.
+     * Run the migration.
      */
     public function up(): void
     {
@@ -508,7 +496,7 @@ return new class extends Migration
     }
 
     /**
-     * Reverte a migration.
+     * Reverse the migration.
      */
     public function down(): void
     {

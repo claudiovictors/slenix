@@ -2,17 +2,11 @@
 
 /*
 |--------------------------------------------------------------------------
-| Classe CSRF
+| CSRF Class
 |--------------------------------------------------------------------------
 |
-| Gerencia tokens CSRF para proteger formulários e requisições
-| mutáveis (POST, PUT, PATCH, DELETE) contra Cross-Site Request Forgery.
-|
-| Integração automática:
-|   - O Kernel verifica automaticamente o token em toda requisição
-|     com método POST/PUT/PATCH/DELETE.
-|   - Nos templates Luna, use @csrf para inserir o campo oculto.
-|   - Em APIs via Ajax, envie o header X-CSRF-Token.
+| Manages CSRF tokens to protect mutable requests (POST, PUT, etc)
+| against Cross-Site Request Forgery.
 |
 */
 
@@ -22,18 +16,24 @@ namespace Slenix\Supports\Security;
 
 class CSRF
 {
+    /** @var string Session storage key for the token */
     private const SESSION_KEY  = '_csrf_token';
-    private const TOKEN_LENGTH = 32; // bytes → 64 chars hex
+
+    /** @var int Byte length for token generation */
+    private const TOKEN_LENGTH = 32;
+
+    /** @var string Expected HTTP Header name */
     private const HEADER_NAME  = 'HTTP_X_CSRF_TOKEN';
+
+    /** @var string Expected form field name */
     private const FIELD_NAME   = '_csrf_token';
 
-    // -------------------------------------------------------------------------
-    // Geração
-    // -------------------------------------------------------------------------
+    /** @var string[] URL patterns to exclude from verification */
+    private static array $except = [];
 
     /**
-     * Retorna o token CSRF da sessão atual.
-     * Gera um novo se não existir.
+     * Gets or generates the active CSRF token.
+     * @return string
      */
     public static function token(): string
     {
@@ -47,7 +47,8 @@ class CSRF
     }
 
     /**
-     * Regenera o token (usar após login/logout para segurança extra).
+     * Forces token regeneration for security purposes.
+     * @return string
      */
     public static function regenerate(): string
     {
@@ -56,52 +57,38 @@ class CSRF
         return $_SESSION[self::SESSION_KEY];
     }
 
-    // -------------------------------------------------------------------------
-    // Validação
-    // -------------------------------------------------------------------------
-
     /**
-     * Verifica se o token enviado na requisição é válido.
-     * Aceita tanto campo de formulário quanto header HTTP (Ajax).
+     * Validates the request token against the session.
+     * @return bool
      */
     public static function verify(): bool
     {
         $tokenInSession = $_SESSION[self::SESSION_KEY] ?? null;
 
-        if (!$tokenInSession) {
-            return false;
-        }
+        if (!$tokenInSession) return false;
 
-        // Tenta pegar do header (Ajax) ou do corpo da requisição (form)
         $tokenInRequest = static::getTokenFromRequest();
 
-        if (!$tokenInRequest) {
-            return false;
-        }
+        if (!$tokenInRequest) return false;
 
-        // hash_equals → constant-time comparison (previne timing attacks)
         return hash_equals($tokenInSession, $tokenInRequest);
     }
 
     /**
-     * Verifica o token e lança exceção se inválido.
-     *
+     * Validates the token and halts execution on failure.
      * @throws \RuntimeException
      */
     public static function verifyOrFail(): void
     {
         if (!static::verify()) {
             http_response_code(419);
-            throw new \RuntimeException(
-                'CSRF token inválido ou ausente. Requisição bloqueada.',
-                419
-            );
+            throw new \RuntimeException('Invalid or missing CSRF token.', 419);
         }
     }
 
     /**
-     * Verifica se a requisição é "segura" (não precisa de CSRF).
-     * Métodos seguros: GET, HEAD, OPTIONS
+     * Checks if the HTTP method requires protection.
+     * @return bool
      */
     public static function isSafeMethod(): bool
     {
@@ -110,22 +97,17 @@ class CSRF
     }
 
     /**
-     * Verifica se a requisição atual precisa de verificação CSRF.
+     * Determines if verification should proceed.
+     * @return bool
      */
     public static function shouldVerify(): bool
     {
         return !static::isSafeMethod();
     }
 
-    // -------------------------------------------------------------------------
-    // Helpers para views
-    // -------------------------------------------------------------------------
-
     /**
-     * Retorna o campo HTML hidden com o token CSRF.
-     * Usar em formulários: echo CSRF::field();
-     *
-     * Nos templates Luna, use @csrf (que chama este método).
+     * Generates a hidden HTML input field for forms.
+     * @return string
      */
     public static function field(): string
     {
@@ -134,10 +116,8 @@ class CSRF
     }
 
     /**
-     * Retorna a meta tag para uso em Ajax (colocar no <head>).
-     * <meta name="csrf-token" content="...">
-     *
-     * No JS: headers: { 'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content }
+     * Generates a meta tag for AJAX headers.
+     * @return string
      */
     public static function meta(): string
     {
@@ -146,23 +126,17 @@ class CSRF
     }
 
     /**
-     * Retorna campo + meta juntos (conveniente para o <head> + formulário).
+     * Returns both meta tag and hidden field.
+     * @return string
      */
     public static function fieldAndMeta(): string
     {
         return static::meta() . "\n" . static::field();
     }
 
-    // -------------------------------------------------------------------------
-    // Exclusões (rotas/caminhos que não precisam de CSRF)
-    // -------------------------------------------------------------------------
-
-    /** @var string[] */
-    private static array $except = [];
-
     /**
-     * Define padrões de URL que devem ser ignorados na verificação.
-     * Suporta wildcard *: '/api/*', '/webhook/stripe'
+     * Registers exclusion patterns (wildcards supported).
+     * @param array $patterns
      */
     public static function except(array $patterns): void
     {
@@ -170,7 +144,8 @@ class CSRF
     }
 
     /**
-     * Verifica se a URL atual está na lista de exclusões.
+     * Verifies if the current path is whitelisted.
+     * @return bool
      */
     public static function isExcluded(): bool
     {
@@ -179,35 +154,23 @@ class CSRF
 
         foreach (self::$except as $pattern) {
             $regex = '#^' . str_replace('\*', '.*', preg_quote($pattern, '#')) . '$#';
-            if (preg_match($regex, $path)) {
-                return true;
-            }
+            if (preg_match($regex, $path)) return true;
         }
 
         return false;
     }
 
-    // -------------------------------------------------------------------------
-    // Helpers internos
-    // -------------------------------------------------------------------------
-
+    /**
+     * Internal retrieval logic for the token from various request parts.
+     * @return string|null
+     */
     private static function getTokenFromRequest(): ?string
     {
-        // 1) Header X-CSRF-Token (Ajax/Fetch/Axios)
-        $header = $_SERVER[self::HEADER_NAME]
-            ?? $_SERVER['HTTP_X_XSRF_TOKEN']
-            ?? null;
+        $header = $_SERVER[self::HEADER_NAME] ?? $_SERVER['HTTP_X_XSRF_TOKEN'] ?? null;
+        if ($header) return trim($header);
 
-        if ($header) {
-            return trim($header);
-        }
+        if (isset($_POST[self::FIELD_NAME])) return trim($_POST[self::FIELD_NAME]);
 
-        // 2) Campo de formulário POST
-        if (isset($_POST[self::FIELD_NAME])) {
-            return trim($_POST[self::FIELD_NAME]);
-        }
-
-        // 3) JSON body (APIs que enviam JSON com _csrf_token)
         $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
         if (str_contains($contentType, 'application/json')) {
             $body = json_decode(file_get_contents('php://input'), true);

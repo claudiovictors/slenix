@@ -2,13 +2,12 @@
 
 /*
 |--------------------------------------------------------------------------
-| Classe EnvLoad
+| EnvLoader Class — Slenix Framework
 |--------------------------------------------------------------------------
 |
-| Esta classe é responsável por carregar as variáveis de ambiente a partir
-| de um arquivo .env. Ela lê o arquivo linha por linha, ignora comentários
-| e linhas vazias, e define as variáveis no ambiente do sistema ($_ENV,
-| $_SERVER e através da função putenv()).
+| This class is responsible for loading environment variables from a .env file.
+| It parses the file line by line, ignores comments and empty lines, and 
+| populates $_ENV, $_SERVER, and putenv().
 |
 */
 
@@ -18,18 +17,13 @@ namespace Slenix\Core;
 
 class EnvLoader
 {
-    /**
-     * Caminho para o arquivo .env.
-     *
-     * @var string
-     */
+    /** @var string Path to the .env file. */
     private static string $path_env = '';
 
     /**
-     * Carrega as variáveis de ambiente do arquivo especificado.
-     *
-     * @param string $path_env O caminho completo para o arquivo .env.
-     * @throws \Exception Se o arquivo .env não for encontrado.
+     * Loads environment variables from the specified file.
+     * * @param string $path_env Full path to the .env file.
+     * @throws \Exception If the .env file is not found.
      * @return void
      */
     public static function load(string $path_env): void
@@ -37,20 +31,26 @@ class EnvLoader
         self::$path_env = $path_env;
 
         if (!file_exists(self::$path_env)) {
-            throw new \Exception('Arquivo .env não encontrado!');
+            throw new \Exception('.env file not found at: ' . self::$path_env);
         }
 
-        $lines_path = file(self::$path_env, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        $lines = file(self::$path_env, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 
-        foreach ($lines_path as $line) {
+        foreach ($lines as $line) {
             $line = trim($line);
 
-            if (strpos($line, '#') === 0) {
+            // Skip comments
+            if (str_starts_with($line, '#')) {
                 continue;
             }
 
-            if (strpos($line, '=') !== false) {
+            if (str_contains($line, '=')) {
                 list($variable, $value) = explode('=', $line, 2);
+                
+                $variable = trim($variable);
+                $value    = trim($value);
+
+                // Register variables if they don't already exist in globals
                 if (!array_key_exists($variable, $_ENV) && !array_key_exists($variable, $_SERVER)) {
                     putenv("$variable=$value");
                     $_ENV[$variable] = $value;
@@ -61,14 +61,13 @@ class EnvLoader
     }
 
     /**
-     * Obtém o valor de uma variável carregada
-     *
-     * @param string $name
-     * @param mixed $default
+     * Retrieves the value of a loaded environment variable.
+     * * @param string $name
+     * @param mixed  $default
      * @return mixed
      */
     public function get(string $name, mixed $default = null): mixed
     {
-        return getenv($name) ?? $default;
+        return getenv($name) ?: $default;
     }
 }

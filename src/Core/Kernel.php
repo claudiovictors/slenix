@@ -1,14 +1,15 @@
 <?php
 
 /*
- |--------------------------------------------------------------------------
- | Classe Kernel
- |--------------------------------------------------------------------------
- |
- | Núcleo da aplicação: inicializa o ambiente, configura segurança
- | e despacha a requisição.
- |
- */
+|--------------------------------------------------------------------------
+| Kernel Class — Slenix Framework
+|--------------------------------------------------------------------------
+|
+| The application core. It orchestrates the entire lifecycle: initializing 
+| the environment, configuring security, starting sessions, and finally 
+| dispatching the incoming request to the router.
+|
+*/
 
 declare(strict_types=1);
 
@@ -25,29 +26,42 @@ use Slenix\Core\Exceptions\ErrorHandler;
 
 class Kernel
 {
+    /** @var float Application start timestamp */
     private float $startTime;
+
+    /** @var ErrorHandler Centralized error handling instance */
     private ErrorHandler $errorHandler;
 
     /**
-     * Rotas/padrões excluídos da verificação CSRF.
-     * Suporta wildcard *: '/api/*', '/webhook/stripe'
+     * Routes or patterns excluded from CSRF verification.
+     * Supports wildcard *: '/api/*', '/webhook/stripe'
+     * * @var array<string>
      */
     private array $csrfExcept = [
         '/api/*',
     ];
 
+    /**
+     * Kernel constructor.
+     * * @param float $startTime Execution start time.
+     */
     public function __construct(float $startTime)
     {
-        $this->startTime = $startTime;
+        $this->startTime    = $startTime;
         $this->errorHandler = new ErrorHandler();
     }
 
     // -------------------------------------------------------------------------
-    // Ponto de entrada
+    // Entry Point
     // -------------------------------------------------------------------------
 
+    /**
+     * Boots the application and dispatches the request.
+     * * @return void
+     */
     public function run(): void
     {
+        // Set low-level PHP error handlers
         set_error_handler([$this->errorHandler, 'handleError']);
         set_exception_handler([$this->errorHandler, 'handleException']);
         register_shutdown_function([$this, 'handleShutdown']);
@@ -58,19 +72,27 @@ class Kernel
             $this->sendSecurityHeaders();
             $this->startSession();
             $this->verifyCsrf();
-            $this->dispatch();
             $this->bootServices();
+            $this->dispatch();
         } catch (\Throwable $e) {
-            // Loga a exceção antes de passar ao handler
-            try { Log::exception($e); } catch (\Throwable) {}
+            // Log the exception before passing it to the visual handler
+            try { 
+                Log::exception($e); 
+            } catch (\Throwable) {
+                // Ignore logging failures to prevent infinite loops
+            }
             $this->errorHandler->handleException($e);
         }
     }
 
     // -------------------------------------------------------------------------
-    // Shutdown
+    // Shutdown Handler
     // -------------------------------------------------------------------------
 
+    /**
+     * Captures fatal errors that cannot be caught by set_error_handler.
+     * * @return void
+     */
     public function handleShutdown(): void
     {
         $error = error_get_last();
@@ -82,9 +104,13 @@ class Kernel
     }
 
     // -------------------------------------------------------------------------
-    // Ambiente
+    // Environment
     // -------------------------------------------------------------------------
 
+    /**
+     * Loads the .env file into the system.
+     * * @return void
+     */
     private function loadEnvironment(): void
     {
         try {
@@ -95,31 +121,39 @@ class Kernel
     }
 
     // -------------------------------------------------------------------------
-    // Boot dos serviços (Log, Cache, Storage)
+    // Service Booting
     // -------------------------------------------------------------------------
- 
+
+    /**
+     * Configures static support services like Logging, Cache, and Storage.
+     * * @return void
+     */
     private function bootServices(): void
     {
         $storagePath = $this->basePath('storage');
- 
-        // Log
+
+        // Configure Logging
         Log::setPath($storagePath . '/logs');
         Log::setChannel($_ENV['LOG_CHANNEL'] ?? 'slenix');
- 
-        // Cache
+
+        // Configure Cache
         Cache::setPath($storagePath . '/cache');
         Cache::setPrefix($_ENV['CACHE_PREFIX'] ?? 'slenix_');
- 
-        // Storage
+
+        // Configure Storage Disks
         Storage::setDisk('public',  $storagePath . '/app/public');
         Storage::setDisk('local',   $storagePath . '/app/private');
         Storage::setDefaultDisk($_ENV['STORAGE_DISK'] ?? 'public');
     }
 
     // -------------------------------------------------------------------------
-    // Configuração PHP
+    // PHP Runtime Configuration
     // -------------------------------------------------------------------------
 
+    /**
+     * Overrides default PHP settings based on environment.
+     * * @return void
+     */
     private function configurePHP(): void
     {
         $debug = $this->isDebug();
@@ -130,6 +164,7 @@ class Kernel
 
         date_default_timezone_set($_ENV['APP_TIMEZONE'] ?? 'UTC');
 
+        // Secure Session Settings
         ini_set('session.cookie_httponly', '1');
         ini_set('session.cookie_samesite', 'Lax');
         ini_set('session.use_strict_mode', '1');
@@ -140,9 +175,13 @@ class Kernel
     }
 
     // -------------------------------------------------------------------------
-    // Headers HTTP de segurança
+    // Security Headers
     // -------------------------------------------------------------------------
 
+    /**
+     * Sends essential security headers to the browser.
+     * * @return void
+     */
     private function sendSecurityHeaders(): void
     {
         if (headers_sent()) {
@@ -161,58 +200,71 @@ class Kernel
             header("Strict-Transport-Security: max-age=31536000; includeSubDomains");
         }
 
+        // Handle Force HTTPS redirection
         if (($_ENV['FORCE_HTTPS'] ?? 'false') === 'true' && !$this->isHttps()) {
             $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-            $uri = $_SERVER['REQUEST_URI'] ?? '/';
+            $uri  = $_SERVER['REQUEST_URI'] ?? '/';
             header("Location: https://{$host}{$uri}", true, 301);
             exit;
         }
     }
 
     // -------------------------------------------------------------------------
-    // Sessão
+    // Session Management
     // -------------------------------------------------------------------------
 
+    /**
+     * Starts the session and registers the helper alias.
+     * * @return void
+     */
     private function startSession(): void
     {
         Session::start();
-        class_alias(Session::class, 'Session');
+        
+        // Expose Session class globally for easier access
+        if (!class_exists('Session')) {
+            class_alias(Session::class, 'Session');
+        }
     }
 
     // -------------------------------------------------------------------------
-    // CSRF — verificação automática em POST/PUT/PATCH/DELETE
+    // CSRF Protection
     // -------------------------------------------------------------------------
 
+    /**
+     * Verifies CSRF tokens for state-changing requests (POST, PUT, DELETE, etc).
+     * * @return void
+     */
     private function verifyCsrf(): void
     {
-        // Métodos seguros não precisam de verificação
         if (CSRF::isSafeMethod()) {
             return;
         }
 
-        // Registra exclusões (webhooks, APIs externas, etc.)
         CSRF::except($this->csrfExcept);
 
-        // Pula rotas excluídas
         if (CSRF::isExcluded()) {
             return;
         }
 
-        // Garante token na sessão e verifica
         CSRF::token();
         CSRF::verifyOrFail();
     }
 
     // -------------------------------------------------------------------------
-    // Despacho de rotas
+    // Request Dispatching
     // -------------------------------------------------------------------------
 
+    /**
+     * Loads routes and dispatches the request to the Router.
+     * * @return void
+     */
     private function dispatch(): void
     {
         $routes = $this->basePath('routes/web.php');
 
         if (!is_file($routes)) {
-            throw new \RuntimeException("Arquivo de rotas não encontrado: {$routes}");
+            throw new \RuntimeException("Main route file not found at: {$routes}");
         }
 
         require_once $routes;
@@ -223,17 +275,30 @@ class Kernel
     // Helpers
     // -------------------------------------------------------------------------
 
+    /**
+     * Checks if the application is in debug mode.
+     * * @return bool
+     */
     private function isDebug(): bool
     {
         return ($_ENV['APP_DEBUG'] ?? 'false') === 'true';
     }
 
+    /**
+     * Checks if the current request is served over HTTPS.
+     * * @return bool
+     */
     private function isHttps(): bool
     {
         return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
             || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
     }
 
+    /**
+     * Resolves a relative path to the absolute base directory of the project.
+     * * @param string $relative
+     * @return string
+     */
     private function basePath(string $relative): string
     {
         return dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . ltrim($relative, '/\\');

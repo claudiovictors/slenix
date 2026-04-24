@@ -2,10 +2,12 @@
 
 /*
 |--------------------------------------------------------------------------
-| Classe SeedCommand
+| SeedCommand Class — Slenix Framework
 |--------------------------------------------------------------------------
 |
-| Integra o sistema de seeds ao CLI Celestial.
+| This class integrates the seeding system into the Celestial CLI.
+| It provides tools to populate the database with dummy data using
+| Seeders and Factories, essential for testing and development environments.
 |
 */
 
@@ -17,10 +19,19 @@ use Slenix\Database\Seeds\Seeder;
 
 class SeedCommand extends Command
 {
+    /** @var array CLI arguments */
     private array $args;
+    
+    /** @var string Path to the seeders directory */
     private string $seedsPath;
+    
+    /** @var string Path to the factories directory */
     private string $factoriesPath;
 
+    /**
+     * SeedCommand constructor.
+     * * @param array $args CLI arguments passed to the script.
+     */
     public function __construct(array $args)
     {
         $this->args          = $args;
@@ -29,12 +40,16 @@ class SeedCommand extends Command
         $this->factoriesPath = $projectRoot . '/database/factories';
     }
 
+    /**
+     * Executes the seeder process.
+     * * @return void
+     */
     public function run(): void
     {
         $className = $this->resolveClassName();
 
         echo PHP_EOL;
-        self::info("Iniciando seeder: {$className}");
+        self::info("Starting seeder: {$className}");
         echo PHP_EOL;
 
         try {
@@ -42,52 +57,58 @@ class SeedCommand extends Command
             $this->loadFactories();
 
             if (!class_exists($className)) {
-                self::error("Seeder [{$className}] não encontrado.");
-                self::info("Verifique se o arquivo existe em: {$this->seedsPath}");
+                self::error("Seeder [{$className}] not found.");
+                self::info("Check if the file exists in: {$this->seedsPath}");
                 exit(1);
             }
 
             $seeder = new $className();
 
             if (!($seeder instanceof Seeder)) {
-                self::error("A classe [{$className}] deve estender Seeder.");
+                self::error("The class [{$className}] must extend Seeder.");
                 exit(1);
             }
 
-            // Intercepta a saída do seeder para exibir progresso
+            // Capture start time for performance monitoring
             $start = microtime(true);
 
-            // Wraps o run() para capturar quaisquer erros com contexto
+            // Execute the seeder logic
             $this->runWithOutput($seeder, $className);
 
             $elapsed = round((microtime(true) - $start) * 1000, 2);
 
             echo PHP_EOL;
-            self::success("Seeding concluído em {$elapsed}ms.");
+            self::success("Seeding completed in {$elapsed}ms.");
             echo PHP_EOL;
 
         } catch (\Throwable $e) {
             echo PHP_EOL;
-            self::error("Erro no seeder [{$className}]: " . $e->getMessage());
+            self::error("Error in seeder [{$className}]: " . $e->getMessage());
             exit(1);
         }
     }
 
     /**
-     * Executa o seeder exibindo progresso no terminal.
+     * Executes the seeder while displaying progress in the terminal.
+     * * @param Seeder $seeder The seeder instance.
+     * @param string $className The name of the seeder class.
+     * @return void
      */
     private function runWithOutput(Seeder $seeder, string $className): void
     {
-        // Hook: antes de call() em outros seeders, exibe o nome
-        // Usa output buffering para detectar o que o seeder escreve
+        // Executes the run method of the seeder
         $seeder->run();
     }
 
+    /**
+     * Creates a new Seeder file.
+     * * @return void
+     */
     public function makeSeeder(): void
     {
         if (count($this->args) < 3) {
-            self::error('Nome do seeder é obrigatório.');
-            self::info('Exemplo: php celestial make:seeder UserSeeder');
+            self::error('Seeder name is required.');
+            self::info('Example: php celestial make:seeder UserSeeder');
             exit(1);
         }
 
@@ -99,30 +120,34 @@ class SeedCommand extends Command
         $filePath = "{$this->seedsPath}/{$name}.php";
 
         if (!is_dir($this->seedsPath) && !mkdir($this->seedsPath, 0755, true)) {
-            self::error("Não foi possível criar o diretório: {$this->seedsPath}");
+            self::error("Could not create directory: {$this->seedsPath}");
             exit(1);
         }
 
         if (file_exists($filePath)) {
-            self::error("Seeder [{$name}] já existe em:");
+            self::error("Seeder [{$name}] already exists at:");
             echo "  {$filePath}" . PHP_EOL;
             exit(1);
         }
 
         if (file_put_contents($filePath, $this->stubSeeder($name)) === false) {
-            self::error("Não foi possível criar o arquivo do seeder.");
+            self::error("Could not create seeder file.");
             exit(1);
         }
 
-        self::success("Seeder criado com sucesso:");
+        self::success("Seeder created successfully:");
         echo "  {$filePath}" . PHP_EOL;
     }
 
+    /**
+     * Creates a new Factory file.
+     * * @return void
+     */
     public function makeFactory(): void
     {
         if (count($this->args) < 3) {
-            self::error('Nome da factory é obrigatório.');
-            self::info('Exemplo: php celestial make:factory UserFactory');
+            self::error('Factory name is required.');
+            self::info('Example: php celestial make:factory UserFactory');
             exit(1);
         }
 
@@ -134,12 +159,12 @@ class SeedCommand extends Command
         $filePath = "{$this->factoriesPath}/{$name}.php";
 
         if (!is_dir($this->factoriesPath) && !mkdir($this->factoriesPath, 0755, true)) {
-            self::error("Não foi possível criar o diretório: {$this->factoriesPath}");
+            self::error("Could not create directory: {$this->factoriesPath}");
             exit(1);
         }
 
         if (file_exists($filePath)) {
-            self::error("Factory [{$name}] já existe em:");
+            self::error("Factory [{$name}] already exists at:");
             echo "  {$filePath}" . PHP_EOL;
             exit(1);
         }
@@ -147,14 +172,18 @@ class SeedCommand extends Command
         $model = str_replace('Factory', '', $name);
 
         if (file_put_contents($filePath, $this->stubFactory($name, $model)) === false) {
-            self::error("Não foi possível criar o arquivo da factory.");
+            self::error("Could not create factory file.");
             exit(1);
         }
 
-        self::success("Factory criada com sucesso:");
+        self::success("Factory created successfully:");
         echo "  {$filePath}" . PHP_EOL;
     }
 
+    /**
+     * Resolves the class name from arguments or defaults to DatabaseSeeder.
+     * * @return string
+     */
     private function resolveClassName(): string
     {
         foreach ($this->args as $arg) {
@@ -165,6 +194,10 @@ class SeedCommand extends Command
         return 'DatabaseSeeder';
     }
 
+    /**
+     * Requires all seeder files in the seeds directory.
+     * * @return void
+     */
     private function loadSeeders(): void
     {
         if (!is_dir($this->seedsPath)) return;
@@ -175,6 +208,10 @@ class SeedCommand extends Command
         }
     }
 
+    /**
+     * Requires all factory files in the factories directory.
+     * * @return void
+     */
     private function loadFactories(): void
     {
         if (!is_dir($this->factoriesPath)) return;
@@ -185,12 +222,17 @@ class SeedCommand extends Command
         }
     }
 
+    /**
+     * Returns the seeder boilerplate code.
+     * * @param string $name Class name.
+     * @return string
+     */
     private function stubSeeder(string $name): string
     {
         $isDatabase = $name === 'DatabaseSeeder';
         $comment    = $isDatabase
-            ? "Ponto de entrada principal. Chame outros seeders aqui."
-            : "Insere dados na tabela correspondente.";
+            ? "Main entry point. Call other seeders here."
+            : "Inserts data into the corresponding table.";
 
         $example = $isDatabase
             ? <<<'BODY'
@@ -200,7 +242,7 @@ class SeedCommand extends Command
         // ]);
 BODY
             : <<<'BODY'
-        // Exemplo com batch insert:
+        // Example with batch insert:
         // $this->truncate('table_name');
         //
         // $rows = [];
@@ -230,6 +272,11 @@ use Slenix\Database\Seeds\Fake;
  */
 class {$name} extends Seeder
 {
+    /**
+     * Run the database seeds.
+     *
+     * @return void
+     */
     public function run(): void
     {
 {$example}
@@ -238,6 +285,12 @@ class {$name} extends Seeder
 PHP;
     }
 
+    /**
+     * Returns the factory boilerplate code.
+     * * @param string $name Class name.
+     * @param string $model Model name.
+     * @return string
+     */
     private function stubFactory(string $name, string $model): string
     {
         return <<<PHP
@@ -251,12 +304,14 @@ use App\Models\\{$model};
 
 class {$name} extends Factory
 {
-    /** Modelo que esta factory gera */
+    /** @var string The model that this factory generates */
     protected string \$model = {$model}::class;
 
     /**
-     * Define os atributos padrão do modelo.
-     * Todos os valores Fake::* são gerados aleatoriamente a cada chamada.
+     * Define the model's default state.
+     * All Fake::* values are randomly generated on each call.
+     *
+     * @return array
      */
     public function definition(): array
     {
@@ -269,7 +324,7 @@ class {$name} extends Factory
     }
 
     // =========================================================
-    // Estados personalizados (opcional)
+    // Custom States (Optional)
     // =========================================================
 
     // public function admin(): static

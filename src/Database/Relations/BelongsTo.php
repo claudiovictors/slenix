@@ -2,13 +2,13 @@
 
 /*
 |--------------------------------------------------------------------------
-| Classe BelongsTo
+| BelongsTo Class
 |--------------------------------------------------------------------------
 |
-| Representa a relação inversa "pertence a" (N:1) entre dois modelos.
-| Exemplo: Um Post pertence a um User. A FK (user_id) fica na tabela posts.
-| A foreignKey é a coluna no modelo atual; localKey é a PK do modelo pai.
-| Suporta lazy loading e eager loading via match().
+| Represents the inverse "belongs to" (N:1) relationship between two models.
+| Example: A Post belongs to a User. The FK (user_id) lives in the posts table.
+| The foreignKey is the column on the current model; localKey is the PK of the parent model.
+| Supports lazy loading and eager loading via match().
 |
 */
 
@@ -19,10 +19,10 @@ namespace Slenix\Database\Relations;
 class BelongsTo extends Relation
 {
     /**
-     * Aplica a constraint padrão: WHERE owner_key = foreign_key_value_do_pai
+     * Applies the default constraint: WHERE owner_key = foreign_key_value_of_parent
      *
-     * foreignKey: coluna FK no modelo atual (ex: user_id em posts)
-     * localKey:   coluna PK no modelo relacionado (ex: id em users)
+     * foreignKey: FK column on the current model (e.g. user_id in posts)
+     * localKey:   PK column on the related model (e.g. id in users)
      */
     public function addConstraints(): void
     {
@@ -34,16 +34,16 @@ class BelongsTo extends Relation
     }
 
     /**
-     * Associa os resultados do eager load a cada modelo (BelongsTo é 1:1)
+     * Associates eager load results to each model (BelongsTo is 1:1)
      *
-     * @param array  $models   Array de modelos que possuem a FK
-     * @param array  $results  Modelos relacionados carregados
-     * @param string $relation Nome da relação
-     * @return array Modelos com a relação definida
+     * @param array  $models   Array of models that own the FK
+     * @param array  $results  Loaded related models
+     * @param string $relation Relation name
+     * @return array Models with the relation set
      */
     public function match(array $models, array $results, string $relation): array
     {
-        // Dicionário: localKey (PK do relacionado) => modelo relacionado
+        // Dictionary: localKey (PK of related) => related model
         $dictionary = [];
         foreach ($results as $result) {
             $key = $result->{$this->localKey};
@@ -52,7 +52,7 @@ class BelongsTo extends Relation
             }
         }
 
-        // Para cada modelo, busca o relacionado pela FK local
+        // For each model, find the related model by its local FK
         foreach ($models as $model) {
             $foreignValue = $model->{$this->foreignKey};
             $model->setRelation($relation, $dictionary[$foreignValue] ?? null);
@@ -62,7 +62,7 @@ class BelongsTo extends Relation
     }
 
     /**
-     * Executa a query e retorna o modelo relacionado (lazy loading)
+     * Executes the query and returns the related model (lazy loading)
      */
     public function getResults(array $columns = ['*']): mixed
     {
@@ -75,12 +75,8 @@ class BelongsTo extends Relation
         return $this->query->select($columns)->first();
     }
 
-    // =========================================================
-    // HELPERS DE ASSOCIAÇÃO
-    // =========================================================
-
     /**
-     * Associa o modelo pai ao relacionado (define a FK)
+     * Associates the parent model to the related model (sets the FK)
      *
      * @example $post->author()->associate($user)
      */
@@ -92,7 +88,7 @@ class BelongsTo extends Relation
     }
 
     /**
-     * Remove a associação (zera a FK)
+     * Removes the association (nullifies the FK)
      *
      * @example $post->author()->dissociate()
      */

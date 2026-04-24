@@ -2,11 +2,12 @@
 
 /*
 |--------------------------------------------------------------------------
-| Classe Route
+| Route Class — Slenix Framework
 |--------------------------------------------------------------------------
 |
-| Classe auxiliar para representar uma rota e permitir encadeamento de métodos.
-| Suporta nomeação de rotas e aplicação de middlewares de forma fluente.
+| A helper class representing a registered route. It enables method 
+| chaining for fluent configuration of route names, middlewares, 
+| and pattern constraints.
 |
 */
 
@@ -16,17 +17,12 @@ namespace Slenix\Http\Routing;
 
 class Route 
 {
-    /**
-     * Índice da rota no array de rotas.
-     *
-     * @var int
-     */
+    /** @var int The index of the route in the Router's storage. */
     private int $routeIndex;
 
     /**
-     * Construtor da classe Route.
-     *
-     * @param int $routeIndex O índice da rota no array de rotas.
+     * Route constructor.
+     * * @param int $routeIndex The index of the route in the main collection.
      */
     public function __construct(int $routeIndex)
     {
@@ -34,9 +30,8 @@ class Route
     }
 
     /**
-     * Define o nome da rota.
-     *
-     * @param string $name O nome da rota.
+     * Sets a unique name for the route.
+     * * @param string $name The route name.
      * @return self
      */
     public function name(string $name): self
@@ -46,9 +41,8 @@ class Route
     }
 
     /**
-     * Adiciona middleware(s) à rota.
-     *
-     * @param array|string $middleware Middleware ou array de middlewares.
+     * Assigns one or more middlewares to the route.
+     * * @param array|string $middleware Single middleware class name or array of names.
      * @return self
      */
     public function middleware(array|string $middleware): self
@@ -58,9 +52,8 @@ class Route
     }
 
     /**
-     * Alias para o método middleware()
-     *
-     * @param array|string $middleware Middleware ou array de middlewares.
+     * Alias for the middleware() method.
+     * * @param array|string $middleware
      * @return self
      */
     public function middlewares(array|string $middleware): self
@@ -69,47 +62,40 @@ class Route
     }
 
     /**
-     * Define onde essa rota pode ser acessada (domínio).
-     * 
-     * @param string $domain O domínio permitido.
+     * Restricts the route to a specific domain (Future Implementation).
+     * * @param string $domain The permitted domain.
      * @return self
      */
     public function domain(string $domain): self
     {
-        // Esta funcionalidade pode ser implementada futuramente
-        // Por agora, apenas retorna $this para manter a fluência
+        // Placeholder for future multi-domain routing logic
         return $this;
     }
 
     /**
-     * Define parâmetros padrão para a rota.
-     *
-     * @param array $defaults Array associativo com valores padrão.
+     * Sets default values for route parameters (Future Implementation).
+     * * @param array $defaults Associative array of default values.
      * @return self
      */
     public function defaults(array $defaults): self
     {
-        // Esta funcionalidade pode ser implementada futuramente
         return $this;
     }
 
     /**
-     * Adiciona restrições regex aos parâmetros da rota.
-     *
-     * @param array $where Array associativo com nome do parâmetro => regex.
+     * Adds regex constraints to route parameters (Future Implementation).
+     * * @param array $where Associative array [parameter => regex_pattern].
      * @return self
      */
     public function where(array $where): self
     {
-        // Esta funcionalidade pode ser implementada futuramente
         return $this;
     }
 
     /**
-     * Adiciona uma restrição regex a um parâmetro específico.
-     *
-     * @param string $parameter Nome do parâmetro.
-     * @param string $pattern Padrão regex.
+     * Constrains a specific parameter with a regex pattern.
+     * * @param string $parameter The parameter name.
+     * @param string $pattern   The regex pattern.
      * @return self
      */
     public function whereParameter(string $parameter, string $pattern): self
@@ -118,9 +104,8 @@ class Route
     }
 
     /**
-     * Restringe um parâmetro a apenas números.
-     *
-     * @param string $parameter Nome do parâmetro.
+     * Constrains a parameter to be numeric only [0-9]+.
+     * * @param string $parameter
      * @return self
      */
     public function whereNumber(string $parameter): self
@@ -129,9 +114,8 @@ class Route
     }
 
     /**
-     * Restringe um parâmetro a apenas letras.
-     *
-     * @param string $parameter Nome do parâmetro.
+     * Constrains a parameter to be alphabetic only [a-zA-Z]+.
+     * * @param string $parameter
      * @return self
      */
     public function whereAlpha(string $parameter): self
@@ -140,9 +124,8 @@ class Route
     }
 
     /**
-     * Restringe um parâmetro a apenas letras e números.
-     *
-     * @param string $parameter Nome do parâmetro.
+     * Constrains a parameter to be alphanumeric [a-zA-Z0-9]+.
+     * * @param string $parameter
      * @return self
      */
     public function whereAlphaNumeric(string $parameter): self
@@ -151,9 +134,8 @@ class Route
     }
 
     /**
-     * Obtém o índice da rota.
-     *
-     * @return int
+     * Returns the internal route index.
+     * * @return int
      */
     public function getRouteIndex(): int
     {

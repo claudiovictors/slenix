@@ -5,9 +5,9 @@
 | Web Routes
 |--------------------------------------------------------------------------
 |
-| Aqui é onde você pode registrar as rotas web para sua aplicação.
-| Essas rotas são carregadas pelo RouteServiceProvider dentro de um grupo
-| que contém o grupo de middleware "web". Aproveite a elegância!
+| This is where you can register web routes for your application.
+| These routes are loaded by the RouteServiceProvider within a group
+| containing the "web" middleware group. Enjoy the elegance!
 |
 */
 
@@ -16,5 +16,5 @@ declare(strict_types=1);
 use Slenix\Http\Routing\Router;
 
 Router::get('/', function(){
-      return view('welcome');
+    return view('welcome');
 });

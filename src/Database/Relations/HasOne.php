@@ -2,12 +2,12 @@
 
 /*
 |--------------------------------------------------------------------------
-| Classe HasOne
+| HasOne Class
 |--------------------------------------------------------------------------
 |
-| Representa a relação "tem um" (1:1) entre dois modelos.
-| Exemplo: Um User tem um Profile. A FK (user_id) fica na tabela do Profile.
-| Suporta lazy loading e eager loading via match().
+| Represents the "has one" (1:1) relationship between two models.
+| Example: A User has one Profile. The FK (user_id) lives in the Profile table.
+| Supports lazy loading and eager loading via match().
 |
 */
 
@@ -18,7 +18,7 @@ namespace Slenix\Database\Relations;
 class HasOne extends Relation
 {
     /**
-     * Aplica a constraint padrão: WHERE foreign_key = local_key_value
+     * Applies the default constraint: WHERE foreign_key = local_key_value
      */
     public function addConstraints(): void
     {
@@ -30,16 +30,16 @@ class HasOne extends Relation
     }
 
     /**
-     * Associa os resultados do eager load a cada modelo pai (1:1)
+     * Associates eager load results to each parent model (1:1)
      *
-     * @param array  $models   Array de modelos pais
-     * @param array  $results  Resultados do banco (array de modelos relacionados)
-     * @param string $relation Nome da relação
-     * @return array Modelos com a relação definida
+     * @param array  $models   Array of parent models
+     * @param array  $results  Database results (array of related models)
+     * @param string $relation Relation name
+     * @return array Models with the relation set
      */
     public function match(array $models, array $results, string $relation): array
     {
-        // Monta dicionário: foreignKey => modelo relacionado
+        // Build dictionary: foreignKey => related model
         $dictionary = [];
         foreach ($results as $result) {
             $key = $result->{$this->foreignKey};
@@ -48,7 +48,7 @@ class HasOne extends Relation
             }
         }
 
-        // Associa o relacionado (ou null) a cada modelo pai
+        // Assign the related model (or null) to each parent model
         foreach ($models as $model) {
             $localValue = $model->{$this->localKey} ?? $model->getKey();
             $model->setRelation($relation, $dictionary[$localValue] ?? null);
@@ -58,7 +58,7 @@ class HasOne extends Relation
     }
 
     /**
-     * Executa a query e retorna um único modelo relacionado (lazy loading)
+     * Executes the query and returns a single related model (lazy loading)
      */
     public function getResults(array $columns = ['*']): mixed
     {

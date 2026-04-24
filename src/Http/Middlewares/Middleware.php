@@ -2,12 +2,12 @@
 
 /*
 |--------------------------------------------------------------------------
-| Interface Middleware
+| Middleware Interface — Slenix Framework
 |--------------------------------------------------------------------------
 |
-| Interface para middlewares que usa o padrão $next.
-| O middleware deve chamar $next($request, $response) para continuar
-| a cadeia de execução, ou retornar/não chamar para interromper.
+| Contract for HTTP middlewares using the $next callback pattern.
+| A middleware must call $next($request, $response) to continue the 
+| execution chain, or return a response to interrupt it.
 |
 */
 
@@ -18,13 +18,14 @@ namespace Slenix\Http\Middlewares;
 use Slenix\Http\Request;
 use Slenix\Http\Response;
 
-interface Middleware {
+interface Middleware
+{
     /**
-     * Processa a requisição através do middleware.
-     * @param Request $request
-     * @param Response $response
-     * @param callable $next
-     * @return void
+     * Process an incoming request through the middleware.
+     * * @param Request  $request  The current request instance.
+     * @param Response $response The current response instance.
+     * @param callable $next     The next middleware/action in the stack.
+     * @return mixed
      */
     public function handle(Request $request, Response $response, callable $next): mixed;
 }

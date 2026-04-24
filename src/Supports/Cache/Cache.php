@@ -2,12 +2,12 @@
 
 /*
 |--------------------------------------------------------------------------
-| Classe Cache
+| Cache Class — Slenix Framework
 |--------------------------------------------------------------------------
 |
-| Cache baseado em ficheiros JSON em storage/cache/.
-| API: get, put, remember, forget, flush, has, forever
-| TTL em segundos. forever() guarda sem expiração.
+| File-based cache system using JSON storage. This class provides a 
+| simple API to store, retrieve, and manage temporary data in the 
+| storage/cache/ directory with TTL (Time To Live) support.
 |
 */
 
@@ -17,33 +17,46 @@ namespace Slenix\Supports\Cache;
 
 class Cache
 {
+    /** @var string Custom storage path for cache files. */
     protected static string $path = '';
+
+    /** @var string Prefix to avoid key collisions. */
     protected static string $prefix = '';
 
     // =========================================================
-    // CONFIGURAÇÃO
+    // CONFIGURATION
     // =========================================================
 
+    /**
+     * Sets the base path for cache storage.
+     * * @param string $path
+     * @return void
+     */
     public static function setPath(string $path): void
     {
         static::$path = $path;
     }
 
+    /**
+     * Sets the global cache prefix.
+     * * @param string $prefix
+     * @return void
+     */
     public static function setPrefix(string $prefix): void
     {
         static::$prefix = $prefix;
     }
 
     // =========================================================
-    // API PÚBLICA
+    // PUBLIC API
     // =========================================================
 
     /**
-     * Guarda um valor no cache.
-     *
-     * @param string $key   Chave única
-     * @param mixed  $value Valor a guardar (qualquer tipo serializável)
-     * @param int    $ttl   Tempo de vida em segundos (0 = forever)
+     * Stores a value in the cache.
+     * * @param string $key   Unique identifier.
+     * @param mixed  $value Data to store (any serializable type).
+     * @param int    $ttl   Time To Live in seconds (0 = forever).
+     * @return void
      */
     public static function put(string $key, mixed $value, int $ttl = 3600): void
     {
@@ -62,7 +75,10 @@ class Cache
     }
 
     /**
-     * Guarda um valor sem expiração.
+     * Stores a value in the cache indefinitely.
+     * * @param string $key
+     * @param mixed  $value
+     * @return void
      */
     public static function forever(string $key, mixed $value): void
     {
@@ -70,7 +86,10 @@ class Cache
     }
 
     /**
-     * Obtém um valor do cache ou null se não existir / expirado.
+     * Retrieves an item from the cache.
+     * * @param string $key
+     * @param mixed  $default Default value if key is not found or expired.
+     * @return mixed
      */
     public static function get(string $key, mixed $default = null): mixed
     {
@@ -83,7 +102,7 @@ class Cache
         $data = json_decode($raw, true);
         if (!is_array($data)) return $default;
 
-        // Expirado
+        // Check if the item has expired
         if ($data['expires_at'] > 0 && time() > $data['expires_at']) {
             unlink($file);
             return $default;
@@ -93,9 +112,11 @@ class Cache
     }
 
     /**
-     * Obtém do cache ou executa o callback e guarda o resultado.
-     *
-     * @example Cache::remember('users.all', 3600, fn() => User::all()->toArray())
+     * Retrieves an item from cache, or executes callback and stores the result.
+     * * @param string   $key
+     * @param int      $ttl
+     * @param callable $callback
+     * @return mixed
      */
     public static function remember(string $key, int $ttl, callable $callback): mixed
     {
@@ -108,7 +129,9 @@ class Cache
     }
 
     /**
-     * Verifica se a chave existe e não está expirada.
+     * Checks if a key exists and is not expired.
+     * * @param string $key
+     * @return bool
      */
     public static function has(string $key): bool
     {
@@ -116,7 +139,9 @@ class Cache
     }
 
     /**
-     * Remove uma entrada do cache.
+     * Removes an item from the cache.
+     * * @param string $key
+     * @return bool
      */
     public static function forget(string $key): bool
     {
@@ -128,7 +153,8 @@ class Cache
     }
 
     /**
-     * Remove todas as entradas do cache.
+     * Deletes all items from the cache storage.
+     * * @return int Number of files removed.
      */
     public static function flush(): int
     {
@@ -144,7 +170,8 @@ class Cache
     }
 
     /**
-     * Remove entradas expiradas (limpeza periódica).
+     * Removes all expired entries from the cache directory.
+     * * @return int Number of purged files.
      */
     public static function purgeExpired(): int
     {
@@ -167,13 +194,17 @@ class Cache
     }
 
     /**
-     * Incrementa um valor numérico no cache.
+     * Increments the value of an item in the cache.
+     * * @param string $key
+     * @param int    $by
+     * @return int The new value.
      */
     public static function increment(string $key, int $by = 1): int
     {
         $current = (int) static::get($key, 0);
         $new     = $current + $by;
-        // Mantém o TTL original se existir
+        
+        // Attempt to preserve original TTL
         $file = static::filePath($key);
         $ttl  = 3600;
         if (file_exists($file)) {
@@ -182,12 +213,16 @@ class Cache
                 $ttl = max(1, $data['expires_at'] - time());
             }
         }
+        
         static::put($key, $new, $ttl);
         return $new;
     }
 
     /**
-     * Decrementa um valor numérico no cache.
+     * Decrements the value of an item in the cache.
+     * * @param string $key
+     * @param int    $by
+     * @return int The new value.
      */
     public static function decrement(string $key, int $by = 1): int
     {
@@ -195,21 +230,34 @@ class Cache
     }
 
     // =========================================================
-    // INTERNOS
+    // INTERNAL HELPERS
     // =========================================================
 
+    /**
+     * Resolves the full path to a cache file based on the key.
+     * * @param string $key
+     * @return string
+     */
     protected static function filePath(string $key): string
     {
         $hash = md5(static::$prefix . $key);
         return static::cacheDir() . '/' . $hash . '.json';
     }
 
+    /**
+     * Resolves the directory where cache files are stored.
+     * * @return string
+     */
     protected static function cacheDir(): string
     {
         if (!empty(static::$path)) return static::$path;
         return (defined('STORAGE_PATH') ? STORAGE_PATH : dirname(__DIR__, 4) . '/storage') . '/cache';
     }
 
+    /**
+     * Ensures that the cache directory exists.
+     * * @return void
+     */
     protected static function ensureDir(): void
     {
         $dir = static::cacheDir();

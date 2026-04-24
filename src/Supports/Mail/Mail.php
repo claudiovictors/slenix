@@ -2,13 +2,13 @@
 
 /*
  |--------------------------------------------------------------------------
- | Classe Email
+ | Mail Class
  |--------------------------------------------------------------------------
  |
- | Classe responsável pelo envio de e-mails usando funções nativas do PHP
- | ou SMTP. Suporta envio com HTML, múltiplos destinatários, e anexos.
- | Facilita o envio de e-mails, abstraindo a complexidade da função mail() do PHP
- | e implementando conexão SMTP nativa. Permite a construção de e-mails de forma fluente.
+ | Responsible for sending emails using native PHP functions or SMTP.
+ | Supports HTML emails, multiple recipients, and attachments.
+ | Abstracts the complexity of PHP's mail() function and implements
+ | a native SMTP connection. Allows building emails in a fluent style.
  |
 */
 
@@ -16,79 +16,78 @@ declare(strict_types=1);
 
 namespace Slenix\Supports\Mail;
 
-
 class Mail
 {
     /**
-     * @var array<int, string> Lista de e-mails dos destinatários.
+     * @var array<int, string> List of recipient email addresses.
      */
     protected array $to = [];
 
     /**
-     * @var string O e-mail do remetente.
+     * @var string The sender's email address.
      */
     protected string $from = '';
 
     /**
-     * @var string O nome do remetente.
+     * @var string The sender's display name.
      */
     protected string $fromName = '';
 
     /**
-     * @var string O assunto do e-mail.
+     * @var string The email subject.
      */
     protected string $subject = '';
 
     /**
-     * @var string O corpo da mensagem do e-mail.
+     * @var string The email message body.
      */
     protected string $message = '';
 
     /**
-     * @var bool Define se a mensagem é em formato HTML.
+     * @var bool Whether the message is in HTML format.
      */
     protected bool $isHtml = false;
 
     /**
-     * @var array<int, string> Cabeçalhos adicionais do e-mail.
+     * @var array<int, string> Additional email headers.
      */
     protected array $headers = [];
 
     /**
-     * @var array<int, string> Caminhos dos arquivos a serem anexados.
+     * @var array<int, string> File paths of attachments.
      */
     protected array $attachments = [];
 
     /**
-     * @var string Método de envio: 'mail' ou 'smtp'
+     * @var string Sending method: 'mail' or 'smtp'
      */
     protected string $method = 'mail';
 
     /**
-     * @var array Configurações SMTP
+     * @var array SMTP configuration
      */
     protected array $smtpConfig = [
-        'host' => env('APP_DOMAIN'),
-        'port' => env('MAIL_PORT'),
-        'username' => env('MAIL_USERNAME'),
-        'password' => env('MAIL_PASSWORD'),
-        'encryption' => 'tls', // tls, ssl ou none
-        'auth' => true,
-        'timeout' => 30
+        'host'       => '',
+        'port'       => 587,
+        'username'   => '',
+        'password'   => '',
+        'encryption' => 'tls', // tls, ssl or none
+        'auth'       => true,
+        'timeout'    => 30,
     ];
 
     /**
-     * @var resource|null Conexão SMTP
+     * @var resource|null SMTP connection
      */
     protected $smtpConnection = null;
 
     /**
-     * @var string Log de debug
+     * @var string Debug log
      */
     protected string $debugLog = '';
 
     /**
-     * Construtor da classe Email.
+     * Mail class constructor.
      */
     public function __construct()
     {
@@ -97,77 +96,85 @@ class Mail
     }
 
     /**
-     * Carrega configurações do ambiente
+     * Loads SMTP configuration from environment variables.
+     *
      * @return void
      */
     protected function loadConfig(): void
     {
         $envVars = [
-            'SMTP_HOST' => 'host',
-            'SMTP_PORT' => 'port',
-            'SMTP_USERNAME' => 'username',
-            'SMTP_PASSWORD' => 'password',
+            'SMTP_HOST'       => 'host',
+            'SMTP_PORT'       => 'port',
+            'SMTP_USERNAME'   => 'username',
+            'SMTP_PASSWORD'   => 'password',
             'SMTP_ENCRYPTION' => 'encryption',
-            'SMTP_AUTH' => 'auth',
-            'SMTP_TIMEOUT' => 'timeout'
+            'SMTP_AUTH'       => 'auth',
+            'SMTP_TIMEOUT'    => 'timeout',
         ];
 
         foreach ($envVars as $envKey => $configKey) {
             $value = getenv($envKey);
-            if ($value !== false) {
-                if ($configKey === 'port' || $configKey === 'timeout') {
-                    $this->smtpConfig[$configKey] = (int) $value;
-                } elseif ($configKey === 'auth') {
-                    $this->smtpConfig[$configKey] = filter_var($value, FILTER_VALIDATE_BOOLEAN);
-                } else {
-                    $this->smtpConfig[$configKey] = $value;
-                }
+            if ($value === false) {
+                continue;
+            }
+
+            if ($configKey === 'port' || $configKey === 'timeout') {
+                $this->smtpConfig[$configKey] = (int) $value;
+            } elseif ($configKey === 'auth') {
+                $this->smtpConfig[$configKey] = filter_var($value, FILTER_VALIDATE_BOOLEAN);
+            } else {
+                $this->smtpConfig[$configKey] = $value;
             }
         }
     }
 
     /**
-     * Define o método de envio
-     * @param string $method
-     * @return Mail
+     * Sets the sending method.
+     *
+     * @param  string $method 'mail' or 'smtp'
+     * @return self
      */
     public function method(string $method): self
     {
-        if (in_array($method, ['mail', 'smtp'])) {
+        if (in_array($method, ['mail', 'smtp'], true)) {
             $this->method = $method;
         }
         return $this;
     }
 
     /**
-     * Configura SMTP
-     * @param array $config
-     * @return Mail
+     * Configures and enables SMTP sending.
+     *
+     * @param  array $config SMTP configuration overrides
+     * @return self
      */
     public function smtp(array $config): self
     {
         $this->smtpConfig = array_merge($this->smtpConfig, $config);
-        $this->method = 'smtp';
+        $this->method     = 'smtp';
         return $this;
     }
 
     /**
-     * Define o remetente do e-mail.
-     * @param string $email
-     * @param string $name
-     * @return Mail
+     * Sets the sender's email address and optional display name.
+     *
+     * @param  string $email
+     * @param  string $name
+     * @return self
      */
     public function from(string $email, string $name = ''): self
     {
-        $this->from = $email;
+        $this->from     = $email;
         $this->fromName = $name;
         return $this;
     }
 
     /**
-     * Adiciona um destinatário ao e-mail.
-     * @param string $email
-     * @return Mail
+     * Adds a recipient to the email.
+     * Invalid email addresses are silently ignored.
+     *
+     * @param  string $email
+     * @return self
      */
     public function to(string $email): self
     {
@@ -178,9 +185,10 @@ class Mail
     }
 
     /**
-     * Define o assunto do e-mail.
-     * @param string $subject
-     * @return Mail
+     * Sets the email subject.
+     *
+     * @param  string $subject
+     * @return self
      */
     public function subject(string $subject): self
     {
@@ -189,22 +197,25 @@ class Mail
     }
 
     /**
-     * Define a mensagem (corpo) do e-mail.
-     * @param string $message
-     * @param bool $isHtml
-     * @return Mail
+     * Sets the email message body.
+     *
+     * @param  string $message
+     * @param  bool   $isHtml  Whether the body is HTML (default: false)
+     * @return self
      */
     public function message(string $message, bool $isHtml = false): self
     {
         $this->message = $message;
-        $this->isHtml = $isHtml;
+        $this->isHtml  = $isHtml;
         return $this;
     }
 
     /**
-     * Anexa um arquivo ao e-mail.
-     * @param string $filePath
-     * @return Mail
+     * Attaches a file to the email.
+     * Non-existent files are silently ignored.
+     *
+     * @param  string $filePath Absolute path to the file
+     * @return self
      */
     public function attach(string $filePath): self
     {
@@ -215,7 +226,9 @@ class Mail
     }
 
     /**
-     * Envia o e-mail usando o método configurado
+     * Sends the email using the configured method.
+     * Returns false if required fields (to, from, subject, message) are missing.
+     *
      * @return bool
      */
     public function send(): bool
@@ -228,22 +241,20 @@ class Mail
     }
 
     /**
-     * Envia e-mail usando a função mail() nativa
+     * Sends the email using PHP's native mail() function.
+     *
      * @return bool
      */
     protected function sendMail(): bool
     {
-        $to = implode(', ', $this->to);
+        $to   = implode(', ', $this->to);
         $from = $this->fromName ? "{$this->fromName} <{$this->from}>" : $this->from;
 
-        $headers = $this->headers;
-        $headers[] = "From: $from";
-
-        if ($this->isHtml) {
-            $headers[] = 'Content-Type: text/html; charset=UTF-8';
-        } else {
-            $headers[] = 'Content-Type: text/plain; charset=UTF-8';
-        }
+        $headers   = $this->headers;
+        $headers[] = "From: {$from}";
+        $headers[] = $this->isHtml
+            ? 'Content-Type: text/html; charset=UTF-8'
+            : 'Content-Type: text/plain; charset=UTF-8';
 
         if (empty($this->attachments)) {
             return mail($to, $this->subject, $this->message, implode("\r\n", $headers));
@@ -253,39 +264,41 @@ class Mail
     }
 
     /**
-     * Envia e-mail com anexos usando mail()
-     * @param string $to
-     * @param array $headers
+     * Sends a multipart email with attachments using mail().
+     *
+     * @param  string $to
+     * @param  array  $headers
      * @return bool
      */
     protected function sendMailWithAttachments(string $to, array $headers): bool
     {
-        $boundary = md5(uniqid((string) time()));
-        $headers[] = "Content-Type: multipart/mixed; boundary=\"$boundary\"";
+        $boundary  = md5(uniqid((string) time()));
+        $headers[] = "Content-Type: multipart/mixed; boundary=\"{$boundary}\"";
 
-        $body = "--$boundary\r\n";
-        $body .= "Content-Type: " . ($this->isHtml ? "text/html" : "text/plain") . "; charset=UTF-8\r\n";
+        $body  = "--{$boundary}\r\n";
+        $body .= 'Content-Type: ' . ($this->isHtml ? 'text/html' : 'text/plain') . "; charset=UTF-8\r\n";
         $body .= "Content-Transfer-Encoding: 7bit\r\n\r\n";
         $body .= $this->message . "\r\n";
 
         foreach ($this->attachments as $filePath) {
             $filename = basename($filePath);
-            $fileData = chunk_split(base64_encode(file_get_contents($filePath)));
+            $fileData = chunk_split(base64_encode((string) file_get_contents($filePath)));
 
-            $body .= "--$boundary\r\n";
-            $body .= "Content-Type: application/octet-stream; name=\"$filename\"\r\n";
-            $body .= "Content-Disposition: attachment; filename=\"$filename\"\r\n";
+            $body .= "--{$boundary}\r\n";
+            $body .= "Content-Type: application/octet-stream; name=\"{$filename}\"\r\n";
+            $body .= "Content-Disposition: attachment; filename=\"{$filename}\"\r\n";
             $body .= "Content-Transfer-Encoding: base64\r\n\r\n";
             $body .= $fileData . "\r\n";
         }
 
-        $body .= "--$boundary--";
+        $body .= "--{$boundary}--";
 
         return mail($to, $this->subject, $body, implode("\r\n", $headers));
     }
 
     /**
-     * Envia e-mail usando SMTP
+     * Sends the email via SMTP.
+     *
      * @return bool
      */
     protected function sendSmtp(): bool
@@ -306,31 +319,32 @@ class Mail
             return $success;
 
         } catch (\Exception $e) {
-            $this->debugLog .= "Erro SMTP: " . $e->getMessage() . "\n";
+            $this->debugLog .= "SMTP error: " . $e->getMessage() . "\n";
             $this->disconnectSmtp();
             return false;
         }
     }
 
     /**
-     * Conecta ao servidor SMTP
+     * Establishes a connection to the SMTP server.
+     *
      * @return bool
      */
     protected function connectSmtp(): bool
     {
-        $host = $this->smtpConfig['host'];
-        $port = $this->smtpConfig['port'];
+        $host    = $this->smtpConfig['host'];
+        $port    = $this->smtpConfig['port'];
         $timeout = $this->smtpConfig['timeout'];
 
-        // Conecta com ou sem criptografia
+        // Prepend SSL wrapper if needed
         if ($this->smtpConfig['encryption'] === 'ssl') {
-            $host = "ssl://$host";
+            $host = "ssl://{$host}";
         }
 
         $this->smtpConnection = fsockopen($host, $port, $errno, $errstr, $timeout);
 
         if (!$this->smtpConnection) {
-            $this->debugLog .= "Erro ao conectar: $errno - $errstr\n";
+            $this->debugLog .= "Connection error: {$errno} - {$errstr}\n";
             return false;
         }
 
@@ -339,14 +353,14 @@ class Mail
             return false;
         }
 
-        // EHLO
+        // Send EHLO
         $this->sendSmtpCommand("EHLO " . gethostname());
         $response = $this->getSmtpResponse();
         if (!$this->checkSmtpResponse($response, 250)) {
             return false;
         }
 
-        // STARTTLS se necessário
+        // Upgrade to TLS if required
         if ($this->smtpConfig['encryption'] === 'tls') {
             $this->sendSmtpCommand("STARTTLS");
             $response = $this->getSmtpResponse();
@@ -355,11 +369,11 @@ class Mail
             }
 
             if (!stream_socket_enable_crypto($this->smtpConnection, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
-                $this->debugLog .= "Erro ao habilitar TLS\n";
+                $this->debugLog .= "Failed to enable TLS\n";
                 return false;
             }
 
-            // EHLO novamente após TLS
+            // Re-send EHLO after TLS handshake
             $this->sendSmtpCommand("EHLO " . gethostname());
             $response = $this->getSmtpResponse();
             if (!$this->checkSmtpResponse($response, 250)) {
@@ -371,7 +385,8 @@ class Mail
     }
 
     /**
-     * Autentica no servidor SMTP
+     * Authenticates with the SMTP server.
+     *
      * @return bool
      */
     protected function authenticateSmtp(): bool
@@ -402,7 +417,8 @@ class Mail
     }
 
     /**
-     * Envia o e-mail via SMTP
+     * Sends the email data through the established SMTP connection.
+     *
      * @return bool
      */
     protected function sendSmtpEmail(): bool
@@ -414,9 +430,9 @@ class Mail
             return false;
         }
 
-        // RCPT TO
+        // RCPT TO (one per recipient)
         foreach ($this->to as $recipient) {
-            $this->sendSmtpCommand("RCPT TO: <$recipient>");
+            $this->sendSmtpCommand("RCPT TO: <{$recipient}>");
             $response = $this->getSmtpResponse();
             if (!$this->checkSmtpResponse($response, 250)) {
                 return false;
@@ -430,9 +446,8 @@ class Mail
             return false;
         }
 
-        // Cabeçalhos e corpo
-        $email = $this->buildSmtpEmail();
-        $this->sendSmtpCommand($email);
+        // Send headers, body and end-of-data marker
+        $this->sendSmtpCommand($this->buildSmtpEmail());
         $this->sendSmtpCommand(".");
 
         $response = $this->getSmtpResponse();
@@ -440,64 +455,64 @@ class Mail
     }
 
     /**
-     * Constrói o e-mail para SMTP
+     * Builds the full email message string for SMTP transmission.
+     *
      * @return string
      */
     protected function buildSmtpEmail(): string
     {
-        $email = "";
-        $email .= "From: " . ($this->fromName ? "{$this->fromName} <{$this->from}>" : $this->from) . "\r\n";
+        $from  = $this->fromName ? "{$this->fromName} <{$this->from}>" : $this->from;
+        $email = "From: {$from}\r\n";
         $email .= "To: " . implode(', ', $this->to) . "\r\n";
         $email .= "Subject: {$this->subject}\r\n";
         $email .= "Date: " . date('r') . "\r\n";
 
         if (empty($this->attachments)) {
-            $email .= "Content-Type: " . ($this->isHtml ? "text/html" : "text/plain") . "; charset=UTF-8\r\n";
+            $email .= 'Content-Type: ' . ($this->isHtml ? 'text/html' : 'text/plain') . "; charset=UTF-8\r\n";
             $email .= "\r\n";
             $email .= $this->message;
         } else {
             $boundary = md5(uniqid((string) time()));
-            $email .= "Content-Type: multipart/mixed; boundary=\"$boundary\"\r\n";
-            $email .= "\r\n";
+            $email   .= "Content-Type: multipart/mixed; boundary=\"{$boundary}\"\r\n\r\n";
 
-            // Corpo da mensagem
-            $email .= "--$boundary\r\n";
-            $email .= "Content-Type: " . ($this->isHtml ? "text/html" : "text/plain") . "; charset=UTF-8\r\n";
-            $email .= "\r\n";
+            // Message body part
+            $email .= "--{$boundary}\r\n";
+            $email .= 'Content-Type: ' . ($this->isHtml ? 'text/html' : 'text/plain') . "; charset=UTF-8\r\n\r\n";
             $email .= $this->message . "\r\n";
 
-            // Anexos
+            // Attachment parts
             foreach ($this->attachments as $filePath) {
                 $filename = basename($filePath);
-                $fileData = chunk_split(base64_encode(file_get_contents($filePath)));
+                $fileData = chunk_split(base64_encode((string) file_get_contents($filePath)));
 
-                $email .= "--$boundary\r\n";
-                $email .= "Content-Type: application/octet-stream; name=\"$filename\"\r\n";
-                $email .= "Content-Disposition: attachment; filename=\"$filename\"\r\n";
-                $email .= "Content-Transfer-Encoding: base64\r\n";
-                $email .= "\r\n";
+                $email .= "--{$boundary}\r\n";
+                $email .= "Content-Type: application/octet-stream; name=\"{$filename}\"\r\n";
+                $email .= "Content-Disposition: attachment; filename=\"{$filename}\"\r\n";
+                $email .= "Content-Transfer-Encoding: base64\r\n\r\n";
                 $email .= $fileData;
             }
 
-            $email .= "--$boundary--";
+            $email .= "--{$boundary}--";
         }
 
         return $email;
     }
 
     /**
-     * Envia comando SMTP
-     * @param string $command
+     * Sends a command to the SMTP server.
+     *
+     * @param  string $command
      * @return void
      */
     protected function sendSmtpCommand(string $command): void
     {
         fwrite($this->smtpConnection, $command . "\r\n");
-        $this->debugLog .= ">> $command\n";
+        $this->debugLog .= ">> {$command}\n";
     }
 
     /**
-     * Obtém resposta do servidor SMTP
+     * Reads and returns the SMTP server's response.
+     *
      * @return string
      */
     protected function getSmtpResponse(): string
@@ -505,28 +520,30 @@ class Mail
         $response = '';
         while (($line = fgets($this->smtpConnection, 515)) !== false) {
             $response .= $line;
+            // A space in position 3 signals the last line of the response
             if (substr($line, 3, 1) === ' ') {
                 break;
             }
         }
-        $this->debugLog .= "<< $response";
+        $this->debugLog .= "<< {$response}";
         return trim($response);
     }
 
     /**
-     * Verifica resposta SMTP
-     * @param string $response
-     * @param int $expectedCode
+     * Checks whether the SMTP response matches the expected status code.
+     *
+     * @param  string $response
+     * @param  int    $expectedCode
      * @return bool
      */
     protected function checkSmtpResponse(string $response, int $expectedCode): bool
     {
-        $code = (int) substr($response, 0, 3);
-        return $code === $expectedCode;
+        return (int) substr($response, 0, 3) === $expectedCode;
     }
 
     /**
-     * Desconecta do servidor SMTP
+     * Sends QUIT and closes the SMTP connection.
+     *
      * @return void
      */
     protected function disconnectSmtp(): void
@@ -539,7 +556,8 @@ class Mail
     }
 
     /**
-     * Obtém log de debug
+     * Returns the accumulated SMTP debug log.
+     *
      * @return string
      */
     public function getDebugLog(): string
@@ -548,7 +566,8 @@ class Mail
     }
 
     /**
-     * Limpa log de debug
+     * Clears the SMTP debug log.
+     *
      * @return void
      */
     public function clearDebugLog(): void

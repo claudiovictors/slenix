@@ -2,11 +2,15 @@
 
 /*
 |--------------------------------------------------------------------------
-| Classe Migration (Base)
+| Migration — Abstract Base Class
 |--------------------------------------------------------------------------
 |
-| Classe abstrata base para todas as migrations do Slenix.
-| Cada migration deve implementar up() e down().
+| Every migration in the application must extend this class and implement
+| the up() and down() methods.
+|
+| Use Schema::create(), Schema::table() and Schema::dropIfExists() inside
+| these methods. The Schema facade automatically adapts the generated SQL
+| to the active database driver (MySQL, PostgreSQL, SQLite).
 |
 */
 
@@ -17,12 +21,16 @@ namespace Slenix\Database\Migrations;
 abstract class Migration
 {
     /**
-     * Executa a migration (cria/altera tabelas).
+     * Applies the migration (creates or alters tables, inserts seed data, etc.).
+     *
+     * @return void
      */
     abstract public function up(): void;
 
     /**
-     * Reverte a migration.
+     * Reverts the migration, restoring the database to its previous state.
+     *
+     * @return void
      */
     abstract public function down(): void;
 }

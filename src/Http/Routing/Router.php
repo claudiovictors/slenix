@@ -2,12 +2,13 @@
 
 /*
 |--------------------------------------------------------------------------
-| Classe Router
+| Router Class — Slenix Framework
 |--------------------------------------------------------------------------
 |
-| Esta classe gerencia as rotas da aplicação, mapeando URIs para handlers
-| (funções ou métodos de classes) e aplicando middlewares. Suporta diferentes
-| verbos HTTP, agrupamento de rotas com prefixos e middlewares, e nomeação de rotas.
+| This class manages application routes, mapping URIs to handlers 
+| (functions or class methods) and applying middlewares. It supports 
+| different HTTP verbs, route grouping with prefixes and middlewares, 
+| and route naming.
 |
 */
 
@@ -22,31 +23,26 @@ use Slenix\Http\Middlewares\Middleware;
 
 class Router
 {
-    /**
-     * @var array Armazena todas as rotas definidas.
-     */
+    /** @var array Stores all defined routes. */
     private static array $routes = [];
 
-    /**
-     * @var array Armazena os prefixos de grupo de rotas.
-     */
+    /** @var array Stores route group prefixes. */
     private static array $prefix = [];
 
-    /**
-     * @var array Armazena os middlewares de grupo de rotas.
-     */
+    /** @var array Stores route group middlewares. */
     private static array $groupMiddlewares = [];
 
-    /**
-     * @var array Armazena middlewares globais.
-     */
+    /** @var array Stores global middlewares. */
     private static array $globalMiddlewares = [];
 
+    /** @var array<string, string> WebSocket path => handler class mapping. */
+    private static array $webSocketRoutes = [];
+
     /**
-     * Define o nome de uma rota com base no seu índice.
+     * Sets the name of a route based on its index.
      *
-     * @param int $routeIndex O índice da rota no array $routes.
-     * @param string $name O nome da rota.
+     * @param int    $routeIndex The index of the route in the $routes array.
+     * @param string $name       The name of the route.
      * @return void
      */
     public static function setRouteName(int $routeIndex, string $name): void
@@ -57,10 +53,10 @@ class Router
     }
 
     /**
-     * Adiciona middleware a uma rota específica pelo índice.
+     * Adds middleware to a specific route by index.
      *
-     * @param int $routeIndex O índice da rota.
-     * @param array|string $middleware Middleware(s) a serem adicionados.
+     * @param int          $routeIndex The route index.
+     * @param array|string $middleware Middleware(s) to be added.
      * @return void
      */
     public static function setRouteMiddleware(int $routeIndex, array|string $middleware): void
@@ -75,9 +71,9 @@ class Router
     }
 
     /**
-     * Define middlewares globais que serão aplicados a todas as rotas.
+     * Defines global middlewares that will be applied to all routes.
      *
-     * @param array $middlewares Array de middlewares globais.
+     * @param array $middlewares Array of global middlewares.
      * @return void
      */
     public static function globalMiddleware(array $middlewares): void
@@ -86,11 +82,11 @@ class Router
     }
 
     /**
-     * Define uma rota para o método HTTP GET.
+     * Defines a route for the GET HTTP method.
      *
-     * @param string $path_uri A URI da rota.
-     * @param callable|array $handle A função ou array [classe, método] a ser executado.
-     * @param array $middleware Um array de classes de middlewares a serem aplicadas.
+     * @param string         $path_uri   The route URI.
+     * @param callable|array $handle     The function or [class, method] array to execute.
+     * @param array          $middleware Array of middlewares.
      * @return Route
      */
     public static function get(string $path_uri, callable|array $handle, array $middleware = []): Route
@@ -99,12 +95,7 @@ class Router
     }
 
     /**
-     * Define uma rota para o método HTTP POST.
-     *
-     * @param string $path_uri A URI da rota.
-     * @param callable|array $handle A função ou array [classe, método] a ser executado.
-     * @param array $middleware Um array de classes de middlewares a serem aplicadas.
-     * @return Route
+     * Defines a route for the POST HTTP method.
      */
     public static function post(string $path_uri, callable|array $handle, array $middleware = []): Route
     {
@@ -112,12 +103,7 @@ class Router
     }
 
     /**
-     * Define uma rota para o método HTTP PUT.
-     *
-     * @param string $path_uri A URI da rota.
-     * @param callable|array $handle A função ou array [classe, método] a ser executado.
-     * @param array $middleware Um array de classes de middlewares a serem aplicadas.
-     * @return Route
+     * Defines a route for the PUT HTTP method.
      */
     public static function put(string $path_uri, callable|array $handle, array $middleware = []): Route
     {
@@ -125,12 +111,7 @@ class Router
     }
 
     /**
-     * Define uma rota para o método HTTP PATCH.
-     *
-     * @param string $path_uri A URI da rota.
-     * @param callable|array $handle A função ou array [classe, método] a ser executado.
-     * @param array $middleware Um array de classes de middlewares a serem aplicadas.
-     * @return Route
+     * Defines a route for the PATCH HTTP method.
      */
     public static function patch(string $path_uri, callable|array $handle, array $middleware = []): Route
     {
@@ -138,12 +119,7 @@ class Router
     }
 
     /**
-     * Define uma rota para o método HTTP DELETE.
-     *
-     * @param string $path_uri A URI da rota.
-     * @param callable|array $handle A função ou array [classe, método] a ser executado.
-     * @param array $middleware Um array de classes de middlewares a serem aplicadas.
-     * @return Route
+     * Defines a route for the DELETE HTTP method.
      */
     public static function delete(string $path_uri, callable|array $handle, array $middleware = []): Route
     {
@@ -151,12 +127,7 @@ class Router
     }
 
     /**
-     * Define uma rota para o método HTTP OPTIONS.
-     *
-     * @param string $path_uri A URI da rota.
-     * @param callable|array $handle A função ou array [classe, método] a ser executado.
-     * @param array $middleware Um array de classes de middlewares a serem aplicadas.
-     * @return Route
+     * Defines a route for the OPTIONS HTTP method.
      */
     public static function options(string $path_uri, callable|array $handle, array $middleware = []): Route
     {
@@ -164,12 +135,7 @@ class Router
     }
 
     /**
-     * Define uma rota para qualquer método HTTP.
-     *
-     * @param string $path_uri A URI da rota.
-     * @param callable|array $handle A função ou array [classe, método] a ser executado.
-     * @param array $middleware Um array de classes de middlewares a serem aplicadas.
-     * @return Route
+     * Defines a route for any HTTP method.
      */
     public static function any(string $path_uri, callable|array $handle, array $middleware = []): Route
     {
@@ -177,12 +143,12 @@ class Router
     }
 
     /**
-     * Define uma rota para múltiplos métodos HTTP.
+     * Defines a route for multiple HTTP methods.
      *
-     * @param array $methods Array de métodos HTTP (ex: ['GET', 'POST']).
-     * @param string $path_uri A URI da rota.
-     * @param callable|array $handle A função ou array [classe, método] a ser executado.
-     * @param array $middleware Um array de classes de middlewares a serem aplicadas.
+     * @param array          $methods  Array of HTTP methods (e.g., ['GET', 'POST']).
+     * @param string         $path_uri The route URI.
+     * @param callable|array $handle   Action handler.
+     * @param array          $middleware Array of middlewares.
      * @return Route
      */
     public static function match(array $methods, string $path_uri, callable|array $handle, array $middleware = []): Route
@@ -195,11 +161,11 @@ class Router
     }
 
     /**
-     * Define uma rota de redirecionamento.
+     * Defines a redirect route.
      *
-     * @param string $from URI de origem.
-     * @param string $to URI de destino.
-     * @param int $status Código de status HTTP para o redirecionamento.
+     * @param string $from   Source URI.
+     * @param string $to     Destination URI.
+     * @param int    $status HTTP status code (default 302).
      * @return Route
      */
     public static function redirect(string $from, string $to, int $status = 302): Route
@@ -210,11 +176,11 @@ class Router
     }
 
     /**
-     * Define uma view diretamente para uma rota.
+     * Defines a view directly for a route.
      *
-     * @param string $path_uri A URI da rota.
-     * @param string $view Nome da view.
-     * @param array $data Dados para passar para a view.
+     * @param string $path_uri The route URI.
+     * @param string $view     View name.
+     * @param array  $data     Data to pass to the view.
      * @return Route
      */
     public static function view(string $path_uri, string $view, array $data = []): Route
@@ -225,10 +191,10 @@ class Router
     }
 
     /**
-     * Cria um grupo de rotas apenas com middleware (sem prefixo).
+     * Creates a route group with middleware only (no prefix).
      *
-     * @param array|string $middleware Middleware(s) a serem aplicados.
-     * @param callable $handle Função que define as rotas do grupo.
+     * @param array|string $middleware Middleware(s) to apply.
+     * @param callable     $handle     Function defining the routes in the group.
      * @return void
      */
     public static function middleware(array|string $middleware, callable $handle): void
@@ -237,12 +203,33 @@ class Router
     }
 
     /**
-     * Adiciona uma nova rota ao array de rotas.
+     * Registers a WebSocket route.
      *
-     * @param string $method O método HTTP da rota.
-     * @param string $path_uri A URI da rota.
-     * @param callable|array $handle A função ou array [classe, método] a ser executado.
-     * @param array $middleware Um array de classes de middlewares a serem aplicadas.
+     * @param string $path         URI path, e.g. '/ws/chat'
+     * @param string $handlerClass Fully-qualified class name (extends WebSocketHandler)
+     */
+    public static function websocket(string $path, string $handlerClass): void
+    {
+        self::$webSocketRoutes[$path] = $handlerClass;
+    }
+
+    /**
+     * Returns all registered WebSocket routes.
+     *
+     * @return array<string, string> path => handlerClass
+     */
+    public static function getWebSocketRoutes(): array
+    {
+        return self::$webSocketRoutes;
+    }
+
+    /**
+     * Internal method to add a new route to the collection.
+     *
+     * @param string         $method     HTTP method.
+     * @param string         $path_uri   The route URI.
+     * @param callable|array $handle     Action handler.
+     * @param array          $middleware Array of middlewares.
      * @return Route
      */
     private static function add(string $method, string $path_uri, callable|array $handle, array $middleware = []): Route
@@ -262,10 +249,10 @@ class Router
     }
 
     /**
-     * Agrupa rotas sob um prefixo e/ou middlewares.
+     * Groups routes under a prefix and/or middlewares.
      *
-     * @param array $configs Configurações do grupo ('prefix', 'middleware', 'name', 'namespace').
-     * @param callable $handle Função que define as rotas do grupo.
+     * @param array    $configs Configuration for the group ('prefix', 'middleware').
+     * @param callable $handle  Function defining the routes.
      * @return void
      */
     public static function group(array $configs, callable $handle): void
@@ -288,12 +275,12 @@ class Router
     }
 
     /**
-     * Gera a URL para uma rota com base no seu nome.
+     * Generates a URL for a route based on its name.
      *
-     * @param string $name O nome da rota.
-     * @param array $params Parâmetros para substituir na URL.
-     * @return string|null A URL gerada ou null se a rota não for encontrada.
-     * @throws \Exception Se parâmetros obrigatórios estiverem faltando.
+     * @param string $name   The name of the route.
+     * @param array  $params Parameters to replace in the URL.
+     * @return string|null The generated URL or null if not found.
+     * @throws \RuntimeException If required parameters are missing.
      */
     public static function route(string $name, array $params = []): ?string
     {
@@ -306,14 +293,13 @@ class Router
                     foreach ($placeholders as $placeholder) {
                         $isOptional = str_contains($matches[0][array_search($placeholder, $placeholders)], '?');
                         if (!$isOptional && !isset($params[$placeholder])) {
-                            throw new \RuntimeException("Parâmetro obrigatório '$placeholder' não fornecido para a rota '$name'.");
+                            throw new \RuntimeException("Missing required parameter '$placeholder' for route '$name'.");
                         }
                         $replacement = $params[$placeholder] ?? '';
                         $url = str_replace('{' . $placeholder . '}', $replacement, $url);
                         $url = str_replace('{' . $placeholder . '?}', $replacement, $url);
                     }
                 }
-                // Remove barras duplas
                 $url = preg_replace('#/+#', '/', $url);
                 return rtrim($url, '/') ?: '/';
             }
@@ -322,9 +308,7 @@ class Router
     }
 
     /**
-     * Retorna todas as rotas registradas.
-     *
-     * @return array
+     * Returns all registered routes.
      */
     public static function getRoutes(): array
     {
@@ -332,9 +316,7 @@ class Router
     }
 
     /**
-     * Limpa todas as rotas (útil para testes).
-     *
-     * @return void
+     * Clears all registered routes (useful for testing).
      */
     public static function clearRoutes(): void
     {
@@ -342,16 +324,15 @@ class Router
         self::$prefix = [];
         self::$groupMiddlewares = [];
         self::$globalMiddlewares = [];
+        self::$webSocketRoutes = [];
     }
 
     /**
-     * Despacha a requisição para a rota correspondente.
-     *
-     * @return void
+     * Dispatches the incoming request to the matching route.
+     * * @return void
      */
     public static function dispatch(): void
     {
-
         $request = new Request();
         $response = new Response();
         $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
@@ -365,21 +346,21 @@ class Router
             if ($route['method'] === $method && preg_match($pattern, $uriPath, $matches)) {
                 $paramskey = array_filter($matches, fn($key) => !is_int($key), ARRAY_FILTER_USE_KEY);
 
-                // Validação CSRF automática
+                // Automatic CSRF validation
                 if (self::shouldValidateCsrf($method)) {
                     if (!self::validateCsrfToken()) {
                         $response->status(419);
                         if ($request->expectsJson()) {
                             header('Content-Type: application/json');
-                            throw new \RuntimeException('CSRF token inválido ou expirado.');
+                            throw new \RuntimeException('Invalid or expired CSRF token.');
                         } else {
-                            throw new \RuntimeException('419 — CSRF token inválido ou expirado.');
+                            throw new \RuntimeException('419 — Invalid or expired CSRF token.');
                         }
                         return;
                     }
                 }
 
-                // Handler final
+                // Final Action Handler
                 $handler = function (Request $req, Response $res) use ($route, $paramskey): void {
                     if (is_callable($route['handler'])) {
                         call_user_func($route['handler'], $req, $res, $paramskey);
@@ -389,7 +370,7 @@ class Router
                     }
                 };
 
-                // Pipeline de middlewares
+                // Middleware Pipeline
                 $pipeline = $handler;
                 foreach (array_reverse($route['middleware']) as $middlewareClass) {
                     $resolvedClass = self::resolveMiddlewareAlias($middlewareClass);
@@ -413,6 +394,9 @@ class Router
         self::handleNotFound();
     }
 
+    /**
+     * Determines if CSRF validation should be performed based on the HTTP method.
+     */
     private static function shouldValidateCsrf(string $method): bool
     {
         $writeMethods = ['POST', 'PUT', 'PATCH', 'DELETE'];
@@ -421,13 +405,10 @@ class Router
             return false;
         }
 
-        // Se veio _csrf_token, valida normalmente
         if (isset($_POST['_csrf_token']) || isset($_SERVER['HTTP_X_CSRF_TOKEN'])) {
             return true;
         }
 
-        // Se não veio token mas é uma requisição de formulário HTML
-        // vinda de origem diferente (ex: index.html externo), bloqueia também
         $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
         $isFormSubmit = str_contains($contentType, 'application/x-www-form-urlencoded')
             || str_contains($contentType, 'multipart/form-data');
@@ -437,12 +418,10 @@ class Router
             $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
             $referer = $_SERVER['HTTP_REFERER'] ?? '';
 
-            // Se há Origin e é diferente do host atual, bloqueia
             if ($origin && !str_contains($origin, $host)) {
                 return true;
             }
 
-            // Se há Referer e é diferente do host atual, bloqueia
             if ($referer && !str_contains($referer, $host)) {
                 return true;
             }
@@ -451,6 +430,9 @@ class Router
         return false;
     }
 
+    /**
+     * Validates the CSRF token from the request.
+     */
     private static function validateCsrfToken(): bool
     {
         $token = $_POST['_csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
@@ -463,28 +445,39 @@ class Router
     }
 
     /**
-     * Resolve aliases de middleware.
+     * Resolves middleware aliases, injecting parameters if needed.
      *
      * @param string $alias
-     * @return string
+     * @return string Fully-qualified middleware class name.
      */
     private static function resolveMiddlewareAlias(string $alias): string
     {
+        $base   = $alias;
+        $params = '';
+ 
+        if (str_contains($alias, ':')) {
+            [$base, $params] = explode(':', $alias, 2);
+        }
+ 
+        if ($base === 'throttle' && $params !== '') {
+            $_SERVER['HTTP_X_THROTTLE_PARAMS'] = "throttle:{$params}";
+        } elseif ($base === 'throttle') {
+            unset($_SERVER['HTTP_X_THROTTLE_PARAMS']);
+        }
+ 
         $aliases = [
-            'auth' => 'App\\Middlewares\\AuthMiddleware',
-            'guest' => 'App\\Middlewares\\GuestMiddleware',
-            'cors' => 'App\\Middlewares\\CorsMiddleware',
-            'jwt' => 'App\\Middlewares\\JwtMiddleware',
+            'auth'     => 'App\\Middlewares\\AuthMiddleware',
+            'guest'    => 'App\\Middlewares\\GuestMiddleware',
+            'cors'     => 'App\\Middlewares\\CorsMiddleware',
+            'jwt'      => 'App\\Middlewares\\JwtMiddleware',
             'throttle' => 'App\\Middlewares\\ThrottleMiddleware',
         ];
-
-        return $aliases[$alias] ?? $alias;
+ 
+        return $aliases[$base] ?? $alias;
     }
 
     /**
-     * Manipula requisições não encontradas (404).
-     *
-     * @return void
+     * Handles 404 - Not Found requests.
      */
     private static function handleNotFound(): void
     {

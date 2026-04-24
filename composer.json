@@ -1,7 +1,7 @@
 {
     "name": "slenix/slenix",
-    "description": "Slenix é um framework flexível rápido para construir APIs REST e aplicações web",
-    "keywords": ["slenix", "framework"],
+    "description": "Slenix is a fast and flexible framework for building REST APIs and web applications",
+    "keywords": ["slenix", "framework", "orm", "route", "cli"],
     "homepage": "https://slenix.vercel.app",
     "type": "project",
     "license": "MIT",
@@ -45,5 +45,4 @@
         "issues": "https://github.com/claudiovictors/slenix/issues",
         "source": "https://github.com/claudiovictors/slenix"
     }
-
 }

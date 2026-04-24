@@ -2,13 +2,12 @@
 
 /*
 |--------------------------------------------------------------------------
-| Classe DatabaseSeeder
+| DatabaseSeeder Class
 |--------------------------------------------------------------------------
 |
-| Ponto de entrada principal para os seeds do banco de dados.
-| Registre aqui todos os seeders que devem ser executados
+| Main entry point for database seeds.
+| Register here all seeders that should be executed
 | via `php celestial db:seed`.
-|
 |
 */
 

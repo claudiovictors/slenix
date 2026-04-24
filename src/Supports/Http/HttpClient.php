@@ -2,12 +2,12 @@
 
 /*
 |--------------------------------------------------------------------------
-| Classe HttpClient
+| HttpClient Class
 |--------------------------------------------------------------------------
 |
-| Esta classe fornece uma interface fluida e robusta para realizar requisições HTTP,
-| com suporte a métodos HTTP, autenticação, cabeçalhos personalizados, corpo da requisição,
-| retries, timeouts, e integração com o framework Slenix.
+| Provides a fluent and robust interface for making HTTP requests,
+| with support for HTTP methods, authentication, custom headers, request
+| body, retries, timeouts, and integration with the Slenix framework.
 |
 */
 
@@ -23,64 +23,48 @@ use Slenix\Http\Response;
 class HttpClient
 {
     /**
-     * @var array Configurações padrão para a requisição
+     * @var array Default request options
      */
     protected array $options = [
-        'timeout' => 30,
-        'connect_timeout' => 5,
-        'verify' => true,
-        'http_errors' => true,
-        'retries' => 0,
-        'retry_delay' => 1000,
+        'timeout'          => 30,
+        'connect_timeout'  => 5,
+        'verify'           => true,
+        'http_errors'      => true,
+        'retries'          => 0,
+        'retry_delay'      => 1000,
         'follow_redirects' => true,
-        'max_redirects' => 5,
-        'user_agent' => 'Slenix-HttpClient/1.0',
+        'max_redirects'    => 5,
+        'user_agent'       => 'Slenix-HttpClient/1.0',
     ];
 
-    /**
-     * @var array Cabeçalhos da requisição
-     */
+    /** @var array Request headers */
     protected array $headers = [];
 
-    /**
-     * @var mixed Dados do corpo da requisição
-     */
+    /** @var mixed Request body data */
     protected mixed $body = null;
 
-    /**
-     * @var string|null URL base para as requisições
-     */
+    /** @var string|null Base URL for requests */
     protected ?string $baseUrl = null;
 
-    /**
-     * @var string|null Método HTTP
-     */
+    /** @var string|null HTTP method */
     protected ?string $method = null;
 
-    /**
-     * @var string|null URL da requisição
-     */
+    /** @var string|null Request URL */
     protected ?string $url = null;
 
-    /**
-     * @var array|null Dados de autenticação
-     */
+    /** @var array|null Authentication data */
     protected ?array $auth = null;
 
-    /**
-     * @var array Eventos de callback (before, after, error)
-     */
+    /** @var array Event callbacks (before, after, error) */
     protected array $events = [];
 
-    /**
-     * @var array Status codes que devem ser considerados erros
-     */
+    /** @var array Status codes that should be treated as errors */
     protected array $errorStatusCodes = [400, 401, 403, 404, 500, 502, 503];
 
     /**
-     * Construtor da classe HttpClient.
+     * Creates a new HttpClient instance.
      *
-     * @param array $options Configurações iniciais
+     * @param array $options Initial options
      */
     public function __construct(array $options = [])
     {
@@ -89,47 +73,47 @@ class HttpClient
     }
 
     /**
-     * Valida as opções fornecidas.
+     * Validates the provided options.
      *
      * @throws InvalidArgumentException
      */
     protected function validateOptions(): void
     {
         if ($this->options['timeout'] <= 0) {
-            throw new InvalidArgumentException('Timeout deve ser maior que 0');
+            throw new InvalidArgumentException('Timeout must be greater than 0');
         }
-        
+
         if ($this->options['connect_timeout'] <= 0) {
-            throw new InvalidArgumentException('Connect timeout deve ser maior que 0');
+            throw new InvalidArgumentException('Connect timeout must be greater than 0');
         }
-        
+
         if ($this->options['retries'] < 0) {
-            throw new InvalidArgumentException('Retries não pode ser negativo');
+            throw new InvalidArgumentException('Retries cannot be negative');
         }
     }
 
     /**
-     * Define a URL base para as requisições.
+     * Sets the base URL for requests.
      *
-     * @param string $baseUrl
+     * @param  string $baseUrl
      * @return self
      * @throws InvalidArgumentException
      */
     public function baseUrl(string $baseUrl): self
     {
         if (!filter_var($baseUrl, FILTER_VALIDATE_URL)) {
-            throw new InvalidArgumentException('URL base inválida');
+            throw new InvalidArgumentException('Invalid base URL');
         }
-        
+
         $this->baseUrl = rtrim($baseUrl, '/');
         return $this;
     }
 
     /**
-     * Define um cabeçalho para a requisição.
+     * Sets a single request header.
      *
-     * @param string $name
-     * @param string $value
+     * @param  string $name
+     * @param  string $value
      * @return self
      */
     public function withHeader(string $name, string $value): self
@@ -139,23 +123,23 @@ class HttpClient
     }
 
     /**
-     * Define múltiplos cabeçalhos.
+     * Sets multiple request headers at once.
      *
-     * @param array $headers
+     * @param  array $headers
      * @return self
      */
     public function withHeaders(array $headers): self
     {
         foreach ($headers as $name => $value) {
-            $this->withHeader($name, $value);
+            $this->withHeader((string) $name, (string) $value);
         }
         return $this;
     }
 
     /**
-     * Remove um cabeçalho.
+     * Removes a request header.
      *
-     * @param string $name
+     * @param  string $name
      * @return self
      */
     public function withoutHeader(string $name): self
@@ -165,33 +149,37 @@ class HttpClient
     }
 
     /**
-     * Define autenticação para a requisição (Basic Auth, Bearer Token, etc.).
+     * Sets authentication for the request (Basic Auth, Bearer Token, Digest).
      *
-     * @param string $type Tipo de autenticação ('basic', 'bearer', 'digest')
-     * @param string|array $credentials Credenciais (usuário/senha ou token)
+     * @param  string       $type        Authentication type ('basic', 'bearer', 'digest')
+     * @param  string|array $credentials Credentials (username/password array or token string)
      * @return self
      * @throws InvalidArgumentException
      */
     public function withAuth(string $type, string|array $credentials): self
     {
         $type = strtolower($type);
-        
-        if (!in_array($type, ['basic', 'bearer', 'digest'])) {
-            throw new InvalidArgumentException('Tipo de autenticação não suportado');
+
+        if (!in_array($type, ['basic', 'bearer', 'digest'], true)) {
+            throw new InvalidArgumentException("Unsupported authentication type: '{$type}'");
         }
-        
+
         if ($type === 'basic' && (!is_array($credentials) || count($credentials) !== 2)) {
-            throw new InvalidArgumentException('Credenciais básicas devem ser um array [username, password]');
+            throw new InvalidArgumentException('Basic credentials must be an array [username, password]');
         }
-        
+
+        if (in_array($type, ['bearer', 'digest']) && !is_string($credentials)) {
+            throw new InvalidArgumentException("'{$type}' credentials must be a string token");
+        }
+
         $this->auth = ['type' => $type, 'credentials' => $credentials];
         return $this;
     }
 
     /**
-     * Define o corpo da requisição como JSON.
+     * Sets the request body as JSON.
      *
-     * @param array|object $data
+     * @param  array|object $data
      * @return self
      */
     public function asJson(array|object $data): self
@@ -202,9 +190,9 @@ class HttpClient
     }
 
     /**
-     * Define o corpo da requisição como formulário (multipart/form-data).
+     * Sets the request body as multipart form data.
      *
-     * @param array $data
+     * @param  array $data
      * @return self
      */
     public function asForm(array $data): self
@@ -215,9 +203,9 @@ class HttpClient
     }
 
     /**
-     * Define o corpo da requisição como URL-encoded.
+     * Sets the request body as URL-encoded form data.
      *
-     * @param array $data
+     * @param  array $data
      * @return self
      */
     public function asFormUrlEncoded(array $data): self
@@ -228,9 +216,9 @@ class HttpClient
     }
 
     /**
-     * Define o corpo da requisição como XML.
+     * Sets the request body as XML.
      *
-     * @param string $xml
+     * @param  string $xml
      * @return self
      */
     public function asXml(string $xml): self
@@ -241,9 +229,9 @@ class HttpClient
     }
 
     /**
-     * Define o corpo da requisição como texto puro.
+     * Sets the request body as plain text.
      *
-     * @param string $text
+     * @param  string $text
      * @return self
      */
     public function asText(string $text): self
@@ -254,49 +242,49 @@ class HttpClient
     }
 
     /**
-     * Define o número de tentativas de repetição em caso de falha.
+     * Sets the number of retry attempts on failure.
      *
-     * @param int $retries
-     * @param int $delay Delay entre tentativas (em milissegundos)
+     * @param  int  $retries Number of retries
+     * @param  int  $delay   Delay between retries in milliseconds
      * @return self
      * @throws InvalidArgumentException
      */
     public function withRetries(int $retries, int $delay = 1000): self
     {
         if ($retries < 0) {
-            throw new InvalidArgumentException('Número de retries não pode ser negativo');
+            throw new InvalidArgumentException('Number of retries cannot be negative');
         }
-        
+
         if ($delay < 0) {
-            throw new InvalidArgumentException('Delay não pode ser negativo');
+            throw new InvalidArgumentException('Retry delay cannot be negative');
         }
-        
-        $this->options['retries'] = $retries;
+
+        $this->options['retries']     = $retries;
         $this->options['retry_delay'] = $delay;
         return $this;
     }
 
     /**
-     * Define o tempo limite da requisição.
+     * Sets the request timeout in seconds.
      *
-     * @param int $timeout
+     * @param  int  $timeout
      * @return self
      * @throws InvalidArgumentException
      */
     public function timeout(int $timeout): self
     {
         if ($timeout <= 0) {
-            throw new InvalidArgumentException('Timeout deve ser maior que 0');
+            throw new InvalidArgumentException('Timeout must be greater than 0');
         }
-        
+
         $this->options['timeout'] = $timeout;
         return $this;
     }
 
     /**
-     * Define o user agent.
+     * Sets the User-Agent header.
      *
-     * @param string $userAgent
+     * @param  string $userAgent
      * @return self
      */
     public function withUserAgent(string $userAgent): self
@@ -306,28 +294,32 @@ class HttpClient
     }
 
     /**
-     * Registra um callback para um evento (before, after, error).
+     * Registers a callback for a lifecycle event (before, after, error).
      *
-     * @param string $event
-     * @param callable $callback
+     * - 'before' receives: (string $method, string $url, mixed $body)
+     * - 'after'  receives: (Response $response)
+     * - 'error'  receives: (Exception $e)
+     *
+     * @param  string   $event    Event name: 'before', 'after', or 'error'
+     * @param  callable $callback
      * @return self
      * @throws InvalidArgumentException
      */
     public function on(string $event, callable $callback): self
     {
-        if (!in_array($event, ['before', 'after', 'error'])) {
-            throw new InvalidArgumentException('Evento não suportado');
+        if (!in_array($event, ['before', 'after', 'error'], true)) {
+            throw new InvalidArgumentException("Unsupported event '{$event}'. Allowed: before, after, error");
         }
-        
+
         $this->events[$event][] = $callback;
         return $this;
     }
 
     /**
-     * Executa uma requisição GET.
+     * Executes a GET request.
      *
-     * @param string $url
-     * @param array $query
+     * @param  string $url
+     * @param  array  $query Query string parameters
      * @return Response
      */
     public function get(string $url, array $query = []): Response
@@ -336,10 +328,10 @@ class HttpClient
     }
 
     /**
-     * Executa uma requisição POST.
+     * Executes a POST request.
      *
-     * @param string $url
-     * @param mixed $data
+     * @param  string $url
+     * @param  mixed  $data
      * @return Response
      */
     public function post(string $url, mixed $data = []): Response
@@ -348,10 +340,10 @@ class HttpClient
     }
 
     /**
-     * Executa uma requisição PUT.
+     * Executes a PUT request.
      *
-     * @param string $url
-     * @param mixed $data
+     * @param  string $url
+     * @param  mixed  $data
      * @return Response
      */
     public function put(string $url, mixed $data = []): Response
@@ -360,10 +352,10 @@ class HttpClient
     }
 
     /**
-     * Executa uma requisição PATCH.
+     * Executes a PATCH request.
      *
-     * @param string $url
-     * @param mixed $data
+     * @param  string $url
+     * @param  mixed  $data
      * @return Response
      */
     public function patch(string $url, mixed $data = []): Response
@@ -372,9 +364,9 @@ class HttpClient
     }
 
     /**
-     * Executa uma requisição DELETE.
+     * Executes a DELETE request.
      *
-     * @param string $url
+     * @param  string $url
      * @return Response
      */
     public function delete(string $url): Response
@@ -383,9 +375,9 @@ class HttpClient
     }
 
     /**
-     * Executa uma requisição HEAD.
+     * Executes a HEAD request.
      *
-     * @param string $url
+     * @param  string $url
      * @return Response
      */
     public function head(string $url): Response
@@ -394,9 +386,9 @@ class HttpClient
     }
 
     /**
-     * Executa uma requisição OPTIONS.
+     * Executes an OPTIONS request.
      *
-     * @param string $url
+     * @param  string $url
      * @return Response
      */
     public function options(string $url): Response
@@ -405,99 +397,94 @@ class HttpClient
     }
 
     /**
-     * Método genérico para executar requisições HTTP.
+     * Generic method to execute any HTTP request.
      *
-     * @param string $method
-     * @param string $url
-     * @param array $options
+     * @param  string $method  HTTP method (GET, POST, PUT, etc.)
+     * @param  string $url
+     * @param  array  $options Additional options: 'query' and/or 'body'
      * @return Response
      */
     public function request(string $method, string $url, array $options = []): Response
     {
         $this->method = strtoupper($method);
-        
-        // Aplica query parameters se fornecidos
-        $query = $options['query'] ?? [];
-        $this->url = $this->buildUrl($url, $query);
-        
-        // Aplica body se fornecido
+        $this->url    = $this->buildUrl($url, $options['query'] ?? []);
+
         if (isset($options['body'])) {
             $this->body = $options['body'];
         }
-        
+
         return $this->send();
     }
 
     /**
-     * Constrói a URL completa com base na baseUrl e parâmetros de query.
+     * Builds the full URL by combining baseUrl, path, and query parameters.
      *
-     * @param string $url
-     * @param array $query
+     * @param  string $url
+     * @param  array  $query
      * @return string
      */
     protected function buildUrl(string $url, array $query = []): string
     {
         $base = $this->baseUrl ? rtrim($this->baseUrl, '/') . '/' : '';
-        $url = $base . ltrim($url, '/');
-        
+        $url  = $base . ltrim($url, '/');
+
         if (!empty($query)) {
             $separator = parse_url($url, PHP_URL_QUERY) ? '&' : '?';
-            $url .= $separator . http_build_query($query);
+            $url      .= $separator . http_build_query($query);
         }
-        
+
         return $url;
     }
 
     /**
-     * Executa a requisição HTTP com sistema de retry.
+     * Sends the HTTP request with retry logic.
      *
      * @return Response
      * @throws Exception
      */
     protected function send(): Response
     {
-        $attempts = 0;
-        $maxAttempts = $this->options['retries'] + 1;
+        $attempts      = 0;
+        $maxAttempts   = $this->options['retries'] + 1;
         $lastException = null;
 
         while ($attempts < $maxAttempts) {
             try {
                 $attempts++;
-                
-                // Dispara evento 'before'
+
                 $this->dispatchEvent('before', [$this->method, $this->url, $this->body]);
 
                 $response = $this->executeCurlRequest();
-                
-                // Verifica se deve considerar como erro
-                if ($this->options['http_errors'] && in_array($response->getStatusCode(), $this->errorStatusCodes)) {
+
+                if (
+                    $this->options['http_errors']
+                    && in_array($response->getStatusCode(), $this->errorStatusCodes, true)
+                ) {
                     throw new RuntimeException("HTTP Error: {$response->getStatusCode()}");
                 }
 
-                // Dispara evento 'after'
                 $this->dispatchEvent('after', [$response]);
 
                 return $response;
-                
+
             } catch (Exception $e) {
                 $lastException = $e;
-                
+
                 if ($attempts >= $maxAttempts) {
-                    // Dispara evento 'error'
                     $this->dispatchEvent('error', [$e]);
                     throw $e;
                 }
-                
-                // Aguarda antes da próxima tentativa
+
+                // Wait before the next attempt
                 usleep($this->options['retry_delay'] * 1000);
             }
         }
 
-        throw $lastException ?? new RuntimeException('Failed to execute request after retries.');
+        throw $lastException ?? new RuntimeException('Failed to execute request after all retry attempts.');
     }
 
     /**
-     * Executa a requisição cURL.
+     * Performs the actual cURL request.
      *
      * @return Response
      * @throws RuntimeException
@@ -508,28 +495,24 @@ class HttpClient
         curl_setopt_array($ch, $this->buildCurlOptions());
 
         $responseContent = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $responseHeaders = curl_getinfo($ch, CURLINFO_HEADER_OUT);
-        $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
-        $error = curl_error($ch);
-        $errno = curl_errno($ch);
-        
+        $httpCode        = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $contentType     = curl_getinfo($ch, CURLINFO_CONTENT_TYPE) ?? '';
+        $error           = curl_error($ch);
+        $errno           = curl_errno($ch);
+
+        curl_close($ch);
+
         if ($responseContent === false) {
-            throw new RuntimeException("cURL error ($errno): $error");
+            throw new RuntimeException("cURL error ({$errno}): {$error}");
         }
 
-        // Cria objeto Response melhorado
         $response = new Response();
         $response->status($httpCode);
-        
-        // Define o conteúdo baseado no tipo
-        if ($contentType && stripos($contentType, 'application/json') !== false) {
-            $decodedData = json_decode($responseContent, true);
-            if (json_last_error() === JSON_ERROR_NONE) {
-                $response->setContent($decodedData);
-            } else {
-                $response->setContent($responseContent);
-            }
+
+        // Auto-decode JSON responses
+        if (stripos($contentType, 'application/json') !== false) {
+            $decoded = json_decode((string) $responseContent, true);
+            $response->setContent(json_last_error() === JSON_ERROR_NONE ? $decoded : $responseContent);
         } else {
             $response->setContent($responseContent);
         }
@@ -538,92 +521,92 @@ class HttpClient
     }
 
     /**
-     * Constrói as opções do cURL.
+     * Builds the cURL options array for the current request.
      *
      * @return array
      */
     protected function buildCurlOptions(): array
     {
         $options = [
-            CURLOPT_URL => $this->url,
+            CURLOPT_URL            => $this->url,
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HEADER => false,
-            CURLOPT_TIMEOUT => $this->options['timeout'],
+            CURLOPT_HEADER         => false,
+            CURLOPT_TIMEOUT        => $this->options['timeout'],
             CURLOPT_CONNECTTIMEOUT => $this->options['connect_timeout'],
             CURLOPT_SSL_VERIFYPEER => $this->options['verify'],
             CURLOPT_FOLLOWLOCATION => $this->options['follow_redirects'],
-            CURLOPT_MAXREDIRS => $this->options['max_redirects'],
-            CURLOPT_USERAGENT => $this->options['user_agent'],
-            CURLOPT_ENCODING => '', // Aceita todas as encodings suportadas
+            CURLOPT_MAXREDIRS      => $this->options['max_redirects'],
+            CURLOPT_USERAGENT      => $this->options['user_agent'],
+            CURLOPT_ENCODING       => '', // Accept all supported encodings
         ];
 
-        // Define o método HTTP
-        switch (strtoupper($this->method)) {
+        // Set HTTP method
+        switch ($this->method) {
             case 'POST':
                 $options[CURLOPT_POST] = true;
                 break;
             case 'GET':
             case 'HEAD':
-                // Métodos que não precisam de configuração especial
+                // No special cURL option needed
                 break;
             default:
-                $options[CURLOPT_CUSTOMREQUEST] = strtoupper($this->method);
+                $options[CURLOPT_CUSTOMREQUEST] = $this->method;
                 break;
         }
 
-        // Define o corpo da requisição
-        if ($this->body !== null && !in_array($this->method, ['GET', 'HEAD'])) {
+        // Attach the request body for non-GET/HEAD methods
+        if ($this->body !== null && !in_array($this->method, ['GET', 'HEAD'], true)) {
             $options[CURLOPT_POSTFIELDS] = $this->prepareRequestBody();
         }
 
-        // Configura autenticação
+        // Apply authentication settings
         $this->applyCurlAuth($options);
 
-        // Define cabeçalhos
+        // Attach request headers
         if (!empty($this->headers)) {
-            $headers = [];
-            foreach ($this->headers as $name => $value) {
-                $headers[] = "$name: $value";
-            }
-            $options[CURLOPT_HTTPHEADER] = $headers;
+            $options[CURLOPT_HTTPHEADER] = array_map(
+                fn($name, $value) => "{$name}: {$value}",
+                array_keys($this->headers),
+                array_values($this->headers)
+            );
         }
 
         return $options;
     }
 
     /**
-     * Prepara o corpo da requisição baseado no tipo de conteúdo.
+     * Prepares the request body based on the Content-Type header.
      *
-     * @return string
+     * @return mixed String for most types, raw array for multipart/form-data (handled by cURL)
      */
-    protected function prepareRequestBody(): string
+    protected function prepareRequestBody(): mixed
     {
         $contentType = $this->headers['Content-Type'] ?? '';
-        
+
         if (stripos($contentType, 'application/json') !== false) {
-            return json_encode($this->body, JSON_UNESCAPED_UNICODE);
+            return json_encode($this->body, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
         }
-        
+
         if (stripos($contentType, 'application/xml') !== false) {
             return (string) $this->body;
         }
-        
+
         if (stripos($contentType, 'multipart/form-data') !== false) {
-            // Para multipart, deixar cURL preparar automaticamente
+            // Pass the raw array and let cURL handle multipart encoding
             return $this->body;
         }
-        
+
         if (is_array($this->body)) {
             return http_build_query($this->body);
         }
-        
+
         return (string) $this->body;
     }
 
     /**
-     * Aplica configurações de autenticação ao cURL.
+     * Applies authentication settings to the cURL options array.
      *
-     * @param array &$options
+     * @param array &$options cURL options passed by reference
      */
     protected function applyCurlAuth(array &$options): void
     {
@@ -633,63 +616,63 @@ class HttpClient
 
         switch ($this->auth['type']) {
             case 'basic':
-                $credentials = $this->auth['credentials'];
-                $options[CURLOPT_USERPWD] = $credentials[0] . ':' . $credentials[1];
+                [$username, $password]     = $this->auth['credentials'];
+                $options[CURLOPT_USERPWD] = "{$username}:{$password}";
                 break;
-                
+
             case 'bearer':
                 $this->headers['Authorization'] = 'Bearer ' . $this->auth['credentials'];
                 break;
-                
+
             case 'digest':
-                $credentials = $this->auth['credentials'];
-                $options[CURLOPT_USERPWD] = $credentials[0] . ':' . $credentials[1];
+                [$username, $password]     = $this->auth['credentials'];
+                $options[CURLOPT_USERPWD]  = "{$username}:{$password}";
                 $options[CURLOPT_HTTPAUTH] = CURLAUTH_DIGEST;
                 break;
         }
     }
 
     /**
-     * Dispara os callbacks de um evento.
+     * Dispatches all callbacks registered for the given event.
+     *
+     * Exceptions thrown inside callbacks are caught and logged so they
+     * do not interrupt the main request flow.
      *
      * @param string $event
-     * @param array $params
-     * @return void
+     * @param array  $params Parameters forwarded to each callback
      */
     protected function dispatchEvent(string $event, array $params): void
     {
-        if (isset($this->events[$event])) {
-            foreach ($this->events[$event] as $callback) {
-                try {
-                    call_user_func_array($callback, $params);
-                } catch (Exception $e) {
-                    // Log do erro mas não interrompe a execução
-                    error_log("Erro no callback do evento {$event}: " . $e->getMessage());
-                }
+        foreach ($this->events[$event] ?? [] as $callback) {
+            try {
+                call_user_func_array($callback, $params);
+            } catch (Exception $e) {
+                // Log the error without interrupting execution
+                error_log("Error in '{$event}' event callback: " . $e->getMessage());
             }
         }
     }
 
     /**
-     * Reseta o estado do cliente para uma nova requisição.
+     * Resets the client state for a new request, keeping base options intact.
      *
      * @return self
      */
     public function reset(): self
     {
-        $this->method = null;
-        $this->url = null;
-        $this->body = null;
+        $this->method  = null;
+        $this->url     = null;
+        $this->body    = null;
         $this->headers = [];
-        $this->auth = null;
-        
+        $this->auth    = null;
+
         return $this;
     }
 
     /**
-     * Método estático para criar uma nova instância do cliente.
+     * Creates a new HttpClient instance (static factory).
      *
-     * @param array $options
+     * @param  array $options
      * @return self
      */
     public static function make(array $options = []): self
@@ -698,10 +681,10 @@ class HttpClient
     }
 
     /**
-     * Método estático para criar requisições rápidas GET.
+     * Static shortcut for a quick GET request.
      *
-     * @param string $url
-     * @param array $options
+     * @param  string $url
+     * @param  array  $options Client options
      * @return Response
      */
     public static function quickGet(string $url, array $options = []): Response
@@ -710,11 +693,11 @@ class HttpClient
     }
 
     /**
-     * Método estático para criar requisições rápidas POST.
+     * Static shortcut for a quick POST request.
      *
-     * @param string $url
-     * @param mixed $data
-     * @param array $options
+     * @param  string $url
+     * @param  mixed  $data
+     * @param  array  $options Client options
      * @return Response
      */
     public static function quickPost(string $url, mixed $data = [], array $options = []): Response

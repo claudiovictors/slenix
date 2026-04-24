@@ -2,14 +2,14 @@
 
 /*
 |--------------------------------------------------------------------------
-| Classe BelongsToMany
+| BelongsToMany Class
 |--------------------------------------------------------------------------
 |
-| Representa a relação muitos-para-muitos (N:N) entre dois modelos via
-| tabela pivot. Suporta colunas extras na pivot (withPivot), timestamps,
-| attach/detach/sync/toggle, eager loading via match() e lazy loading
-| retornando Collection. A tabela pivot é nomeada automaticamente em
-| ordem alfabética (ex: role_user para User e Role).
+| Represents the many-to-many (N:N) relationship between two models via
+| a pivot table. Supports extra pivot columns (withPivot), timestamps,
+| attach/detach/sync/toggle, eager loading via match(), and lazy loading
+| returning a Collection. The pivot table is named automatically in
+| alphabetical order (e.g. role_user for User and Role).
 |
 */
 
@@ -23,29 +23,29 @@ use Slenix\Database\Collection;
 
 class BelongsToMany extends Relation
 {
-    /** @var string Tabela intermediária (pivot) */
+    /** @var string Intermediate (pivot) table */
     protected string $pivotTable;
 
-    /** @var string FK do modelo pai na pivot */
+    /** @var string FK of the parent model in the pivot */
     protected string $pivotForeignKey;
 
-    /** @var string FK do modelo relacionado na pivot */
+    /** @var string FK of the related model in the pivot */
     protected string $pivotRelatedKey;
 
-    /** @var array Colunas extras da pivot a trazer nos resultados */
+    /** @var array Extra pivot columns to include in results */
     protected array $pivotColumns = [];
 
-    /** @var bool Se deve incluir timestamps da pivot */
+    /** @var bool Whether to include pivot timestamps */
     protected bool $withTimestamps = false;
 
     /**
-     * @param \Slenix\Database\Model $related        Modelo relacionado
-     * @param \Slenix\Database\Model $parent         Modelo pai
-     * @param string                           $pivotTable     Tabela pivot
-     * @param string                           $pivotForeignKey FK do pai na pivot
-     * @param string                           $pivotRelatedKey FK do relacionado na pivot
-     * @param string                           $foreignKey     PK do pai (localKey)
-     * @param string                           $localKey       PK do relacionado (ownerKey)
+     * @param \Slenix\Database\Model $related         Related model
+     * @param \Slenix\Database\Model $parent          Parent model
+     * @param string                 $pivotTable      Pivot table name
+     * @param string                 $pivotForeignKey FK of the parent in the pivot
+     * @param string                 $pivotRelatedKey FK of the related in the pivot
+     * @param string                 $foreignKey      PK of the parent (localKey)
+     * @param string                 $localKey        PK of the related (ownerKey)
      */
     public function __construct(
         \Slenix\Database\Model $related,
@@ -64,7 +64,7 @@ class BelongsToMany extends Relation
     }
 
     /**
-     * Aplica JOIN com a pivot e WHERE pelo pai
+     * Applies the JOIN with the pivot table and WHERE by parent
      */
     public function addConstraints(): void
     {
@@ -83,12 +83,8 @@ class BelongsToMany extends Relation
         }
     }
 
-    // =========================================================
-    // CONFIGURAÇÃO DA PIVOT
-    // =========================================================
-
     /**
-     * Define colunas extras da pivot a incluir nos resultados
+     * Defines extra pivot columns to include in results
      *
      * @example ->withPivot('role', 'expires_at')
      */
@@ -99,7 +95,7 @@ class BelongsToMany extends Relation
     }
 
     /**
-     * Inclui timestamps (created_at, updated_at) da pivot
+     * Includes pivot timestamps (created_at, updated_at)
      */
     public function withTimestamps(): static
     {
@@ -108,15 +104,11 @@ class BelongsToMany extends Relation
         return $this;
     }
 
-    // =========================================================
-    // ATTACH / DETACH / SYNC / TOGGLE
-    // =========================================================
-
     /**
-     * Insere um ou mais registros na pivot
+     * Inserts one or more records into the pivot table
      *
-     * @param int|array $ids       ID(s) do modelo relacionado
-     * @param array     $pivotData Dados extras da pivot
+     * @param int|array $ids       ID(s) of the related model
+     * @param array     $pivotData Extra pivot data
      */
     public function attach(int|array $ids, array $pivotData = []): void
     {
@@ -145,10 +137,10 @@ class BelongsToMany extends Relation
     }
 
     /**
-     * Remove um ou mais registros da pivot
+     * Removes one or more records from the pivot table
      *
-     * @param int|array|null $ids null = remove todos do pai
-     * @return int Número de linhas removidas
+     * @param int|array|null $ids null = removes all records for the parent
+     * @return int Number of rows removed
      */
     public function detach(int|array|null $ids = null): int
     {
@@ -179,10 +171,10 @@ class BelongsToMany extends Relation
     }
 
     /**
-     * Sincroniza a pivot: remove ausentes, insere novos
+     * Syncs the pivot table: removes absent records, inserts new ones
      *
-     * @param array $ids       IDs para manter
-     * @param bool  $detaching Se deve remover os não incluídos (padrão: true)
+     * @param array $ids       IDs to keep
+     * @param bool  $detaching Whether to remove records not included (default: true)
      * @return array{attached: array, detached: array, updated: array}
      */
     public function sync(array $ids, bool $detaching = true): array
@@ -207,7 +199,7 @@ class BelongsToMany extends Relation
     }
 
     /**
-     * Sync sem remover os não incluídos
+     * Sync without removing records not included
      */
     public function syncWithoutDetaching(array $ids): array
     {
@@ -215,7 +207,7 @@ class BelongsToMany extends Relation
     }
 
     /**
-     * Alterna (toggle) o estado de IDs na pivot
+     * Toggles the state of IDs in the pivot table
      *
      * @example $user->roles()->toggle([1, 2, 3])
      */
@@ -236,7 +228,7 @@ class BelongsToMany extends Relation
     }
 
     /**
-     * Atualiza dados extras na pivot para um ID específico
+     * Updates extra pivot data for a specific ID
      *
      * @example $user->roles()->updateExistingPivot(1, ['expires_at' => '2025-12-31'])
      */
@@ -261,12 +253,8 @@ class BelongsToMany extends Relation
         return $this->getPdo()->prepare($sql)->execute($params);
     }
 
-    // =========================================================
-    // LAZY / EAGER LOADING
-    // =========================================================
-
     /**
-     * Executa a query e retorna Collection dos relacionados (lazy loading)
+     * Executes the query and returns a Collection of related models (lazy loading)
      */
     public function getResults(array $columns = ['*']): Collection
     {
@@ -279,7 +267,7 @@ class BelongsToMany extends Relation
     }
 
     /**
-     * Alias para getResults
+     * Alias for getResults
      */
     public function get(): Collection
     {
@@ -287,7 +275,7 @@ class BelongsToMany extends Relation
     }
 
     /**
-     * Associa resultados do eager load a cada modelo pai
+     * Associates eager load results to each parent model
      */
     public function match(array $models, array $results, string $relation): array
     {
@@ -307,12 +295,8 @@ class BelongsToMany extends Relation
         return $models;
     }
 
-    // =========================================================
-    // INTERNOS
-    // =========================================================
-
     /**
-     * Aplica o SELECT com colunas do relacionado + pivot
+     * Applies the SELECT with related model columns + pivot columns
      */
     protected function applyPivotSelect(array $columns): void
     {
@@ -322,10 +306,10 @@ class BelongsToMany extends Relation
             $columns
         );
 
-        // FK do pai da pivot (necessária para o match no eager loading)
+        // Parent FK from the pivot (required for match() in eager loading)
         $selects[] = "`{$this->pivotTable}`.`{$this->pivotForeignKey}`";
 
-        // Colunas extras da pivot (prefixadas com "pivot_")
+        // Extra pivot columns (prefixed with "pivot_")
         foreach ($this->pivotColumns as $col) {
             $selects[] = "`{$this->pivotTable}`.`{$col}` as `pivot_{$col}`";
         }
@@ -334,7 +318,7 @@ class BelongsToMany extends Relation
     }
 
     /**
-     * Retorna IDs atualmente na pivot para o pai
+     * Returns the IDs currently in the pivot table for the parent
      */
     protected function getCurrentRelatedIds(): array
     {
@@ -347,7 +331,7 @@ class BelongsToMany extends Relation
     }
 
     /**
-     * Obtém a instância do PDO
+     * Returns the PDO instance
      */
     protected function getPdo(): PDO
     {

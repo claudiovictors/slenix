@@ -1,15 +1,15 @@
 <?php
 
 /*
- |--------------------------------------------------------------------------
- | Classe AppFactory
- |--------------------------------------------------------------------------
- |
- | Fábrica principal da aplicação. Centraliza a criação do Kernel,
- | registro de serviços compartilhados (Request, Response) e a
- | execução do ciclo de vida HTTP.
- |
- */
+|--------------------------------------------------------------------------
+| AppFactory Class — Slenix Framework
+|--------------------------------------------------------------------------
+|
+| The primary application factory and service container. It centralizes the 
+| creation of the Kernel, registers shared core services (Request, Response), 
+| and manages the HTTP lifecycle execution.
+|
+*/
 
 declare(strict_types=1);
 
@@ -20,18 +20,21 @@ use Slenix\Http\Response;
 
 class AppFactory
 {
-    /** @var array<string, mixed> Serviços registrados no container simples */
+    /** @var array<string, mixed> Registered services in the simple container. */
     private static array $bindings = [];
 
-    /** @var self|null Instância singleton da factory */
+    /** @var self|null Singleton instance of the factory. */
     private static ?self $instance = null;
 
+    /**
+     * AppFactory constructor (Private to enforce singleton/static usage).
+     */
     private function __construct() {}
 
     /**
-     * Cria e executa a aplicação.
-     *
-     * @param float $startTime Timestamp de início (microtime(true)).
+     * Creates and runs the application.
+     * * @param float $startTime Start timestamp in microtime(true).
+     * @return void
      */
     public static function create(float $startTime): void
     {
@@ -40,22 +43,23 @@ class AppFactory
     }
 
     /**
-     * Registra serviços fundamentais no container antes de iniciar o Kernel.
+     * Registers fundamental services into the container before starting the Kernel.
+     * * @return void
      */
     private static function bootstrap(): void
     {
-        // Request singleton (criado a partir dos superglobais atuais)
+        // Register Request as a singleton (created from globals)
         static::singleton('request', static fn () => Request::createFromGlobals());
 
-        // Response singleton
+        // Register Response as a singleton
         static::singleton('response', static fn () => new Response());
     }
 
     /**
-     * Registra uma instância como singleton (criada uma única vez sob demanda).
-     *
-     * @param string   $abstract Nome/chave do serviço.
-     * @param callable $factory  Callable que retorna a instância.
+     * Registers a service as a singleton (created once and shared).
+     * * @param string   $abstract Service name/key.
+     * @param callable $factory  Callable to create the instance.
+     * @return void
      */
     public static function singleton(string $abstract, callable $factory): void
     {
@@ -67,10 +71,10 @@ class AppFactory
     }
 
     /**
-     * Registra uma ligação simples (nova instância a cada chamada).
-     *
-     * @param string   $abstract Nome/chave do serviço.
-     * @param callable $factory  Callable que retorna a instância.
+     * Registers a simple binding (new instance per resolution).
+     * * @param string   $abstract Service name/key.
+     * @param callable $factory  Callable to create the instance.
+     * @return void
      */
     public static function bind(string $abstract, callable $factory): void
     {
@@ -82,10 +86,10 @@ class AppFactory
     }
 
     /**
-     * Registra uma instância já criada diretamente.
-     *
-     * @param string $abstract Nome/chave do serviço.
-     * @param mixed  $instance Instância a armazenar.
+     * Directly registers an already created instance.
+     * * @param string $abstract Service name/key.
+     * @param mixed  $instance The object instance.
+     * @return void
      */
     public static function instance(string $abstract, mixed $instance): void
     {
@@ -97,29 +101,27 @@ class AppFactory
     }
 
     /**
-     * Resolve e retorna um serviço registrado.
-     *
-     * @param string $abstract Nome/chave do serviço.
+     * Resolves and returns a registered service.
+     * * @param string $abstract Service name/key.
      * @return mixed
-     *
-     * @throws \InvalidArgumentException Se o serviço não estiver registrado.
+     * @throws \InvalidArgumentException If the service is not registered.
      */
     public static function make(string $abstract): mixed
     {
         if (!isset(static::$bindings[$abstract])) {
             throw new \InvalidArgumentException(
-                "Serviço '{$abstract}' não está registrado no container."
+                "Service '{$abstract}' is not registered in the container."
             );
         }
 
         $binding = &static::$bindings[$abstract];
 
-        // Singleton: retorna a instância já resolvida se existir
+        // Return resolved singleton if available
         if ($binding['singleton'] && $binding['resolved'] !== null) {
             return $binding['resolved'];
         }
 
-        // Resolve via factory
+        // Resolve via factory callable
         if ($binding['factory'] !== null) {
             $resolved = ($binding['factory'])();
 
@@ -134,9 +136,8 @@ class AppFactory
     }
 
     /**
-     * Verifica se um serviço está registrado.
-     *
-     * @param string $abstract
+     * Checks if a service is registered in the container.
+     * * @param string $abstract
      * @return bool
      */
     public static function has(string $abstract): bool
@@ -145,9 +146,9 @@ class AppFactory
     }
 
     /**
-     * Remove um serviço do container (útil em testes).
-     *
-     * @param string $abstract
+     * Removes a service from the container (primarily for testing).
+     * * @param string $abstract
+     * @return void
      */
     public static function forget(string $abstract): void
     {
@@ -155,7 +156,8 @@ class AppFactory
     }
 
     /**
-     * Limpa todos os serviços registrados (útil em testes).
+     * Clears all registered services.
+     * * @return void
      */
     public static function flush(): void
     {
@@ -163,9 +165,8 @@ class AppFactory
     }
 
     /**
-     * Retorna todos os serviços registrados (sem resolver).
-     *
-     * @return array<string>
+     * Returns an array of all registered service keys.
+     * * @return array<string>
      */
     public static function registered(): array
     {
@@ -173,20 +174,20 @@ class AppFactory
     }
 
     /**
-     * Retorna a instância da requisição atual.
+     * Helper to get the current Request instance.
+     * * @return Request
      */
     public static function request(): Request
     {
-        /** @var Request */
         return static::make('request');
     }
 
     /**
-     * Retorna a instância da resposta atual.
+     * Helper to get the current Response instance.
+     * * @return Response
      */
     public static function response(): Response
     {
-        /** @var Response */
         return static::make('response');
     }
 }

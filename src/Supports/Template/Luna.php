@@ -8,26 +8,6 @@
  | Inspirado no Blade (Laravel). Suporta layouts, seções, includes,
  | condicionais, loops, stacks e cache inteligente em disco.
  |
- | Ficheiro de template: nome.luna.php
- | Uso:  view('auth.login', ['erro' => 'Credenciais inválidas'])
- |
- | Melhorias v3.0:
- |  - Compatível com PHP 7.4+
- |  - Suporte a comentários {{-- --}} (inline e multiline)
- |  - Suporte a comentários {# #} (mantido por retrocompatibilidade)
- |  - Novos componentes: @component / @endcomponent / @slot
- |  - Diretiva @translate / @lang para i18n
- |  - Diretiva @once / @endonce (renderiza bloco apenas 1x)
- |  - Diretiva @checked / @selected / @disabled / @required / @readonly
- |  - Diretiva @props para definir propriedades com defaults
- |  - Diretiva @inject para resolver dependências do container
- |  - @foreach melhorado: $loop->count, $loop->last, $loop->depth, $loop->parent
- |  - @verbatim / @endverbatim para blocos que não devem ser compilados
- |  - {{ expr }} agora funciona corretamente com texto literal com vírgulas
- |  - Cache em disco em storage/views com TTL configurável
- |  - Sistema de logs em storage/logs/luna.log
- |  - Heurística robusta para distinguir expressão PHP de texto literal
- |
  */
 
 declare(strict_types=1);

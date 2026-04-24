@@ -2,11 +2,11 @@
 
 /*
  |--------------------------------------------------------------------------
- | SLENIX COLLECTION - Coleção de modelos estilo Laravel
+ | SLENIX COLLECTION - Laravel-style model collection
  |--------------------------------------------------------------------------
  |
- | Permite encadeamento de métodos após consultas, oferecendo funcionalidades
- | de manipulação de dados semelhantes ao Laravel Collection.
+ | Enables method chaining after queries, providing data manipulation
+ | functionality similar to Laravel Collection.
  |
  */
 
@@ -22,28 +22,23 @@ use JsonSerializable;
 
 class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSerializable
 {
-    /** @var array Items da coleção */
+    /** @var array Collection items */
     protected array $items = [];
 
     /**
-     * @param array $items Items iniciais
+     * @param array $items Initial items
      */
     public function __construct(array $items = [])
     {
         $this->items = array_values($items);
     }
 
-    // =========================================================
-    // FILTRAGEM E BUSCA
-    // =========================================================
-
     /**
-     * Filtra os items por coluna e valor (equivalente ao where do Eloquent Collection)
-     *
+     * Filters items by column and value (equivalent to Eloquent Collection's where)
      */
     public function where(string $column, $operatorOrValue = null, $value = null): self
     {
-        // Suporte a 2 ou 3 argumentos
+        // Supports 2 or 3 arguments
         if ($value === null) {
             $operator = '=';
             $value = $operatorOrValue;
@@ -68,7 +63,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Filtra itens onde o valor da coluna está no array
+     * Filters items where the column value is in the array
      *
      * @example $collection->whereIn('status', ['active', 'pending'])
      */
@@ -81,7 +76,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Filtra itens onde o valor da coluna NÃO está no array
+     * Filters items where the column value is NOT in the array
      */
     public function whereNotIn(string $column, array $values): self
     {
@@ -92,7 +87,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Filtra itens onde a coluna é null
+     * Filters items where the column is null
      */
     public function whereNull(string $column): self
     {
@@ -103,7 +98,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Filtra itens onde a coluna não é null
+     * Filters items where the column is not null
      */
     public function whereNotNull(string $column): self
     {
@@ -114,7 +109,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Filtra itens onde o valor da coluna está entre dois valores
+     * Filters items where the column value is between two values
      */
     public function whereBetween(string $column, $min, $max): self
     {
@@ -125,7 +120,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Retorna o primeiro item que corresponde a condição opcional
+     * Returns the first item matching an optional condition
      *
      * @example $collection->first()
      * @example $collection->first(fn($u) => $u->active)
@@ -146,7 +141,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Retorna o último item
+     * Returns the last item
      */
     public function last(?callable $callback = null, $default = null)
     {
@@ -159,7 +154,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Retorna o item no índice especificado
+     * Returns the item at the specified index
      */
     public function nth(int $index, $default = null)
     {
@@ -167,7 +162,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Verifica se a coleção contém um item que satisfaz o critério
+     * Checks whether the collection contains an item matching the criteria
      *
      * @example $collection->contains('active', true)
      * @example $collection->contains(fn($u) => $u->admin)
@@ -185,7 +180,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Alias de !contains
+     * Alias for !contains
      */
     public function doesntContain($keyOrCallback, $value = null): bool
     {
@@ -193,19 +188,15 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Busca um item pela chave primária
+     * Finds an item by primary key
      */
     public function find($id, string $keyColumn = 'id')
     {
         return $this->first(fn($item) => ($item->$keyColumn ?? null) == $id);
     }
 
-    // =========================================================
-    // TRANSFORMAÇÃO
-    // =========================================================
-
     /**
-     * Aplica callback em cada item e retorna nova coleção
+     * Applies a callback to each item and returns a new collection
      *
      * @example $collection->map(fn($u) => $u->name)
      */
@@ -215,7 +206,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Aplica callback em cada item (sem retornar nova coleção)
+     * Applies a callback to each item (without returning a new collection)
      *
      * @example $collection->each(fn($u) => $u->save())
      */
@@ -230,7 +221,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Filtra os items com um callback
+     * Filters items using a callback
      *
      * @example $collection->filter(fn($u) => $u->active)
      */
@@ -244,7 +235,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Rejeita itens que satisfazem o critério (inverso do filter)
+     * Rejects items that satisfy the criteria (inverse of filter)
      */
     public function reject(callable $callback): self
     {
@@ -252,7 +243,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Retorna apenas os valores de uma coluna
+     * Returns only the values of a column
      *
      * @example $collection->pluck('name')
      * @example $collection->pluck('name', 'id')
@@ -273,7 +264,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Ordena a coleção por coluna
+     * Sorts the collection by column
      *
      * @example $collection->sortBy('name')
      * @example $collection->sortBy('created_at', 'desc')
@@ -293,7 +284,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Ordena de forma decrescente
+     * Sorts in descending order
      */
     public function sortByDesc(string $column): self
     {
@@ -301,7 +292,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Ordena usando callback customizado
+     * Sorts using a custom callback
      */
     public function sortUsing(callable $callback): self
     {
@@ -311,9 +302,9 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Agrupa os itens por coluna
+     * Groups items by column
      *
-     * @example $collection->groupBy('status') // retorna ['active' => [...], 'inactive' => [...]]
+     * @example $collection->groupBy('status') // returns ['active' => [...], 'inactive' => [...]]
      */
     public function groupBy(string $column): array
     {
@@ -323,12 +314,12 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
             $groups[$key][] = $item;
         }
 
-        // Converte cada grupo para Collection
+        // Convert each group to a Collection
         return array_map(fn($group) => new static($group), $groups);
     }
 
     /**
-     * Retorna itens únicos por coluna ou identidade
+     * Returns unique items by column or identity
      *
      * @example $collection->unique('email')
      */
@@ -350,7 +341,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Faz o flat map (map + flatten)
+     * Performs a flat map (map + flatten)
      */
     public function flatMap(callable $callback): self
     {
@@ -369,7 +360,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Aplica um callback sem modificar a coleção (para debug/side-effects)
+     * Applies a callback without modifying the collection (for debug/side-effects)
      */
     public function tap(callable $callback): self
     {
@@ -378,7 +369,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Aplica um callback que pode transformar toda a coleção
+     * Applies a callback that may transform the entire collection
      */
     public function pipe(callable $callback)
     {
@@ -386,7 +377,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Passa cada item pelo callback e retorna a coleção original (sem modificar)
+     * Passes each item through a callback and returns the original collection (unmodified)
      */
     public function tapEach(callable $callback): self
     {
@@ -396,12 +387,8 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
         return $this;
     }
 
-    // =========================================================
-    // SLICING
-    // =========================================================
-
     /**
-     * Retorna os primeiros N items
+     * Returns the first N items
      */
     public function take(int $limit): self
     {
@@ -409,7 +396,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Pula os primeiros N items
+     * Skips the first N items
      */
     public function skip(int $offset): self
     {
@@ -417,7 +404,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Retorna uma fatia da coleção
+     * Returns a slice of the collection
      */
     public function slice(int $offset, ?int $length = null): self
     {
@@ -425,9 +412,9 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Divide a coleção em pedaços
+     * Splits the collection into chunks
      *
-     * @example $collection->chunk(3) // retorna [Collection, Collection, ...]
+     * @example $collection->chunk(3) // returns [Collection, Collection, ...]
      */
     public function chunk(int $size): array
     {
@@ -438,7 +425,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Processa a coleção em chunks (sem guardar em memória)
+     * Processes the collection in chunks (without holding all in memory)
      *
      * @example $collection->chunkEach(100, fn($chunk) => ...)
      */
@@ -452,7 +439,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Embaralha os items
+     * Shuffles the items
      */
     public function shuffle(): self
     {
@@ -462,7 +449,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Reverte a ordem dos items
+     * Reverses the order of items
      */
     public function reverse(): self
     {
@@ -470,7 +457,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Retorna items aleatórios
+     * Returns random items
      */
     public function random(int $count = 1): self
     {
@@ -478,12 +465,9 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
         return $count === 1 ? $shuffled->take(1) : $shuffled->take($count);
     }
 
-    // =========================================================
-    // AGREGAÇÃO
-    // =========================================================
-
     /**
-     * Conta os items
+     * Counts the items
+     * @return int
      */
     public function count(): int
     {
@@ -491,7 +475,9 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Soma os valores de uma coluna
+     * Sums the values of a column
+     * @param mixed $column
+     * @return float
      */
     public function sum(?string $column = null): float
     {
@@ -505,7 +491,9 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Calcula a média dos valores de uma coluna
+     * Calculates the average of a column's values
+     * @param mixed $column
+     * @return float|int
      */
     public function avg(?string $column = null): float
     {
@@ -514,7 +502,8 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Retorna o valor mínimo de uma coluna
+     * Returns the minimum value of a column
+     * @param mixed $column
      */
     public function min(?string $column = null)
     {
@@ -526,7 +515,8 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Retorna o valor máximo de uma coluna
+     * Returns the maximum value of a column
+     * @param mixed $column
      */
     public function max(?string $column = null)
     {
@@ -538,19 +528,17 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Reduz a coleção a um único valor
+     * Reduces the collection to a single value
+     * @param callable $callback
+     * @param mixed $carry
      */
     public function reduce(callable $callback, $carry = null)
     {
         return array_reduce($this->items, $callback, $carry);
     }
 
-    // =========================================================
-    // VERIFICAÇÃO
-    // =========================================================
-
     /**
-     * Verifica se a coleção está vazia
+     * Checks whether the collection is empty
      */
     public function isEmpty(): bool
     {
@@ -558,7 +546,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Verifica se a coleção NÃO está vazia
+     * Checks whether the collection is NOT empty
      */
     public function isNotEmpty(): bool
     {
@@ -566,7 +554,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Verifica se todos os items satisfazem o critério
+     * Checks whether all items satisfy the criteria
      */
     public function every(callable $callback): bool
     {
@@ -577,19 +565,15 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Verifica se algum item satisfaz o critério
+     * Checks whether any item satisfies the criteria
      */
     public function some(callable $callback): bool
     {
         return $this->contains($callback);
     }
 
-    // =========================================================
-    // CONVERSÃO
-    // =========================================================
-
     /**
-     * Retorna todos os items como array
+     * Returns all items as an array
      */
     public function all(): array
     {
@@ -597,7 +581,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Converte para array de arrays (usando toArray() em cada modelo)
+     * Converts to an array of arrays (using toArray() on each model)
      */
     public function toArray(): array
     {
@@ -610,7 +594,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Converte para JSON
+     * Converts to JSON
      */
     public function toJson(): string
     {
@@ -618,7 +602,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Para json_encode()
+     * For json_encode()
      */
     public function jsonSerialize(): array
     {
@@ -626,7 +610,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Converte para array plano de valores de uma coluna
+     * Converts to a flat array of column values
      */
     public function toFlatArray(string $column): array
     {
@@ -634,7 +618,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Converte a coleção para um array com chave
+     * Converts the collection to a keyed array
      */
     public function keyBy(string $column): array
     {
@@ -647,7 +631,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Concatena coleções
+     * Merges collections
      */
     public function merge(self|array $other): self
     {
@@ -656,7 +640,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Combina com outra coleção removendo duplicatas por coluna
+     * Combines with another collection removing duplicates by column
      */
     public function union(self|array $other, ?string $uniqueBy = null): self
     {
@@ -664,7 +648,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Retorna apenas os items que existem em ambas coleções
+     * Returns only items that exist in both collections
      */
     public function intersect(self|array $other): self
     {
@@ -673,7 +657,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Retorna items que não existem na outra coleção
+     * Returns items that do not exist in the other collection
      */
     public function diff(self|array $other): self
     {
@@ -681,20 +665,38 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
         return new static(array_values(array_diff($this->items, $otherArray)));
     }
 
-    // =========================================================
-    // INTERFACES
-    // =========================================================
-
+    /**
+     * Determine if an item exists at a given offset.
+     * * Implementation of the ArrayAccess interface.
+     *
+     * @param mixed $offset The key to check.
+     * @return bool
+     */
     public function offsetExists($offset): bool
     {
         return isset($this->items[$offset]);
     }
 
+    /**
+     * Get the item at a given offset.
+     * * Implementation of the ArrayAccess interface.
+     *
+     * @param mixed $offset The key to retrieve.
+     * @return mixed
+     */
     public function offsetGet($offset): mixed
     {
         return $this->items[$offset];
     }
 
+    /**
+     * Set the item at a given offset.
+     * * Implementation of the ArrayAccess interface.
+     *
+     * @param mixed $offset The key to set or null to append to the array.
+     * @param mixed $value The value to store.
+     * @return void
+     */
     public function offsetSet($offset, $value): void
     {
         if ($offset === null) {
@@ -704,11 +706,24 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
         }
     }
 
+    /**
+     * Unset the item at a given offset.
+     * * Implementation of the ArrayAccess interface.
+     *
+     * @param mixed $offset The key to remove.
+     * @return void
+     */
     public function offsetUnset($offset): void
     {
         unset($this->items[$offset]);
     }
 
+    /**
+     * Get an iterator for the items.
+     * * Implementation of the IteratorAggregate interface.
+     *
+     * @return ArrayIterator
+     */
     public function getIterator(): ArrayIterator
     {
         return new ArrayIterator($this->items);
@@ -724,7 +739,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     }
 
     /**
-     * Debug helper (sem exit)
+     * Debug helper (without exit)
      */
     public function dump(): self
     {

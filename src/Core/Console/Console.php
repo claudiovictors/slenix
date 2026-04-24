@@ -5,13 +5,13 @@
 | Console — Slenix Framework
 |--------------------------------------------------------------------------
 |
-| Esta classe fornece utilitários para formatação e estilização de saída
-| no terminal (CLI). Permite aplicar cores e estilos ANSI ao texto exibido
-| na linha de comando, tornando as mensagens do framework mais legíveis
-| e visualmente organizadas durante o desenvolvimento.
+| This class provides utilities for formatting and styling output in the 
+| terminal (CLI). It allows applying ANSI colors and styles to text 
+| displayed on the command line, making framework messages more readable 
+| and visually organized during development.
 |
-| Utilizada internamente pelo Celestial CLI e por qualquer comando que
-| necessite de saída formatada no terminal.
+| Used internally by Celestial CLI and any command requiring formatted 
+| terminal output.
 |
 */
 
@@ -23,10 +23,10 @@ class Console
 {
 
     /**
-     * Mapa de cores para os respectivos códigos ANSI de escape.
+     * Map of color names to their respective ANSI escape codes.
      *
-     * Os códigos seguem o padrão ANSI/VT100 e são compatíveis com a maioria
-     * dos terminais modernos (bash, zsh, PowerShell, Windows Terminal).
+     * Codes follow the ANSI/VT100 standard and are compatible with most
+     * modern terminals (bash, zsh, PowerShell, Windows Terminal).
      *
      * @var array<string, string>
      */
@@ -42,22 +42,16 @@ class Console
     ];
 
     /**
-     * Aplica cor e formatação ANSI ao texto para exibição no terminal.
+     * Applies ANSI color and formatting to text for terminal display.
      *
-     * Envolve o texto com os códigos de escape ANSI correspondentes à cor
-     * informada. Se a cor não for reconhecida, retorna o texto sem formatação.
-     * O parâmetro $bold converte o prefixo '0;' para '1;', ativando o negrito.
+     * Wraps the text with ANSI escape codes corresponding to the provided color.
+     * If the color is not recognized, it returns the unformatted text.
+     * The $bold parameter converts the '0;' prefix to '1;', enabling bold mode.
      *
-     * Exemplo de uso:
-     * ```php
-     * echo $console->colorize('Sucesso!', 'green', true);
-     * echo $console->colorize('[ERRO]', 'red');
-     * ```
-     *
-     * @param  string $text  Texto a ser formatado e exibido no terminal.
-     * @param  string $color Nome da cor (black, red, green, yellow, blue, purple, cyan, white).
-     * @param  bool   $bold  Se true, aplica negrito ao texto (padrão: false).
-     * @return string        Texto com os códigos ANSI aplicados, ou o texto original se a cor for inválida.
+     * @param  string $text  The text to be formatted and displayed in the terminal.
+     * @param  string $color Color name (black, red, green, yellow, blue, purple, cyan, white).
+     * @param  bool   $bold  Whether to apply bold styling (default: false).
+     * @return string        The text with ANSI codes applied, or the original text if the color is invalid.
      */
     public function colorize(string $text, string $color, bool $bold = false): string
     {

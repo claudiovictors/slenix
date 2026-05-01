@@ -4,7 +4,6 @@
 
 User-agent: *
 
-# Diretórios internos do framework (nunca indexar)
 Disallow: /src/
 Disallow: /vendor/
 Disallow: /app/
@@ -12,12 +11,10 @@ Disallow: /routes/
 Disallow: /storage/
 Disallow: /views/
 
-# Arquivos sensíveis na raiz
 Disallow: /celestial
 Disallow: /.env
 Disallow: /.env.example
 Disallow: /composer.json
 Disallow: /composer.lock
 
-# Permite tudo em /public (assets, imagens, etc.)
 Allow: /

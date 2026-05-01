@@ -29,11 +29,11 @@
     "prefer-stable": true,
     "scripts": {
         "post-create-project-cmd": [
-            "@php -r \"if (!file_exists('.env') && file_exists('.env.example')) { copy('.env.example', '.env'); echo 'INFO  .env file created successfully.'.PHP_EOL; }\"",
+            "@php -r \"if (!file_exists('.env') && file_exists('.env.example')) { copy('.env.example', '.env'); echo '[INFO]  .env file created successfully.'.PHP_EOL; }\"",
             "@php celestial key:generate --ansi"
         ],
         "post-install-cmd": [
-            "@php -r \"if (!file_exists('.env') && file_exists('.env.example')) { copy('.env.example', '.env'); echo 'INFO  .env file created successfully.'.PHP_EOL; }\""
+            "@php -r \"if (!file_exists('.env') && file_exists('.env.example')) { copy('.env.example', '.env'); echo '[INFO]  .env file created successfully.'.PHP_EOL; }\""
         ],
         "serve": "php celestial serve"
     },

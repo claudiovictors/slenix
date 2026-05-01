@@ -87,6 +87,7 @@ final class Celestial
                 // ── Application ───────────────────────────────────────────────
                 case 'key:generate':
                     MakeCommand::generateKey();
+                    MakeCommand::generateJwt();
                     break;
 
                 // ── Scaffolding generators ────────────────────────────────────
@@ -112,6 +113,11 @@ final class Celestial
 
                 case 'make:factory':
                     (new SeedCommand($this->args))->makeFactory();
+                    break;
+                
+                case 'veil:install':
+                    require_once __DIR__ . '/vendor/slenix/veil/src/Console/VeilInstallCommand.php';
+                    (new \Slenix\Veil\Console\VeilInstallCommand($this->args))->install();
                     break;
 
                 case 'make:job':
@@ -237,11 +243,11 @@ final class Celestial
         }
 
         echo PHP_EOL;
-        echo $c->colorize("▲ Celestial WebSocket Server", 'white', true) . PHP_EOL;
+        echo $c->colorize("  ▾ Celestial WebSocket Server", 'white', true) . PHP_EOL;
         echo PHP_EOL;
         echo $c->colorize("  ➜ Listening: ", 'cyan') . "ws://{$host}:{$port}" . PHP_EOL;
         echo PHP_EOL;
-        echo $c->colorize("  press Ctrl+C to stop", 'white') . PHP_EOL;
+        echo $c->colorize("  press Ctrl+C to stop", 'red', true) . PHP_EOL;
         echo PHP_EOL;
 
         $routesFile = __DIR__ . '/routes/web.php';

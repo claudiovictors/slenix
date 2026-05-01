@@ -15,10 +15,6 @@ declare(strict_types=1);
 
 use Slenix\Core\AppFactory;
 
-/**
- * Load the Composer Autoloader.
- * Enables automatic class loading for the framework and dependencies.
- */
 require_once __DIR__ . '/../vendor/autoload.php';
 
 /**

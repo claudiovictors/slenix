@@ -20,7 +20,7 @@ abstract class Command
     /**
      * @var string The current version of the CLI tool.
      */
-    protected static string $version = '2.5';
+    protected static string $version = '2.6';
 
     /**
      * Get an instance of the Console helper.
@@ -33,7 +33,7 @@ abstract class Command
 
     /**
      * Base method for printing formatted lines to the console.
-     * * @param string $symbol  The prefix symbol (e.g., '!', '✔').
+     * @param string $symbol  The prefix symbol (e.g., '!', '✔').
      * @param string $message The message text to display.
      * @param string $color   The ANSI color name.
      * @return void
@@ -53,7 +53,7 @@ abstract class Command
      */
     public static function info(string $message): void
     {
-        self::line('ℹ', $message, 'cyan');
+        self::line('¡', $message, 'cyan');
     }
 
     /**
@@ -92,7 +92,7 @@ abstract class Command
      */
     public static function version(): void
     {
-        self::info("Slenix v" . self::$version);
+        self::info("Slenix v" . env('APP_VERSION') ?? self::$version);
     }
 
     /**

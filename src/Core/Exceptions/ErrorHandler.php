@@ -448,6 +448,7 @@ class ErrorHandler
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width,initial-scale=1">
+            <link rel="shortcut icon" href="/logo.svg" type="image/x-icon">
             <title>500 — {$appName}</title>
             <style>
                 body{background:#0a0a0a;color:#ededed;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center}

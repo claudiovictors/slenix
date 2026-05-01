@@ -29,19 +29,12 @@ use Slenix\Database\Migrations\Grammar;
 
 abstract class Seeder
 {
-    // =========================================================
-    // PROPERTIES
-    // =========================================================
 
     /** @var PDO Active PDO connection. */
     protected PDO $pdo;
 
     /** @var Grammar Grammar instance for the active driver. */
     protected Grammar $grammar;
-
-    // =========================================================
-    // CONSTRUCTOR
-    // =========================================================
 
     /**
      * Obtains the PDO connection and builds the matching Grammar instance.
@@ -54,10 +47,6 @@ abstract class Seeder
         );
     }
 
-    // =========================================================
-    // ABSTRACT CONTRACT
-    // =========================================================
-
     /**
      * Executes the seeder logic.
      * Implement this method to insert data into the database.
@@ -65,10 +54,6 @@ abstract class Seeder
      * @return void
      */
     abstract public function run(): void;
-
-    // =========================================================
-    // SEEDER DELEGATION
-    // =========================================================
 
     /**
      * Calls one or more other seeders from within this seeder.
@@ -100,10 +85,6 @@ abstract class Seeder
             $seeder->run();
         }
     }
-
-    // =========================================================
-    // INSERT HELPERS
-    // =========================================================
 
     /**
      * Inserts a single row, silently ignoring duplicate-key conflicts.
@@ -214,10 +195,6 @@ abstract class Seeder
         return $this->pdo->prepare($sql)->execute($data);
     }
 
-    // =========================================================
-    // TRUNCATE
-    // =========================================================
-
     /**
      * Removes all rows from a table and resets auto-increment counters.
      *
@@ -234,10 +211,6 @@ abstract class Seeder
             $this->pdo->exec($sql);
         }
     }
-
-    // =========================================================
-    // UTILITY METHODS
-    // =========================================================
 
     /**
      * Executes a raw SQL statement with optional bind parameters.
@@ -333,10 +306,6 @@ abstract class Seeder
         return $row !== false ? $row : null;
     }
 
-    // =========================================================
-    // IDENTIFIER QUOTING SHORTCUTS
-    // =========================================================
-
     /**
      * Quotes a table identifier for the active driver.
      *
@@ -373,10 +342,6 @@ abstract class Seeder
     {
         return $this->grammar->quoteColumns($columns);
     }
-
-    // =========================================================
-    // DRIVER DETECTION
-    // =========================================================
 
     /**
      * Returns true when the active driver is MySQL.

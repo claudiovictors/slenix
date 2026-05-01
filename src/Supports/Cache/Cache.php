@@ -23,10 +23,6 @@ class Cache
     /** @var string Prefix to avoid key collisions. */
     protected static string $prefix = '';
 
-    // =========================================================
-    // CONFIGURATION
-    // =========================================================
-
     /**
      * Sets the base path for cache storage.
      * * @param string $path
@@ -46,10 +42,6 @@ class Cache
     {
         static::$prefix = $prefix;
     }
-
-    // =========================================================
-    // PUBLIC API
-    // =========================================================
 
     /**
      * Stores a value in the cache.
@@ -228,10 +220,6 @@ class Cache
     {
         return static::increment($key, -$by);
     }
-
-    // =========================================================
-    // INTERNAL HELPERS
-    // =========================================================
 
     /**
      * Resolves the full path to a cache file based on the key.

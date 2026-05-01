@@ -220,6 +220,8 @@ class Kernel
     private function startSession(): void
     {
         Session::start();
+
+        Session::flashOldInput(request()->all());
         
         // Expose Session class globally for easier access
         if (!class_exists('Session')) {

@@ -20,21 +20,24 @@ declare(strict_types=1);
 
 use Slenix\Http\Request;
 use Slenix\Http\Response;
+use Slenix\Supports\Auth\Auth;
 use Slenix\Http\Routing\Router;
 use Slenix\Supports\Cache\Cache;
 use Slenix\Supports\Logging\Log;
-use Slenix\Supports\Storage\Storage;
 use Slenix\Supports\Template\Luna;
+use Slenix\Supports\Storage\Storage;
+use Slenix\Supports\Auth\AuthManager;
 use Slenix\Supports\Security\Session;
-use Slenix\Supports\Libraries\FlashMessage;
 use Slenix\Supports\Validation\Validator;
+use Slenix\Supports\Libraries\FlashMessage;
 use Slenix\Supports\Libraries\SessionManager;
+use Slenix\Supports\Auth\Guards\GuardInterface;
 use Slenix\Supports\Libraries\RedirectResponse;
 use Slenix\Supports\Validation\ValidationException;
 
-// =============================================================================
-// CONSTANTES DO PROJETO
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
+// CONST
+// ────────────────────────────────────────────────────────────────────────
 
 defined('SLENIX_START') or define('SLENIX_START', microtime(true));
 defined('ROOT_PATH') or define('ROOT_PATH', dirname(__DIR__, 3));
@@ -46,9 +49,9 @@ defined('VIEWS_PATH') or define('VIEWS_PATH', ROOT_PATH . '/views');
 defined('STORAGE_PATH') or define('STORAGE_PATH', ROOT_PATH . '/storage');
 defined('CONFIG_PATH') or define('CONFIG_PATH', ROOT_PATH . '/src/Config');
 
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 // VIEWS
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 
 if (!function_exists('view')) {
     /**
@@ -65,9 +68,9 @@ if (!function_exists('view')) {
     }
 }
 
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 // REDIRECT
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 
 if (!function_exists('redirect')) {
     /**
@@ -99,9 +102,9 @@ if (!function_exists('redirect')) {
     }
 }
 
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 // FLASH
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 
 if (!function_exists('flash')) {
     /**
@@ -115,9 +118,9 @@ if (!function_exists('flash')) {
     }
 }
 
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 // SESSION
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 
 if (!function_exists('session')) {
     /**
@@ -155,9 +158,9 @@ if (!function_exists('session')) {
     }
 }
 
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 // OLD INPUT & ERRORS
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 
 if (!function_exists('old')) {
     /**
@@ -235,9 +238,9 @@ if (!function_exists('has_error')) {
     }
 }
 
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 // URL & ROTAS
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 
 if (!function_exists('url')) {
     /**
@@ -316,6 +319,18 @@ if (!function_exists('request_path')) {
     }
 }
 
+if (!function_exists('request_is')) {
+    /**
+     * Verifica se a rota atual bate com a rota do usuário inserido no path.
+     *
+     * @return string Caminho da URL atual (ex: '/dashboard/users').
+     */
+    function request_is(string $path): string
+    {
+        return ((new Request())->uri() === $path) ? $path : '';
+    }
+}
+
 if (!function_exists('is_active')) {
     /**
      * Retorna uma classe CSS se o caminho atual corresponder ao padrão informado.
@@ -361,9 +376,9 @@ if (!function_exists('query_string')) {
     }
 }
 
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 // HTTP / ABORT
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 
 if (!function_exists('abort')) {
     /**
@@ -403,14 +418,15 @@ if (!function_exists('abort')) {
         if ($wantsJson) {
             header('Content-Type: application/json; charset=UTF-8');
             echo json_encode(['error' => true, 'message' => $msg, 'status' => $code]);
+            exit;
+        }
+
+        $errFile = SRC_PATH . "/Core/Exceptions/errors/{$code}.php";
+        if (file_exists($errFile)) {
+            extract(['code' => $code, 'message' => $msg]);
+            include $errFile;
         } else {
-            $errFile = SRC_PATH . "/Core/Exceptions/errors/{$code}.php";
-            if (file_exists($errFile)) {
-                extract(['code' => $code, 'message' => $msg]);
-                include $errFile;
-            } else {
-                echo "<h1>{$code} — {$msg}</h1>";
-            }
+            echo "<h1>{$code} — {$msg}</h1>";
         }
 
         exit;
@@ -449,9 +465,9 @@ if (!function_exists('abort_unless')) {
     }
 }
 
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 // RESPOSTA
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 
 if (!function_exists('response')) {
     /**
@@ -471,9 +487,9 @@ if (!function_exists('response')) {
     }
 }
 
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 // REQUEST
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 
 if (!function_exists('request')) {
     /**
@@ -491,9 +507,9 @@ if (!function_exists('request')) {
     }
 }
 
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 // JSON
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 
 if (!function_exists('to_json')) {
     /**
@@ -540,9 +556,9 @@ if (!function_exists('is_json')) {
     }
 }
 
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 // NÚMEROS
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 
 if (!function_exists('currency')) {
     /**
@@ -559,7 +575,7 @@ if (!function_exists('currency')) {
      */
     function currency(
         float $value,
-        string $symbol = 'R$',
+        string $symbol = '$',
         int $decimals = 2,
         string $thousands = '.',
         string $decimal = ','
@@ -681,9 +697,9 @@ if (!function_exists('roman')) {
     }
 }
 
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 // UTILITÁRIOS FUNCIONAIS
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 
 if (!function_exists('value')) {
     /**
@@ -714,9 +730,9 @@ if (!function_exists('tap')) {
     }
 }
 
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 // PASSWORDS
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 
 if (!function_exists('hash_make')) {
     /**
@@ -740,9 +756,9 @@ if (!function_exists('hash_check')) {
     }
 }
 
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 // AVATAR
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 
 if (!function_exists('avatar')) {
     /**
@@ -959,9 +975,9 @@ if (!function_exists('data_get')) {
     }
 }
 
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 // STRINGS
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 
 if (!function_exists('sanitize')) {
     /**
@@ -1407,9 +1423,9 @@ if (!function_exists('format_bytes')) {
     }
 }
 
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 // SEGURANÇA
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 
 if (!function_exists('csrf_token')) {
     /**
@@ -1435,7 +1451,7 @@ if (!function_exists('csrf_field')) {
      */
     function csrf_field(): string
     {
-        return '<input type="hidden" name="_csrf_token" value="' . csrf_token() . '">';
+        return '<input type="hidden" name="_csrf_token" value="' . csrf_token() . '"/>';
     }
 }
 
@@ -1447,7 +1463,7 @@ if (!function_exists('csrf_meta')) {
      */
     function csrf_meta(): string
     {
-        return '<meta name="csrf-token" content="' . csrf_token() . '">';
+        return '<meta name="csrf-token" content="' . csrf_token() . '"/>';
     }
 }
 
@@ -1555,34 +1571,6 @@ if (!function_exists('decrypt')) {
             $iv,
             $tag
         );
-    }
-}
-
-if (!function_exists('hash_make')) {
-    /**
-     * Cria um hash seguro de uma senha usando bcrypt.
-     *
-     * @param  string $password Senha em texto puro.
-     * @param  int    $cost     Custo do bcrypt (padrão: 12).
-     * @return string           Hash bcrypt da senha.
-     */
-    function hash_make(string $password, int $cost = 12): string
-    {
-        return password_hash($password, PASSWORD_BCRYPT, ['cost' => $cost]);
-    }
-}
-
-if (!function_exists('hash_check')) {
-    /**
-     * Verifica se uma senha corresponde a um hash bcrypt.
-     *
-     * @param  string $password Senha em texto puro.
-     * @param  string $hash     Hash bcrypt armazenado.
-     * @return bool             True se a senha for válida, false caso contrário.
-     */
-    function hash_check(string $password, string $hash): bool
-    {
-        return password_verify($password, $hash);
     }
 }
 
@@ -1707,9 +1695,9 @@ if (!function_exists('purify_html')) {
     }
 }
 
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 // AMBIENTE
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 
 if (!function_exists('env')) {
     /**
@@ -1805,9 +1793,9 @@ if (!function_exists('is_local')) {
     }
 }
 
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 // CAMINHOS
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 
 if (!function_exists('base_path')) {
     /**
@@ -1887,9 +1875,9 @@ if (!function_exists('src_path')) {
     }
 }
 
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 // DEBUG
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 
 if (!function_exists('dd')) {
     /**
@@ -1925,17 +1913,17 @@ if (!function_exists('dump')) {
 if (!function_exists('_slenix_dump_render')) {
     function _slenix_dump_render(mixed $var, int $index, int $total): string
     {
-        $type    = gettype($var);
-        $isLast  = $index === $total - 1;
+        $type = gettype($var);
+        $isLast = $index === $total - 1;
 
         $typeColor = match ($type) {
-            'string'           => '#a78bfa', // lilás
-            'integer', 'double'=> '#34d399', // verde
-            'boolean'          => '#fbbf24', // âmbar
-            'NULL'             => '#6b7280', // cinza
-            'array'            => '#38bdf8', // azul
-            'object'           => '#f472b6', // rosa
-            default            => '#cdd6f4',
+            'string' => '#a78bfa', // lilás
+            'integer', 'double' => '#34d399', // verde
+            'boolean' => '#fbbf24', // âmbar
+            'NULL' => '#6b7280', // cinza
+            'array' => '#38bdf8', // azul
+            'object' => '#f472b6', // rosa
+            default => '#cdd6f4',
         };
 
         ob_start();
@@ -1943,33 +1931,57 @@ if (!function_exists('_slenix_dump_render')) {
         $raw = ob_get_clean();
 
         // 1. Highlight com marcadores ANTES de qualquer escape
-        $raw = preg_replace("/\b(true|false|null|NULL)\b/",
-            '§BOOL§$1§/BOOL§', $raw);
-        $raw = preg_replace("/'((?:[^'\\\\]|\\\\.)*)'/",
-            "§STR§'$1'§/STR§", $raw);
-        $raw = preg_replace('/(?<![\'a-zA-Z_])\b(\d+\.?\d*)\b(?![\'a-zA-Z_])/',
-            '§NUM§$1§/NUM§', $raw);
-        $raw = preg_replace('/\b(array)\s*\(/i',
-            '§ARR§array§/ARR§(', $raw);
+        $raw = preg_replace(
+            "/\b(true|false|null|NULL)\b/",
+            '§BOOL§$1§/BOOL§',
+            $raw
+        );
+        $raw = preg_replace(
+            "/'((?:[^'\\\\]|\\\\.)*)'/",
+            "§STR§'$1'§/STR§",
+            $raw
+        );
+        $raw = preg_replace(
+            '/(?<![\'a-zA-Z_])\b(\d+\.?\d*)\b(?![\'a-zA-Z_])/',
+            '§NUM§$1§/NUM§',
+            $raw
+        );
+        $raw = preg_replace(
+            '/\b(array)\s*\(/i',
+            '§ARR§array§/ARR§(',
+            $raw
+        );
 
         // 2. Escapa HTML (não afeta os marcadores § pois não são chars especiais)
         $raw = htmlspecialchars($raw, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
         // 3. Converte marcadores em spans
-        $raw = preg_replace('/§BOOL§(.*?)§\/BOOL§/',
-            '<span style="color:#fbbf24;font-weight:600">$1</span>', $raw);
-        $raw = preg_replace('/§STR§(.*?)§\/STR§/',
-            '<span style="color:#a78bfa">$1</span>', $raw);
-        $raw = preg_replace('/§NUM§(.*?)§\/NUM§/',
-            '<span style="color:#34d399">$1</span>', $raw);
-        $raw = preg_replace('/§ARR§(.*?)§\/ARR§/',
-            '<span style="color:#38bdf8;font-weight:600">$1</span>', $raw);
+        $raw = preg_replace(
+            '/§BOOL§(.*?)§\/BOOL§/',
+            '<span style="color:#fbbf24;font-weight:600">$1</span>',
+            $raw
+        );
+        $raw = preg_replace(
+            '/§STR§(.*?)§\/STR§/',
+            '<span style="color:#a78bfa">$1</span>',
+            $raw
+        );
+        $raw = preg_replace(
+            '/§NUM§(.*?)§\/NUM§/',
+            '<span style="color:#34d399">$1</span>',
+            $raw
+        );
+        $raw = preg_replace(
+            '/§ARR§(.*?)§\/ARR§/',
+            '<span style="color:#38bdf8;font-weight:600">$1</span>',
+            $raw
+        );
 
-        $mb     = $isLast ? '1rem' : '0.5rem';
+        $mb = $isLast ? '1rem' : '0.5rem';
         $border = '1px solid rgba(255,255,255,0.08)';
 
         return <<<HTML
-<div style="background:#0a0a0a;border:{$border};border-left:3px solid {$typeColor};border-radius:8px;font-family:'JetBrains Mono','Fira Code',monospace;font-size:13px;overflow:auto;margin:0.4rem 1rem {$mb};box-shadow:0 4px 24px rgba(0,0,0,0.5);">
+<div style="background:#0a0a0a;border:{$border};border-radius:8px;font-family:'JetBrains Mono','Fira Code',monospace;font-size:13px;overflow:auto;margin:0.4rem 1rem {$mb};box-shadow:0 4px 24px rgba(0,0,0,0.5);">
   <div style="display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0.85rem;background:rgba(255,255,255,0.03);border-bottom:{$border};">
     <span style="background:{$typeColor};color:#000;font-size:10px;font-weight:700;padding:1px 8px;border-radius:99px;letter-spacing:0.5px;text-transform:uppercase;">{$type}</span>
     <span style="color:#4b5563;font-size:11px;margin-left:auto;">Slenix</span>
@@ -2103,9 +2115,9 @@ if (!function_exists('trace')) {
     }
 }
 
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 // DATAS
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 
 if (!function_exists('now')) {
     /**
@@ -2326,9 +2338,9 @@ if (!function_exists('business_days')) {
     }
 }
 
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 // ARRAYS
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 
 if (!function_exists('is_empty')) {
     /**
@@ -2638,9 +2650,9 @@ if (!function_exists('collect')) {
     }
 }
 
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 // COLLECTION
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 
 /**
  * Coleção fluente e encadeável para manipulação de arrays.
@@ -2663,9 +2675,9 @@ if (!function_exists('collect')) {
  */
 class Collection
 {
-    // =========================================================================
+    // ────────────────────────────────────────────────────────────────────────
     // PROPRIEDADES
-    // =========================================================================
+    // ────────────────────────────────────────────────────────────────────────
 
     /**
      * Itens armazenados na coleção.
@@ -3409,9 +3421,9 @@ class Collection
     }
 }
 
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 // VALIDATION
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 if (!function_exists('validate')) {
     /**
      * Valida dados contra um conjunto de regras.
@@ -3436,18 +3448,18 @@ if (!function_exists('validate')) {
             Session::start();
             Session::flash('_errors', ['default' => $e->errors()]);
             Session::flash('_old_input', $data);
- 
+
             $referer = $_SERVER['HTTP_REFERER'] ?? '/';
             header("Location: {$referer}", true, 302);
             exit;
         }
     }
 }
- 
-// =============================================================================
+
+// ────────────────────────────────────────────────────────────────────────
 // CACHE
-// =============================================================================
-  
+// ────────────────────────────────────────────────────────────────────────
+
 if (!function_exists('cache')) {
     /**
      * Acessa o sistema de cache.
@@ -3460,8 +3472,9 @@ if (!function_exists('cache')) {
     function cache(string|array|null $key = null, mixed $default = null, int $ttl = 3600): mixed
     {
         // cache() sem args → retorna a classe para chamadas estáticas
-        if ($key === null) return Cache::class;
- 
+        if ($key === null)
+            return Cache::class;
+
         // cache(['key' => value], ttl) → put
         if (is_array($key)) {
             foreach ($key as $k => $v) {
@@ -3469,16 +3482,16 @@ if (!function_exists('cache')) {
             }
             return null;
         }
- 
+
         // cache('key') ou cache('key', $default) → get
         return Cache::get($key, $default);
     }
 }
- 
-// =============================================================================
+
+// ────────────────────────────────────────────────────────────────────────
 // LOG
-// =============================================================================
-  
+// ────────────────────────────────────────────────────────────────────────
+
 if (!function_exists('logger')) {
     /**
      * Atalho para logar mensagens.
@@ -3490,19 +3503,19 @@ if (!function_exists('logger')) {
     function logger(string $message, array $context = [], string $level = 'debug'): void
     {
         match ($level) {
-            'info'     => Log::info($message, $context),
-            'warning'  => Log::warning($message, $context),
-            'error'    => Log::error($message, $context),
+            'info' => Log::info($message, $context),
+            'warning' => Log::warning($message, $context),
+            'error' => Log::error($message, $context),
             'critical' => Log::critical($message, $context),
-            default    => Log::debug($message, $context),
+            default => Log::debug($message, $context),
         };
     }
 }
 
-// ============================================================
+// ────────────────────────────────────────────────────────────────────────
 // PATCH — add to src/Supports/Helpers/Helpers.php
-// ============================================================
- 
+// ────────────────────────────────────────────────────────────────────────
+
 if (!function_exists('dispatch')) {
     /**
      * Dispatches a job to the queue.
@@ -3513,18 +3526,18 @@ if (!function_exists('dispatch')) {
      * @param \Slenix\Supports\Queue\Job $job
      * @param string $queue  Optional queue channel override
      * @param int    $delay  Optional delay in seconds
-     * @return string        Job ID
+     * @return string        \Job ID
      */
     function dispatch(\Slenix\Supports\Queue\Job $job, string $queue = '', int $delay = 0): string
     {
         // Boot storage path from environment
         $basePath = (defined('STORAGE_PATH') ? STORAGE_PATH : dirname(__DIR__, 3) . '/storage') . '/queue';
         \Slenix\Supports\Queue\Queue::setBasePath($basePath);
- 
+
         return \Slenix\Supports\Queue\Queue::push($job, $queue, $delay);
     }
 }
- 
+
 if (!function_exists('queue')) {
     /**
      * Returns the Queue facade for direct interaction.
@@ -3540,11 +3553,11 @@ if (!function_exists('queue')) {
     }
 }
 
- 
-// =============================================================================
+
+// ────────────────────────────────────────────────────────────────────────
 // STORAGE
-// =============================================================================
-  
+// ────────────────────────────────────────────────────────────────────────
+
 if (!function_exists('storage')) {
     /**
      * Acessa o sistema de storage.
@@ -3558,7 +3571,7 @@ if (!function_exists('storage')) {
         return Storage::disk($disk);
     }
 }
- 
+
 if (!function_exists('storage_url')) {
     /**
      * Gera URL pública para um ficheiro no disco 'public'.
@@ -3572,10 +3585,32 @@ if (!function_exists('storage_url')) {
     }
 }
 
+// ────────────────────────────────────────────────────────────────────────
+// AUTH
+// ────────────────────────────────────────────────────────────────────────
 
-// =============================================================================
+
+if (!function_exists('auth')) {
+    /**
+     * Get the AuthManager or a specific guard instance.
+     *
+     * @param  string|null $guard  Guard name ('web', 'api', …) or null for the default.
+     * @return AuthManager|GuardInterface
+     *
+     * @example  auth()->check()
+     * @example  auth()->user()
+     * @example  auth('api')->getToken()
+     * @example  auth()->guard('web')->refresh()
+     */
+    function auth(?string $guard = null): AuthManager|GuardInterface
+    {
+        return Auth::resolve($guard);
+    }
+}
+
+// ────────────────────────────────────────────────────────────────────────
 // LUNA — Variáveis globais disponíveis em todos os templates
-// =============================================================================
+// ────────────────────────────────────────────────────────────────────────
 
 if (class_exists(Luna::class)) {
 

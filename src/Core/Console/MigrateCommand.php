@@ -48,6 +48,7 @@ class MigrateCommand extends Command
      */
     public function run(): void
     {
+        echo PHP_EOL;
         self::info('Running pending migrations...');
         echo PHP_EOL;
 
@@ -60,7 +61,7 @@ class MigrateCommand extends Command
             }
 
             foreach ($executed as $name) {
-                self::success("  ✔  {$name}");
+                self::success("{$name}");
             }
 
             echo PHP_EOL;
@@ -89,6 +90,7 @@ class MigrateCommand extends Command
             }
         }
 
+        echo PHP_EOL;
         self::info("Rolling back {$steps} batch(es)...");
         echo PHP_EOL;
 
@@ -96,17 +98,19 @@ class MigrateCommand extends Command
             $reverted = $this->migrator->rollback($steps);
 
             if (empty($reverted)) {
+                echo PHP_EOL;
                 self::warning('Nothing to rollback.');
+                echo PHP_EOL;
                 return;
             }
 
             foreach ($reverted as $name) {
-                self::warning("  ✖  {$name}");
+                self::warning("{$name}");
             }
 
             echo PHP_EOL;
             self::success(count($reverted) . ' migration(s) rolled back.');
-
+            echo PHP_EOL;
         } catch (\Throwable $e) {
             self::error($e->getMessage());
             exit(1);
@@ -120,6 +124,7 @@ class MigrateCommand extends Command
      */
     public function reset(): void
     {
+        echo PHP_EOL;
         self::warning('Reverting ALL migrations...');
         echo PHP_EOL;
 
@@ -128,15 +133,18 @@ class MigrateCommand extends Command
 
             if (empty($reverted)) {
                 self::warning('Nothing to revert.');
+                echo PHP_EOL;
                 return;
             }
 
             foreach ($reverted as $name) {
-                self::warning("  ✖  {$name}");
+                echo PHP_EOL;
+                self::warning("{$name}");
             }
 
             echo PHP_EOL;
             self::success(count($reverted) . ' migration(s) reverted.');
+            echo PHP_EOL;
 
         } catch (\Throwable $e) {
             self::error($e->getMessage());
@@ -152,6 +160,7 @@ class MigrateCommand extends Command
      */
     public function fresh(): void
     {
+        echo PHP_EOL;
         self::warning('Running migrate:fresh (reset + migrate)...');
         echo PHP_EOL;
 
@@ -161,7 +170,7 @@ class MigrateCommand extends Command
             if (!empty($result['reverted'])) {
                 self::info('Reverted:');
                 foreach ($result['reverted'] as $name) {
-                    self::warning("  ✖  {$name}");
+                    self::warning("{$name}");
                 }
                 echo PHP_EOL;
             }
@@ -169,7 +178,7 @@ class MigrateCommand extends Command
             if (!empty($result['executed'])) {
                 self::info('Executed:');
                 foreach ($result['executed'] as $name) {
-                    self::success("  ✔  {$name}");
+                    self::success("{$name}");
                 }
             } else {
                 self::warning('No migrations to execute.');
@@ -177,6 +186,7 @@ class MigrateCommand extends Command
 
             echo PHP_EOL;
             self::success('migrate:fresh completed.');
+            echo PHP_EOL;
 
         } catch (\Throwable $e) {
             self::error($e->getMessage());
@@ -296,7 +306,9 @@ class MigrateCommand extends Command
             exit(1);
         }
 
+        echo PHP_EOL;
         self::success('Migration created successfully:');
+        echo PHP_EOL;
         echo "  {$filePath}" . PHP_EOL;
     }
 
@@ -365,6 +377,7 @@ return new class extends Migration
             \$table->id();
             // \$table->string('name');
             // \$table->string('email')->unique();
+            // \$table->string('password');
             \$table->timestamps();
         });
     }

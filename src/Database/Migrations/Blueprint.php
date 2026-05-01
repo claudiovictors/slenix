@@ -61,10 +61,6 @@ class Blueprint
     /** @var Grammar|null Optional grammar instance injected by Schema::create/table. */
     protected ?Grammar $grammar = null;
 
-    // =========================================================
-    // CONSTRUCTOR
-    // =========================================================
-
     /**
      * @param string       $table   Target table name.
      * @param Grammar|null $grammar Optional grammar; when null, raw MySQL is produced.

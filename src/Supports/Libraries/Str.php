@@ -17,18 +17,14 @@ namespace Slenix\Supports\Libraries;
 
 class Str
 {
-    
+
     // -------------------------------------------------------------------------
     // CACHE interno (memoization para conversões repetidas)
     // -------------------------------------------------------------------------
 
-    private static array $camelCache  = [];
+    private static array $camelCache = [];
     private static array $studlyCache = [];
-    private static array $snakeCache  = [];
-
-    // =========================================================================
-    // CASE CONVERSION
-    // =========================================================================
+    private static array $snakeCache = [];
 
     /**
      * Converte para camelCase.
@@ -57,7 +53,7 @@ class Str
 
         return self::$studlyCache[$value] = implode(
             '',
-            array_map(fn ($w) => mb_strtoupper(mb_substr($w, 0, 1)) . mb_substr($w, 1), $words)
+            array_map(fn($w) => mb_strtoupper(mb_substr($w, 0, 1)) . mb_substr($w, 1), $words)
         );
     }
 
@@ -155,10 +151,6 @@ class Str
         return mb_strtolower($value) ^ mb_strtoupper($value) ^ $value;
     }
 
-    // =========================================================================
-    // SLUG & URL
-    // =========================================================================
-
     /**
      * Gera slug URL-friendly.
      * Str::slug('Olá, Mundo!') → 'ola-mundo'
@@ -186,9 +178,42 @@ class Str
         return static::title(str_replace($separator, ' ', $value));
     }
 
-    // =========================================================================
-    // TRUNCATE & PADDING
-    // =========================================================================
+    /**
+     * Generates a cryptographically secure numeric OTP of a specific length.
+     * 
+     * @param int $length The desired length of the OTP.
+     * @return string
+     */
+    public static function otp(int $length = 6): string
+    {
+        $max = (10 ** $length) - 1;
+
+        try {
+            $number = random_int(0, $max);
+        } catch (\Exception $e) {
+            $number = mt_rand(0, $max);
+        }
+
+        return str_pad((string) $number, $length, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Generates a cryptographically secure alphanumeric code.
+     * @param int $length
+     * @return string
+     */
+    public static function generateCode(int $length = 6): string
+    {
+        $chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+        $code = '';
+        $max = strlen($chars) - 1;
+
+        for ($i = 0; $i < $length; $i++) {
+            $code .= $chars[random_int(0, $max)];
+        }
+
+        return $code;
+    }
 
     /**
      * Limita a string por número de caracteres.
@@ -261,7 +286,7 @@ class Str
     public static function padBoth(string $value, int $length, string $pad = ' '): string
     {
         $short = max(0, $length - mb_strlen($value));
-        $left  = (int) floor($short / 2);
+        $left = (int) floor($short / 2);
         $right = (int) ceil($short / 2);
         return str_repeat($pad, $left) . $value . str_repeat($pad, $right);
     }
@@ -718,8 +743,8 @@ class Str
      */
     public static function number(
         float|int $number,
-        int    $decimals   = 0,
-        string $decPoint   = ',',
+        int $decimals = 0,
+        string $decPoint = ',',
         string $thousandsSep = '.'
     ): string {
         return number_format($number, $decimals, $decPoint, $thousandsSep);
@@ -733,8 +758,8 @@ class Str
     {
         $units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
         $bytes = max($bytes, 0);
-        $pow   = $bytes > 0 ? floor(log($bytes) / log(1024)) : 0;
-        $pow   = min($pow, count($units) - 1);
+        $pow = $bytes > 0 ? floor(log($bytes) / log(1024)) : 0;
+        $pow = min($pow, count($units) - 1);
 
         return round($bytes / (1024 ** $pow), $precision) . ' ' . $units[(int) $pow];
     }
@@ -755,8 +780,8 @@ class Str
             return $string;
         }
 
-        $start  = mb_substr($string, 0, $index, 'UTF-8');
-        $end    = mb_substr($string, $index + mb_strlen($segment, 'UTF-8'), null, 'UTF-8');
+        $start = mb_substr($string, 0, $index, 'UTF-8');
+        $end = mb_substr($string, $index + mb_strlen($segment, 'UTF-8'), null, 'UTF-8');
         $masked = str_repeat(mb_substr($char, 0, 1, 'UTF-8'), mb_strlen($segment, 'UTF-8'));
 
         return $start . $masked . $end;
@@ -783,8 +808,12 @@ class Str
 
         // Irregulares comuns PT
         $ptIrregulars = [
-            'homem' => 'homens', 'mulher' => 'mulheres', 'mão' => 'mãos',
-            'pão' => 'pães', 'cão' => 'cães', 'alemão' => 'alemães',
+            'homem' => 'homens',
+            'mulher' => 'mulheres',
+            'mão' => 'mãos',
+            'pão' => 'pães',
+            'cão' => 'cães',
+            'alemão' => 'alemães',
         ];
 
         if (isset($ptIrregulars[$lower])) {
@@ -851,7 +880,7 @@ class Str
      */
     public static function uuid(): string
     {
-        $data    = random_bytes(16);
+        $data = random_bytes(16);
         $data[6] = chr(ord($data[6]) & 0x0f | 0x40);
         $data[8] = chr(ord($data[8]) & 0x3f | 0x80);
 
@@ -864,9 +893,9 @@ class Str
      */
     public static function random(int $length = 16): string
     {
-        $chars  = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
         $result = '';
-        $max    = strlen($chars) - 1;
+        $max = strlen($chars) - 1;
 
         for ($i = 0; $i < $length; $i++) {
             $result .= $chars[random_int(0, $max)];
@@ -892,13 +921,13 @@ class Str
      */
     public static function ulid(): string
     {
-        $time    = (int) (microtime(true) * 1000);
-        $chars   = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+        $time = (int) (microtime(true) * 1000);
+        $chars = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
         $encoded = '';
 
         for ($i = 0; $i < 10; $i++) {
             $encoded = $chars[$time % 32] . $encoded;
-            $time    = (int) ($time / 32);
+            $time = (int) ($time / 32);
         }
 
         for ($i = 0; $i < 16; $i++) {
@@ -912,24 +941,28 @@ class Str
      * Gera senha aleatória com requisitos configuráveis.
      */
     public static function password(
-        int  $length    = 16,
-        bool $letters   = true,
-        bool $numbers   = true,
-        bool $symbols   = true,
+        int $length = 16,
+        bool $letters = true,
+        bool $numbers = true,
+        bool $symbols = true,
         bool $uppercase = true
     ): string {
         $pool = '';
-        if ($letters)   $pool .= 'abcdefghijklmnopqrstuvwxyz';
-        if ($uppercase) $pool .= 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-        if ($numbers)   $pool .= '0123456789';
-        if ($symbols)   $pool .= '!@#$%^&*()-_=+[]{}|;:,.<>?';
+        if ($letters)
+            $pool .= 'abcdefghijklmnopqrstuvwxyz';
+        if ($uppercase)
+            $pool .= 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        if ($numbers)
+            $pool .= '0123456789';
+        if ($symbols)
+            $pool .= '!@#$%^&*()-_=+[]{}|;:,.<>?';
 
         if ($pool === '') {
             $pool = 'abcdefghijklmnopqrstuvwxyz0123456789';
         }
 
         $result = '';
-        $max    = strlen($pool) - 1;
+        $max = strlen($pool) - 1;
 
         for ($i = 0; $i < $length; $i++) {
             $result .= $pool[random_int(0, $max)];
@@ -988,7 +1021,7 @@ class Str
     public static function base64Decode(string $value): string
     {
         $value = str_replace(['-', '_'], ['+', '/'], $value);
-        $pad   = strlen($value) % 4;
+        $pad = strlen($value) % 4;
         if ($pad) {
             $value .= str_repeat('=', 4 - $pad);
         }
@@ -1143,7 +1176,7 @@ class Str
     public static function headline(string $value): string
     {
         $parts = preg_split('/[_\-\s]+|(?<=[a-z])(?=[A-Z])/u', $value) ?: [$value];
-        return implode(' ', array_map(fn ($w) => static::ucfirst(mb_strtolower($w)), array_filter($parts)));
+        return implode(' ', array_map(fn($w) => static::ucfirst(mb_strtolower($w)), array_filter($parts)));
     }
 
     /**
@@ -1188,8 +1221,8 @@ class Str
      */
     public static function flushCache(): void
     {
-        self::$camelCache  = [];
+        self::$camelCache = [];
         self::$studlyCache = [];
-        self::$snakeCache  = [];
+        self::$snakeCache = [];
     }
 }

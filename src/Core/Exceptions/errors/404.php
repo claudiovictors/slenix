@@ -10,7 +10,7 @@
             --bg: #000000;
             --text-main: #ffffff;
             --text-muted: #888888;
-            --accent: #667eea;
+            --accent: #FF2D20;
         }
 
         body {

@@ -55,13 +55,9 @@ class Fake
         return self::firstName() . ' ' . self::lastName();
     }
 
-    // =========================================================
-    // CONTATOS
-    // =========================================================
-
     private static array $domains = [
-        'gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com.br',
-        'icloud.com', 'proton.me', 'empresa.com.br', 'mail.com',
+        'gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com.ao',
+        'icloud.com', 'proton.me', 'empresa.com.ao', 'mail.com',
     ];
 
     public static function email(string $name = ''): string
@@ -85,10 +81,6 @@ class Fake
         $n2  = self::numberBetween(1000, 9999);
         return "({$ddd}) {$n1}-{$n2}";
     }
-
-    // =========================================================
-    // INTERNET
-    // =========================================================
 
     public static function username(): string
     {
@@ -142,10 +134,6 @@ class Fake
         return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
     }
 
-    // =========================================================
-    // NÚMEROS
-    // =========================================================
-
     public static function numberBetween(int $min = 0, int $max = 9999): int
     {
         return random_int($min, $max);
@@ -161,10 +149,6 @@ class Fake
     {
         return random_int(1, 100) <= $chanceOfTrue;
     }
-
-    // =========================================================
-    // DATAS
-    // =========================================================
 
     public static function date(string $start = '-2 years', string $end = 'now'): string
     {
@@ -184,10 +168,6 @@ class Fake
     {
         return random_int(strtotime('-5 years'), time());
     }
-
-    // =========================================================
-    // TEXTO
-    // =========================================================
 
     private static array $wordList = [
         'lorem', 'ipsum', 'dolor', 'sit', 'amet', 'consectetur',
@@ -243,10 +223,6 @@ class Fake
         return ucwords(self::words(random_int(3, 6), ' '));
     }
 
-    // =========================================================
-    // ENDEREÇO
-    // =========================================================
-
     private static array $cities = [
         'Luanda', 'Cabinda', 'Huambo', 'Benguela', 'Bié', 'Lubango',
         'Bengo', 'Huíla', 'Namibe', 'Malanje', 'Lunda-Sul', 'Lunda-Norte',
@@ -280,10 +256,6 @@ class Fake
             . ', '
             . random_int(1, 9999);
     }
-
-    // =========================================================
-    // ESCOLHA
-    // =========================================================
 
     /**
      * Seleciona aleatoriamente um elemento do array.

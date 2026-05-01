@@ -9,18 +9,6 @@
 | When the --ws flag is provided it also starts the WebSocket server
 | in a child process — no temporary files are written to disk.
 |
-| Child process strategy (in priority order):
-|   1. pcntl_fork()  — forks the current process in memory (Unix only).
-|   2. proc_open()   — spawns a child via the OS process API (cross-platform).
-|
-| Usage:
-|
-|   php celestial serve                        HTTP only, port 8080
-|   php celestial serve 8090                  HTTP only, custom port (positional)
-|   php celestial serve --port=8090           HTTP only, custom port (flag)
-|   php celestial serve --ws                  HTTP + WebSocket (8080 + 8081)
-|   php celestial serve --ws --ws-port=9000   HTTP + WebSocket (8080 + 9000)
-|
 */
 
 declare(strict_types=1);
@@ -60,10 +48,6 @@ class ServeCommand extends Command
     {
         $this->args = $args;
     }
-
-    // =========================================================================
-    // Entry point
-    // =========================================================================
 
     /**
      * Parses CLI flags and starts the appropriate server(s).
@@ -106,7 +90,7 @@ class ServeCommand extends Command
         $publicDir = PUBLIC_PATH;
 
         echo PHP_EOL;
-        echo $c->colorize("▲ Celestial Dev Server", 'white', true) . PHP_EOL;
+        echo $c->colorize("  ▾ Celestial Dev Server", 'white', true) . PHP_EOL;
 
         if (!is_dir($publicDir)) {
             echo $c->colorize("  - Creating public directory...", 'white') . PHP_EOL;
@@ -116,7 +100,6 @@ class ServeCommand extends Command
             }
         }
 
-        echo $c->colorize("  ✓ Ready in " . rand(120, 400) . "ms", 'green') . PHP_EOL;
         echo PHP_EOL;
         echo $c->colorize("  ➜ Local:   ", 'cyan') . "http://{$host}:{$port}" . PHP_EOL;
         echo $c->colorize("  ➜ Network: ", 'cyan') . "http://0.0.0.0:{$port}" . PHP_EOL;
@@ -126,7 +109,7 @@ class ServeCommand extends Command
         }
 
         echo PHP_EOL;
-        echo $c->colorize("  press Ctrl+C to stop", 'white') . PHP_EOL;
+        echo $c->colorize("   press Ctrl+C to stop", 'red') . PHP_EOL;
         echo PHP_EOL;
 
         if ($withWs) {
@@ -135,10 +118,6 @@ class ServeCommand extends Command
             passthru("php -S {$host}:{$port} -t {$publicDir}");
         }
     }
-
-    // =========================================================================
-    // WebSocket co-launch
-    // =========================================================================
 
     /**
      * Starts the WebSocket server in a child process and the HTTP server in

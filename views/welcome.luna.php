@@ -12,14 +12,18 @@
 
     :root {
       --bg: #050505;
-      --accent: #FF2D20; 
+      --accent: #FF2D20;
       --glass: rgba(255, 255, 255, 0.03);
       --border: rgba(255, 255, 255, 0.08);
       --text-main: #e2e8f0;
       --text-dim: #64748b;
     }
 
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
     body {
       font-family: 'Inter', sans-serif;
@@ -29,7 +33,8 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      overflow: hidden; /* Importante para o bg 3D não criar scroll */
+      overflow: hidden;
+      /* Importante para o bg 3D não criar scroll */
       position: relative;
     }
 
@@ -50,11 +55,14 @@
     .version-text-3d {
       font-family: 'JetBrains Mono', monospace;
       font-weight: 800;
-      font-size: 20vw; /* Se ainda não aparecer, tente 400px */
+      font-size: 20vw;
+      /* Se ainda não aparecer, tente 400px */
       line-height: 1;
-      color: rgba(255, 45, 32, 0.03); /* Cor sólida bem clarinha */
-      -webkit-text-stroke: 2px rgba(255, 45, 32, 0.15); /* Contorno mais grosso */
-      
+      color: rgba(255, 45, 32, 0.03);
+      /* Cor sólida bem clarinha */
+      -webkit-text-stroke: 2px rgba(255, 45, 32, 0.15);
+      /* Contorno mais grosso */
+
       /* Transformação fixa para teste inicial */
       transform: rotateX(25deg) rotateY(-20deg);
       opacity: 0.8;
@@ -63,8 +71,15 @@
     }
 
     @keyframes float3D {
-      0%, 100% { transform: rotateX(20deg) rotateY(-30deg) translateZ(-200px) translateY(0px); }
-      50% { transform: rotateX(25deg) rotateY(-25deg) translateZ(-150px) translateY(-30px); }
+
+      0%,
+      100% {
+        transform: rotateX(20deg) rotateY(-30deg) translateZ(-200px) translateY(0px);
+      }
+
+      50% {
+        transform: rotateX(25deg) rotateY(-25deg) translateZ(-150px) translateY(-30px);
+      }
     }
 
     /* Grid de fundo sutil (sobre o texto 3D) */
@@ -86,7 +101,8 @@
       grid-template-columns: 1.2fr 0.8fr;
       gap: 2rem;
       position: relative;
-      z-index: 10; /* Garante que fique acima do background */
+      z-index: 10;
+      /* Garante que fique acima do background */
     }
 
     .hero-section {
@@ -189,28 +205,71 @@
       position: absolute;
       border: 1px solid var(--border);
       border-radius: 50%;
-      animation: rotate 25s linear infinite;
+      animation: rotate .1s linear infinite;
     }
 
-    .orbit-1 { width: 400px; height: 400px; }
-    .orbit-2 { width: 520px; height: 520px; border-style: dashed; animation-duration: 40s; animation-direction: reverse; }
+    .orbit-1 {
+      width: 400px;
+      height: 400px;
+    }
+
+    .orbit-2 {
+      width: 520px;
+      height: 520px;
+      border-style: dashed;
+      animation-duration: .2s;
+      animation-direction: reverse;
+    }
 
     @keyframes rotate {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
+      from {
+        transform: rotate(0deg);
+      }
+
+      to {
+        transform: rotate(360deg);
+      }
     }
 
     @keyframes pulse {
-      0%, 100% { transform: scale(1); box-shadow: 0 0 40px rgba(255, 45, 32, 0.1); }
-      50% { transform: scale(1.05); box-shadow: 0 0 80px rgba(255, 45, 32, 0.2); }
+
+      0%,
+      100% {
+        transform: scale(1);
+        box-shadow: 0 0 40px rgba(255, 45, 32, 0.1);
+      }
+
+      50% {
+        transform: scale(1.05);
+        box-shadow: 0 0 80px rgba(255, 45, 32, 0.2);
+      }
     }
 
     @media (max-width: 968px) {
-      .main-container { grid-template-columns: 1fr; text-align: center; margin-top: 2rem; }
-      .description { margin-left: auto; margin-right: auto; }
-      .visual-stack { display: none; }
-      .action-grid { justify-content: center; }
-      .version-text-3d { font-size: 60vw; } /* Aumenta o bg no mobile */
+      .main-container {
+        grid-template-columns: 1fr;
+        text-align: center;
+        margin-top: 2rem;
+      }
+
+      .description {
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      .visual-stack {
+        display: none;
+      }
+
+      .action-grid {
+        justify-content: center;
+      }
+
+      .version-text-3d {
+        font-size: 60vw;
+      }
+
+      /* Aumenta o bg no mobile */
     }
   </style>
 </head>
@@ -218,15 +277,15 @@
 <body>
 
   <div class="bg-version-3d">
-    <div class="version-text-3d">v{{ env('APP_VERSION') ?: 'v2.5' }}</div>
+    <div class="version-text-3d">v{{ env('APP_VERSION') ?: 'v2.6' }}</div>
   </div>
 
   <div class="bg-grid"></div>
 
   <main class="main-container">
-    
+
     <section class="hero-section">
-      <div class="badge">Slenix Core Engine</div>
+      <div class="badge">Slenix Framework</div>
       <h1>Slenix.</h1>
       <p class="description">
         A minimalist PHP framework engineered for developers who demand peak performance and architectural clarity.
@@ -248,7 +307,7 @@
     <section class="visual-stack">
       <div class="orbit orbit-1"></div>
       <div class="orbit orbit-2"></div>
-      
+
       <div class="core-sphere">
         <img src="/logo.svg" alt="Slenix Logo">
       </div>

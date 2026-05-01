@@ -232,7 +232,7 @@ class Router
      * @param array          $middleware Array of middlewares.
      * @return Route
      */
-    private static function add(string $method, string $path_uri, callable|array $handle, array $middleware = []): Route
+    public static function add(string $method, string $path_uri, callable|array $handle, array $middleware = []): Route
     {
         $path = !empty(self::$prefix) ? implode('', self::$prefix) . ltrim($path_uri, '/') : $path_uri;
 

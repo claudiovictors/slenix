@@ -22,7 +22,7 @@ interface Middleware
 {
     /**
      * Process an incoming request through the middleware.
-     * * @param Request  $request  The current request instance.
+     * @param Request  $request  The current request instance.
      * @param Response $response The current response instance.
      * @param callable $next     The next middleware/action in the stack.
      * @return mixed

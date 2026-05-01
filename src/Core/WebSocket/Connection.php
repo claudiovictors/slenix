@@ -42,10 +42,6 @@ class Connection
         $this->id     = bin2hex(random_bytes(8));
     }
 
-    // -------------------------------------------------------------------------
-    // Identity
-    // -------------------------------------------------------------------------
-
     /**
      * Returns the unique connection ID.
      * * @return string
@@ -65,10 +61,6 @@ class Connection
         return $this->socket;
     }
 
-    // -------------------------------------------------------------------------
-    // Handshake
-    // -------------------------------------------------------------------------
-
     /**
      * Checks if the connection has completed the WebSocket handshake.
      * * @return bool
@@ -87,10 +79,6 @@ class Connection
         $this->handshaked = true;
     }
 
-    // -------------------------------------------------------------------------
-    // Sending data
-    // -------------------------------------------------------------------------
-
     /**
      * Sends a text frame to this client.
      *
@@ -105,10 +93,6 @@ class Connection
         @socket_write($this->socket, $frame, strlen($frame));
     }
 
-    // -------------------------------------------------------------------------
-    // Closing
-    // -------------------------------------------------------------------------
-
     /**
      * Sends a close frame and shuts down the socket.
      * * @return void
@@ -119,10 +103,6 @@ class Connection
         @socket_write($this->socket, $closeFrame, strlen($closeFrame));
         @socket_close($this->socket);
     }
-
-    // -------------------------------------------------------------------------
-    // Attribute bag
-    // -------------------------------------------------------------------------
 
     /**
      * Stores a value in the connection attribute bag.
@@ -157,10 +137,6 @@ class Connection
     {
         return array_key_exists($key, $this->attributes);
     }
-
-    // -------------------------------------------------------------------------
-    // Frame encoding / decoding
-    // -------------------------------------------------------------------------
 
     /**
      * Encodes a payload into a WebSocket frame according to RFC 6455.

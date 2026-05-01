@@ -36,10 +36,6 @@ class MakeCommand extends Command
         $this->args = $args;
     }
 
-    // =========================================================================
-    // Application
-    // =========================================================================
-
     /**
      * Generates a cryptographically secure APP_KEY and persists it to .env.
      *
@@ -53,26 +49,30 @@ class MakeCommand extends Command
      */
     public static function generateKey(): void
     {
-        $envPath     = self::basePath('.env');
+        $envPath = self::basePath('.env');
         $examplePath = self::basePath('.env.example');
 
         if (!file_exists($envPath)) {
             if (file_exists($examplePath)) {
                 if (!copy($examplePath, $envPath)) {
+                    echo PHP_EOL;
                     self::error("Could not create .env from .env.example.");
                     return;
                 }
+                echo PHP_EOL;
                 self::info(".env created from .env.example.");
             } else {
+                echo PHP_EOL;
                 self::error(".env file not found. Please create it first.");
                 return;
             }
         }
 
-        $key     = 'base64:' . base64_encode(random_bytes(32));
+        $key = 'base64:' . base64_encode(random_bytes(32));
         $content = file_get_contents($envPath);
 
         if ($content === false) {
+            echo PHP_EOL;
             self::error("Could not read .env file.");
             return;
         }
@@ -89,22 +89,57 @@ class MakeCommand extends Command
         }
 
         if ($updated === null || $updated === $content) {
+            echo PHP_EOL;
             self::error("Could not update APP_KEY in .env.");
             return;
         }
 
         if (file_put_contents($envPath, $updated) === false) {
+            echo PHP_EOL;
             self::error("Could not write to .env.");
             return;
         }
-
+        echo PHP_EOL;
         self::success("APP_KEY generated and saved to .env.");
+        echo PHP_EOL;
         self::info("Key: {$key}");
+        echo PHP_EOL;
     }
 
-    // =========================================================================
-    // Generators
-    // =========================================================================
+    /**
+     * Generates a secure random key for JWT_SECRET and updates the .env file.
+     * @return void
+     */
+    public static function generateJwt(): void
+    {
+        $key = bin2hex(random_bytes(32));
+        $envPath = self::basePath('.env');
+
+        if (!file_exists($envPath)) {
+            self::error("The .env file was not found. Please create one first.");
+            return;
+        }
+
+        $content = file_get_contents($envPath);
+
+        $pattern = "/^JWT_SECRET\s*=.*$/m";
+        $replacement = "JWT_SECRET={$key}";
+
+        if (preg_match($pattern, $content)) {
+            $updated = preg_replace($pattern, $replacement, $content);
+        } else {
+            $updated = $content . "\nJWT_SECRET={$key}";
+        }
+
+        if (file_put_contents($envPath, $updated) !== false) {
+            echo PHP_EOL;
+            self::success("JWT Secret Key generated successfully!");
+            self::info("Key: {$key}");
+            echo PHP_EOL;
+        } else {
+            self::error("Failed to write to .env file.");
+        }
+    }
 
     /**
      * Generates a new Eloquent-style Model class.
@@ -121,14 +156,17 @@ class MakeCommand extends Command
     public function makeModel(): void
     {
         if (count($this->args) < 3) {
+            echo PHP_EOL;
             self::error('Model name is required.');
+            echo PHP_EOL;
             self::info('Example: php celestial make:model User');
+            echo PHP_EOL;
             exit(1);
         }
 
         $modelName = ucfirst($this->args[2]);
         $tableName = strtolower(preg_replace('/(?<!^)[A-Z]/', '_$0', $modelName)) . 's';
-        $filePath  = APP_PATH . '/Models/' . $modelName . '.php';
+        $filePath = APP_PATH . '/Models/' . $modelName . '.php';
 
         $this->ensureFileDoesNotExist($filePath, $modelName, 'Model');
 
@@ -167,13 +205,16 @@ EOT;
     public function makeController(): void
     {
         if (count($this->args) < 3) {
+            echo PHP_EOL;
             self::error('Controller name is required.');
+            echo PHP_EOL;
             self::info('Example: php celestial make:controller Home');
+            echo PHP_EOL;
             exit(1);
         }
 
         $controllerName = ucfirst($this->getControllerName());
-        $filePath       = APP_PATH . '/Controllers/' . $controllerName . '.php';
+        $filePath = APP_PATH . '/Controllers/' . $controllerName . '.php';
 
         $this->ensureFileDoesNotExist($filePath, $controllerName, 'Controller');
 
@@ -189,7 +230,7 @@ use Slenix\Http\Response;
 
 class {$controllerName}
 {
-    public function index(Request \$request, Response \$response)
+    public function index(Request \$req, Response \$res)
     {
         // Your application logic here
     }
@@ -214,8 +255,11 @@ EOT;
     public function makeMiddleware(): void
     {
         if (count($this->args) < 3) {
+            echo PHP_EOL;
             self::error('Middleware name is required.');
+            echo PHP_EOL;
             self::info('Example: php celestial make:middleware Auth');
+            echo PHP_EOL;
             exit(1);
         }
 
@@ -290,8 +334,11 @@ EOT;
     public function makeJob(): void
     {
         if (count($this->args) < 3) {
+            echo PHP_EOL;
             self::error('Job name is required.');
+            echo PHP_EOL;
             self::info('Example: php celestial make:job SendWelcomeEmail');
+            echo PHP_EOL;
             exit(1);
         }
 
@@ -300,7 +347,7 @@ EOT;
             $jobName .= 'Job';
         }
 
-        $dir      = APP_PATH . '/Jobs';
+        $dir = APP_PATH . '/Jobs';
         $filePath = $dir . '/' . $jobName . '.php';
 
         if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
@@ -373,13 +420,17 @@ EOT;
         $filePath = APP_PATH . '/Middlewares/ThrottleMiddleware.php';
 
         if (file_exists($filePath)) {
+            echo PHP_EOL;
             self::error("ThrottleMiddleware already exists at {$filePath}.");
+            echo PHP_EOL;
             exit(1);
         }
 
         $dir = dirname($filePath);
         if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
+            echo PHP_EOL;
             self::error("Could not create directory {$dir}.");
+            echo PHP_EOL;
             exit(1);
         }
 
@@ -398,40 +449,6 @@ EOT;
 | $_SERVER['HTTP_X_THROTTLE_PARAMS'] variable by the Router just before this
 | middleware is instantiated, so no constructor arguments are required.
 |
-| Usage in routes/web.php:
-|
-|   // 60 requests per minute — default
-|   Router::get('/api/products', [ProductController::class, 'index'])
-|       ->middleware('throttle');
-|
-|   // 100 requests per minute
-|   Router::get('/api/products', [ProductController::class, 'index'])
-|       ->middleware('throttle:100,1');
-|
-|   // 5 attempts per 10 minutes — login brute-force protection
-|   Router::post('/auth/login', [AuthController::class, 'login'])
-|       ->middleware('throttle:5,10');
-|
-|   // Applied to a route group
-|   Router::group(['prefix' => 'api/v1', 'middleware' => ['jwt', 'throttle:120,1']], function () {
-|       Router::get('/users',  [UserController::class, 'index']);
-|       Router::post('/orders', [OrderController::class, 'store']);
-|   });
-|
-| Response headers emitted on every request:
-|
-|   X-RateLimit-Limit:     60
-|   X-RateLimit-Remaining: 45
-|   X-RateLimit-Reset:     1700000060
-|
-| Additional header emitted only when the request is blocked (HTTP 429):
-|
-|   Retry-After: 47
-|
-| Identity resolution priority:
-|   1. JWT user_id   — stateless API clients authenticated via Bearer token.
-|   2. Session user_id — authenticated web users with an active PHP session.
-|   3. IP address    — universal fallback for anonymous callers.
 |
 */
 
@@ -670,10 +687,6 @@ EOT;
         self::info("Register it in your routes with: ->middleware('throttle:60,1')");
     }
 
-    // =========================================================================
-    // Internal helpers
-    // =========================================================================
-
     /**
      * Extracts the controller name from the CLI arguments, skipping any flags
      * (arguments that begin with --).
@@ -688,8 +701,11 @@ EOT;
             }
         }
 
+        echo PHP_EOL;
         self::error('Controller name is required.');
+        echo PHP_EOL;
         self::info('Example: php celestial make:controller Home');
+        echo PHP_EOL;
         exit(1);
     }
 
@@ -709,13 +725,17 @@ EOT;
     private function ensureFileDoesNotExist(string $path, string $name, string $type): void
     {
         if (file_exists($path)) {
+            echo PHP_EOL;
             self::error("{$type} '{$name}' already exists at {$path}.");
+            echo PHP_EOL;
             exit(1);
         }
 
         $dir = dirname($path);
         if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
+            echo PHP_EOL;
             self::error("Could not create directory {$dir}.");
+            echo PHP_EOL;
             exit(1);
         }
     }
@@ -735,12 +755,17 @@ EOT;
     private function createFile(string $path, string $content, string $name, string $type): void
     {
         if (file_put_contents($path, $content) === false) {
+            echo PHP_EOL;
             self::error("Failed to create {$type} '{$name}' at {$path}.");
+            echo PHP_EOL;
             exit(1);
         }
 
+        echo PHP_EOL;
         self::success("{$type} '{$name}' created successfully at:");
-        echo "  {$path}" . PHP_EOL;
+        echo PHP_EOL;
+        echo "{$path}";
+        echo PHP_EOL;
     }
 
     /**

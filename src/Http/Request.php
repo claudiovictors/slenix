@@ -2,12 +2,12 @@
 
 /*
 |--------------------------------------------------------------------------
-| Classe Request
+| Request Class
 |--------------------------------------------------------------------------
 |
-| Esta classe representa um pedido HTTP, encapsulando informações como
-| parâmetros da rota, método HTTP, URI, dados de entrada (POST, GET),
-| arquivos, cookies, cabeçalhos, IP do cliente e user agent.
+| This class represents an HTTP request, encapsulating information such as
+| route parameters, HTTP method, URI, input data (POST, GET), files,
+| cookies, headers, client IP, and user agent.
 |
 */
 
@@ -21,7 +21,7 @@ use Slenix\Supports\Uploads\Upload;
 class Request
 {
     // -------------------------------------------------------------------------
-    // Propriedades principais
+    // Core properties
     // -------------------------------------------------------------------------
     private array   $params     = [];
     private array   $server     = [];
@@ -42,7 +42,7 @@ class Request
     private bool     $userResolved        = false;
 
     // -------------------------------------------------------------------------
-    // Configurações
+    // Configuration
     // -------------------------------------------------------------------------
     private int   $maxInputSize   = 8_388_608; // 8 MB
     private array $trustedProxies = [];
@@ -53,22 +53,18 @@ class Request
         'X-Forwarded-Port',
     ];
 
-    /** Resolver de autenticação (callable) */
+    /** Authentication resolver (callable) */
     private static mixed $authResolver = null;
 
-    /** Rate-limit store (em memória / APCu / sessão) */
+    /** Rate-limit store (memory / APCu / session) */
     private static array $rateLimitStore = [];
 
-    // =========================================================================
-    // CONSTRUTOR
-    // =========================================================================
-
     /**
-     * @param array $params   Parâmetros de rota
-     * @param array $server   Dados do servidor (padrão $_SERVER)
-     * @param array $query    Query string (padrão $_GET)
-     * @param array $cookies  Cookies (padrão $_COOKIE)
-     * @param array $files    Arquivos (padrão $_FILES)
+     * @param array $params Route parameters
+     * @param array $server Server data (default $_SERVER)
+     * @param array $query Query string (default $_GET)
+     * @param array $cookies Cookies (default $_COOKIE)
+     * @param array $files Uploaded files (default $_FILES)
      */
     public function __construct(
         array $params  = [],
@@ -85,10 +81,10 @@ class Request
     }
 
     /**
-     * Retorna o valor de um parâmetro da rota.
+     * Returns a route parameter value.
      *
-     * @param string $key A chave do parâmetro.
-     * @param mixed $default O valor padrão se a chave não existir.
+     * @param string $key Parameter key
+     * @param mixed $default Default value
      * @return mixed
      */
     public function param(string $key, mixed $default = null): mixed
@@ -97,9 +93,9 @@ class Request
     }
 
     /**
-     * Retorna todos os parâmetros da rota.
+     * Returns all route parameters.
      *
-     * @return array
+     * @return array<string, mixed>
      */
     public function params(): array
     {
@@ -107,7 +103,7 @@ class Request
     }
 
     /**
-     * Define um parâmetro da rota.
+     * Sets a route parameter.
      *
      * @param string $key
      * @param mixed $value
@@ -120,7 +116,7 @@ class Request
     }
 
     /**
-     * Define múltiplos parâmetros da rota.
+     * Sets multiple route parameters.
      *
      * @param array $params
      * @return self
@@ -132,20 +128,18 @@ class Request
     }
 
     /**
-     * Retorna o método HTTP da requisição.
+     * Returns the HTTP method of the request.
      *
-     * @return string O método HTTP em maiúsculas.
+     * @return string Uppercase HTTP method
      */
     public function method(): string
     {
-        // Cache para evitar reprocessamento
         static $method = null;
 
         if ($method !== null) {
             return $method;
         }
 
-        // Verifica método override via header ou campo oculto
         $overrideMethod = $this->getHeader('X-HTTP-Method-Override')
             ?? $this->input('_method')
             ?? null;
@@ -160,9 +154,9 @@ class Request
     }
 
     /**
-     * Retorna o caminho da URI da requisição.
+     * Returns the request URI path.
      *
-     * @return string O caminho da URI.
+     * @return string
      */
     public function uri(): string
     {
@@ -176,7 +170,7 @@ class Request
     }
 
     /**
-     * Retorna a URI completa da requisição.
+     * Returns the full request URI.
      *
      * @return string
      */
@@ -186,7 +180,7 @@ class Request
     }
 
     /**
-     * Retorna a URL completa da requisição.
+     * Returns the full request URL.
      *
      * @return string
      */
@@ -200,7 +194,6 @@ class Request
             $port = $this->getPort();
             $uri = $this->fullUri();
 
-            // Inclui porta apenas se não for padrão
             $portString = '';
             if (($scheme === 'http' && $port !== 80) || ($scheme === 'https' && $port !== 443)) {
                 $portString = ':' . $port;
@@ -213,7 +206,7 @@ class Request
     }
 
     /**
-     * Retorna apenas a URL base (sem query string).
+     * Returns base URL without query string.
      *
      * @return string
      */
@@ -224,9 +217,9 @@ class Request
     }
 
     /**
-     * Retorna a query string da requisição.
+     * Returns query string.
      *
-     * @return ?string A query string ou null se não existir.
+     * @return string|null
      */
     public function queryString(): ?string
     {
@@ -240,15 +233,14 @@ class Request
     }
 
     /**
-     * Retorna um valor de entrada (POST, GET, JSON ou corpo parseado).
+     * Returns an input value (GET, POST, JSON body).
      *
-     * @param string $key A chave do valor de entrada.
-     * @param mixed $default Valor padrão
+     * @param string $key
+     * @param mixed $default
      * @return mixed
      */
     public function input(string $key, mixed $default = null): mixed
     {
-        // Ordem de prioridade: JSON -> POST -> GET
         $parsedBody = $this->getParsedBody();
 
         if (array_key_exists($key, $parsedBody)) {
@@ -266,8 +258,8 @@ class Request
         return $default;
     }
 
-    /**
-     * Retorna todos os dados de entrada combinados.
+     /**
+     * Returns all input data merged.
      *
      * @return array
      */
@@ -277,7 +269,7 @@ class Request
     }
 
     /**
-     * Retorna apenas os campos especificados.
+     * Returns only selected fields.
      *
      * @param array|string $keys
      * @return array
@@ -290,7 +282,7 @@ class Request
     }
 
     /**
-     * Retorna todos os campos exceto os especificados.
+     * Returns all fields except selected ones.
      *
      * @param array|string $keys
      * @return array
@@ -303,7 +295,7 @@ class Request
     }
 
     /**
-     * Verifica se um campo existe nos dados de entrada.
+     * Checks if a field exists.
      *
      * @param string $key
      * @return bool
@@ -314,7 +306,7 @@ class Request
     }
 
     /**
-     * Verifica se múltiplos campos existem.
+     * Checks if any field exists.
      *
      * @param array $keys
      * @return bool
@@ -330,7 +322,7 @@ class Request
     }
 
     /**
-     * Verifica se um campo existe e não está vazio.
+     * Checks if field is filled.
      *
      * @param string $key
      * @return bool
@@ -359,7 +351,7 @@ class Request
     }
 
     /**
-     * Verifica se um campo está vazio ou ausente.
+     * Checks if field is missing or empty.
      *
      * @param string $key
      * @return bool
@@ -370,7 +362,7 @@ class Request
     }
 
     /**
-     * Retorna valor tipado como inteiro
+     * Returns value type integer.
      * 
      * @param string $key
      * @param int $default
@@ -382,7 +374,7 @@ class Request
     }
 
     /**
-     * Retorna valor tipado como float
+     * Returns value type float.
      * @param string $key
      * @param float $default
      * @return float
@@ -393,7 +385,7 @@ class Request
     }
 
     /**
-     * Retorna valor tipado como bool
+     * Returns value type bool.
      * @param string $key
      * @param bool $default
      * @return bool
@@ -405,7 +397,7 @@ class Request
     }
 
     /**
-     * Retorna valor tipado como string
+     * Returns value type string.
      * @param string $key
      * @param string $default
      * @return string
@@ -416,7 +408,7 @@ class Request
     }
 
     /**
-     * Retorna valor tipado como array
+     * Returns value type array.
      * @param string $key
      * @param array $default
      * @return array
@@ -428,7 +420,7 @@ class Request
     }
 
     /**
-     * Retorna um valor POST.
+     * Returns value type POST.
      *
      * @param string $key A chave do valor de entrada.
      * @param mixed $default Valor padrão
@@ -440,7 +432,7 @@ class Request
     }
 
     /**
-     * Retorna todos os dados POST.
+     * Returns all values type POST.
      *
      * @return array
      */
@@ -450,7 +442,7 @@ class Request
     }
 
     /**
-     * Retorna um valor GET.
+     * Returns value type GET.
      *
      * @param string $key A chave do valor de entrada.
      * @param mixed $default Valor padrão
@@ -462,7 +454,7 @@ class Request
     }
 
     /**
-     * Retorna um parâmetro de query.
+     * Return value params query.
      *
      * @param string $key
      * @param mixed $default
@@ -474,7 +466,7 @@ class Request
     }
 
     /**
-     * Retorna todos os parâmetros de query.
+     * Return all value params query.
      *
      * @return array
      */
@@ -484,50 +476,46 @@ class Request
     }
 
     /**
-     * Verifica se um arquivo foi enviado.
+     * Check if a file was uploaded.
      *
      * @param string $key
      * @return bool
      */
     public function hasFile(string $key): bool
     {
-        // Verifica se $_FILES[$key] existe, é um array e contém todas as chaves necessárias
         if (!isset($_FILES[$key]) || !is_array($_FILES[$key])) {
             return false;
         }
 
-        // Verifica chaves obrigatórias para um arquivo único
         $requiredKeys = ['name', 'tmp_name', 'size', 'error'];
         foreach ($requiredKeys as $requiredKey) {
             if (
                 !array_key_exists($requiredKey, $_FILES[$key]) ||
                 (is_array($_FILES[$key][$requiredKey]) && !isset($_FILES[$key]['name'][0]))
             ) {
-                error_log("Erro no upload: Chave obrigatória '{$requiredKey}' ausente ou inválida para a chave '{$key}'.");
+                error_log("Upload error: missing required key '{$requiredKey}' for '{$key}'");
                 return false;
             }
         }
 
-        // Para arquivos únicos, verifica se é válido
         if (!is_array($_FILES[$key]['name'])) {
             return $_FILES[$key]['error'] !== UPLOAD_ERR_NO_FILE && !empty($_FILES[$key]['tmp_name']);
         }
 
-        // Para múltiplos arquivos, verifica se pelo menos um é válido
         return is_array($_FILES[$key]['name']) && !empty($_FILES[$key]['name'][0]);
     }
 
     /**
-     * Retorna uma nova instância da classe Upload para o arquivo especificado.
+     * Return a new Upload instance for the specified file.
      *
-     * @param string $key A chave do arquivo no array $_FILES.
+     * @param string $key The file key in the $_FILES array.
      * @return Upload
      */
     public function file(string $key): Upload
     {
         $fileData = $_FILES[$key] ?? [];
         if (is_array($fileData['name']) && isset($fileData['name'][0])) {
-            // Para múltiplos arquivos, retorna o primeiro
+            // For multiple files, return the first one
             $normalizedFiles = $this->normalizeNestedFiles($fileData);
             $fileData = $normalizedFiles[0] ?? [];
         }
@@ -535,7 +523,7 @@ class Request
     }
 
     /**
-     * Retorna todos os arquivos enviados como objetos Upload.
+     * Return all uploaded files as Upload objects.
      *
      * @return array<string, Upload>
      */
@@ -549,7 +537,7 @@ class Request
     }
 
     /**
-     * Normaliza arquivos aninhados para múltiplos uploads.
+     * Normalize nested files for multiple uploads.
      *
      * @param array $fileData
      * @return array
@@ -572,10 +560,11 @@ class Request
     }
 
     /**
-     * Retorna o valor de um cookie.
+     * Retrieve a cookie value.
      *
-     * @param string $key A chave do cookie.
-     * @param mixed $default O valor padrão se a chave não existir.
+     * @param string $key The cookie key.
+     * @param mixed $default Default value if the key does not exist.
+     * @param bool $decrypt Whether to decrypt the value.
      * @return mixed
      */
     public function cookie(string $key, mixed $default = null, bool $decrypt = false): mixed
@@ -591,7 +580,7 @@ class Request
     }
 
     /**
-     * Retorna todos os cookies.
+     * Retrieve all cookies.
      *
      * @return array
      */
@@ -601,7 +590,8 @@ class Request
     }
 
     /**
-     * Verifica se existe uma chave em uma cookie
+     * Check if a cookie key exists.
+     * 
      * @param string $key
      * @return bool
      */
@@ -611,7 +601,8 @@ class Request
     }
 
     /**
-     * Retorna todos os cookies como array sanitizado.
+     * Retrieve all cookies as a sanitized array.
+     * 
      * @param bool $sanitize
      * @return array
      */
@@ -628,9 +619,9 @@ class Request
     }
 
     /**
-     * Retorna o endereço IP do cliente (considerando proxies confiáveis).
+     * Get the client's IP address (considering trusted proxies).
      *
-     * @return ?string O IP do cliente ou null.
+     * @return string|null The client's IP or null.
      */
     public function ip(): ?string
     {
@@ -640,7 +631,7 @@ class Request
             return $ip;
         }
 
-        // Se há proxies confiáveis, verifica headers de forwarding
+        // Check for trusted proxies and forwarding headers
         if (!empty($this->trustedProxies)) {
             $forwardedIp = $this->getForwardedIp();
             if ($forwardedIp) {
@@ -649,7 +640,7 @@ class Request
             }
         }
 
-        // Headers padrão para detecção de IP
+        // Standard headers for IP detection
         $headers = [
             'HTTP_CF_CONNECTING_IP',
             'HTTP_CLIENT_IP',
@@ -678,9 +669,9 @@ class Request
     }
 
     /**
-     * Retorna o user agent da requisição.
+     * Retrieve the request user agent.
      *
-     * @return ?string O user agent ou null.
+     * @return string|null The user agent or null.
      */
     public function userAgent(): ?string
     {
@@ -688,13 +679,13 @@ class Request
     }
 
     /**
-     * Retorna o host da requisição.
+     * Retrieve the request host.
      *
      * @return string
      */
     public function getHost(): string
     {
-        // Verifica headers de proxy confiável primeiro
+        // Check trusted proxy headers first
         if (!empty($this->trustedProxies)) {
             $forwardedHost = $this->getHeader('X-Forwarded-Host');
             if ($forwardedHost && $this->isTrustedProxy($this->server['REMOTE_ADDR'] ?? '')) {
@@ -707,13 +698,13 @@ class Request
     }
 
     /**
-     * Retorna a porta da requisição.
+     * Retrieve the request port.
      *
      * @return int
      */
     public function getPort(): int
     {
-        // Verifica header de proxy confiável primeiro
+        // Check trusted proxy headers first
         if (!empty($this->trustedProxies)) {
             $forwardedPort = $this->getHeader('X-Forwarded-Port');
             if ($forwardedPort && $this->isTrustedProxy($this->server['REMOTE_ADDR'] ?? '')) {
@@ -725,7 +716,7 @@ class Request
     }
 
     /**
-     * Retorna o esquema da requisição (http ou https).
+     * Retrieve the request scheme (http or https).
      *
      * @return string
      */
@@ -735,7 +726,7 @@ class Request
     }
 
     /**
-     * Verifica se a conexão é segura (HTTPS).
+     * Check if the connection is secure (HTTPS).
      *
      * @return bool
      */
@@ -747,7 +738,7 @@ class Request
             return $isSecure;
         }
 
-        // Verifica headers de proxy confiável primeiro
+        // Check trusted proxy headers first
         if (!empty($this->trustedProxies)) {
             $forwardedProto = $this->getHeader('X-Forwarded-Proto');
             if ($forwardedProto && $this->isTrustedProxy($this->server['REMOTE_ADDR'] ?? '')) {
@@ -767,9 +758,9 @@ class Request
     }
 
     /**
-     * Verifica se o método da requisição corresponde ao fornecido.
+     * Check if the request method matches the given value(s).
      *
-     * @param string|array $methods O(s) método(s) HTTP a comparar.
+     * @param string|array $methods The HTTP method(s) to compare.
      * @return bool
      */
     public function isMethod(string|array $methods): bool
@@ -779,7 +770,7 @@ class Request
     }
 
     /**
-     * Verifica se a requisição é AJAX.
+     * Check if the request is an AJAX request.
      *
      * @return bool
      */
@@ -789,7 +780,7 @@ class Request
     }
 
     /**
-     * Verifica se a requisição é JSON.
+     * Check if the request is JSON.
      *
      * @return bool
      */
@@ -800,7 +791,7 @@ class Request
     }
 
     /**
-     * Verifica se a requisição espera uma resposta JSON.
+     * Check if the request expects a JSON response.
      *
      * @return bool
      */
@@ -810,7 +801,7 @@ class Request
     }
 
     /**
-     * Verifica se a requisição quer uma resposta JSON.
+     * Check if the request wants a JSON response.
      *
      * @return bool
      */
@@ -821,7 +812,7 @@ class Request
     }
 
     /**
-     * Verifica se a requisição aceita HTML.
+     * Check if the request accepts HTML.
      *
      * @return bool
      */
@@ -832,10 +823,10 @@ class Request
     }
 
     /**
-     * Obtém um cabeçalho HTTP específico.
+     * Retrieve a specific HTTP header.
      *
-     * @param string $name Nome do cabeçalho
-     * @param mixed $default Valor padrão se o cabeçalho não existir
+     * @param string $name Header name.
+     * @param mixed $default Default value if header does not exist.
      * @return mixed
      */
     public function getHeader(string $name, mixed $default = null): mixed
@@ -845,7 +836,7 @@ class Request
     }
 
     /**
-     * Retorna todos os cabeçalhos.
+     * Retrieve all headers.
      *
      * @return array
      */
@@ -855,7 +846,7 @@ class Request
     }
 
     /**
-     * Verifica se um cabeçalho existe.
+     * Check if a header exists.
      *
      * @param string $name
      * @return bool
@@ -867,7 +858,7 @@ class Request
     }
 
     /**
-     * Retorna o valor de um cabeçalho como string.
+     * Retrieve a header value as a string.
      *
      * @param string $name
      * @param string|null $default
@@ -889,7 +880,7 @@ class Request
     }
 
     /**
-     * Define um atributo na requisição.
+     * Set an attribute on the request.
      *
      * @param string $key
      * @param mixed $value
@@ -902,7 +893,7 @@ class Request
     }
 
     /**
-     * Obtém um atributo da requisição.
+     * Retrieve an attribute from the request.
      *
      * @param string $key
      * @param mixed $default
@@ -914,17 +905,7 @@ class Request
     }
 
     /**
-     * Retorna todos os atributos.
-     *
-     * @return array
-     */
-    public function getAttributes(): array
-    {
-        return $this->attributes;
-    }
-
-    /**
-     * Remove um atributo.
+     * Remove an attribute.
      *
      * @param string $key
      * @return self
@@ -936,7 +917,7 @@ class Request
     }
 
     /**
-     * Obtém o corpo da requisição parseado.
+     * Get the parsed request body.
      *
      * @return array
      */
@@ -950,7 +931,7 @@ class Request
     }
 
     /**
-     * Obtém o conteúdo bruto da requisição.
+     * Get the raw request content.
      *
      * @return string
      */
@@ -959,9 +940,9 @@ class Request
         if ($this->rawBody === null) {
             $this->rawBody = file_get_contents('php://input');
 
-            // Verifica o tamanho do corpo
+            // Check body size
             if (strlen($this->rawBody) > $this->maxInputSize) {
-                throw new InvalidArgumentException('Corpo da requisição muito grande');
+                throw new InvalidArgumentException('Request body is too large');
             }
         }
 
@@ -969,7 +950,7 @@ class Request
     }
 
     /**
-     * Verifica se o corpo da requisição está vazio.
+     * Check if the request body is empty.
      *
      * @return bool
      */
@@ -979,7 +960,7 @@ class Request
     }
 
     /**
-     * Obtém dados do servidor.
+     * Get server data.
      *
      * @param string|null $key
      * @param mixed $default
@@ -995,10 +976,10 @@ class Request
     }
 
     /**
-     * Valida se os campos obrigatórios estão presentes e preenchidos.
+     * Validate if required fields are present and filled.
      *
      * @param array $required
-     * @return array Lista de campos faltando
+     * @return array List of missing fields
      */
     public function validate(array $required): array
     {
@@ -1014,10 +995,10 @@ class Request
     }
 
     /**
-     * Sanitiza um valor de entrada.
+     * Sanitize an input value.
      *
      * @param string $key
-     * @param string $filter Tipo de filtro
+     * @param string $filter Filter type
      * @param mixed $default
      * @return mixed
      */
@@ -1045,9 +1026,9 @@ class Request
     }
 
     /**
-     * Sanitiza múltiplos campos de uma vez.
+     * Sanitize multiple fields at once.
      *
-     * @param array $rules ['campo' => 'filtro']
+     * @param array $rules ['field' => 'filter']
      * @return array
      */
     public function sanitizeMultiple(array $rules): array
@@ -1062,7 +1043,7 @@ class Request
     }
 
     /**
-     * Obtém o referer da requisição.
+     * Get the request referer.
      *
      * @param string|null $default
      * @return string|null
@@ -1073,7 +1054,7 @@ class Request
     }
 
     /**
-     * Verifica se a requisição veio de uma origem específica.
+     * Check if the request came from a specific origin.
      *
      * @param string|array $origins
      * @return bool
@@ -1098,7 +1079,7 @@ class Request
     }
 
     /**
-     * Verifica se a requisição é de um bot/crawler.
+     * Check if the request is from a bot/crawler.
      *
      * @return bool
      */
@@ -1138,7 +1119,7 @@ class Request
     }
 
     /**
-     * Obtém informações do dispositivo baseado no User-Agent.
+     * Get device information based on User-Agent.
      *
      * @return array
      */
@@ -1165,7 +1146,7 @@ class Request
     }
 
     /**
-     * Verifica se a requisição é de um dispositivo móvel.
+     * Check if the request is from a mobile device.
      *
      * @return bool
      */
@@ -1175,7 +1156,7 @@ class Request
     }
 
     /**
-     * Verifica se a requisição é de um tablet.
+     * Check if the request is from a tablet.
      *
      * @return bool
      */
@@ -1185,7 +1166,7 @@ class Request
     }
 
     /**
-     * Verifica se a requisição é de um desktop.
+     * Check if the request is from a desktop.
      *
      * @return bool
      */
@@ -1195,7 +1176,7 @@ class Request
     }
 
     /**
-     * Obtém as linguagens aceitas pelo cliente.
+     * Get the acceptable languages from the client.
      *
      * @return array
      */
@@ -1227,9 +1208,9 @@ class Request
     }
 
     /**
-     * Obtém a linguagem preferida do cliente.
+     * Get the client's preferred language.
      *
-     * @param array $available Linguagens disponíveis
+     * @param array $available Available languages
      * @return string|null
      */
     public function getPreferredLanguage(array $available = []): ?string
@@ -1245,7 +1226,7 @@ class Request
                 return $language;
             }
 
-            // Verifica idioma base (ex: en de en-US)
+            // Check base language (e.g., "en" from "en-US")
             $baseLang = substr($language, 0, 2);
             if (in_array($baseLang, $available)) {
                 return $baseLang;
@@ -1256,7 +1237,7 @@ class Request
     }
 
     /**
-     * Define proxies confiáveis.
+     * Set trusted proxies.
      *
      * @param array $proxies
      * @return self
@@ -1268,7 +1249,7 @@ class Request
     }
 
     /**
-     * Define headers confiáveis de proxy.
+     * Set trusted proxy headers.
      *
      * @param array $headers
      * @return self
@@ -1279,10 +1260,10 @@ class Request
         return $this;
     }
 
-    /**
-     * Define o tamanho máximo do corpo da requisição.
+   /**
+     * Set the maximum request body size.
      *
-     * @param int $size Tamanho em bytes
+     * @param int $size Size in bytes
      * @return self
      */
     public function setMaxInputSize(int $size): self
@@ -1292,7 +1273,7 @@ class Request
     }
 
     /**
-     * Cria uma nova instância de Request a partir dos dados globais atuais.
+     * Create a new Request instance from current global data.
      *
      * @param array $params
      * @return self
@@ -1303,7 +1284,7 @@ class Request
     }
 
     /**
-     * Cria uma nova instância de Request para testes.
+     * Create a new Request instance for testing.
      *
      * @param string $method
      * @param string $uri
@@ -1326,7 +1307,7 @@ class Request
             'QUERY_STRING' => parse_url($uri, PHP_URL_QUERY) ?? '',
         ]);
 
-        // Define headers customizados
+        // Define custom headers
         foreach ($headers as $name => $value) {
             $headerKey = 'HTTP_' . str_replace('-', '_', strtoupper($name));
             $serverData[$headerKey] = $value;
@@ -1335,17 +1316,17 @@ class Request
         $queryParams = [];
         $postData = [];
 
-        // Define dados baseado no método
+        // Define data based on method
         if (in_array(strtoupper($method), ['POST', 'PUT', 'PATCH', 'DELETE'])) {
             $postData = $data;
-            $_POST = $data; // Para compatibilidade
+            $_POST = $data; // For compatibility
         } else {
             $queryParams = $data;
         }
 
         $request = new self([], $serverData, $queryParams);
 
-        // Se há dados JSON, simula
+        // If JSON data is present, simulate it
         if (isset($headers['Content-Type']) && str_contains($headers['Content-Type'], 'application/json')) {
             $request->parsedBody = $data;
         }
@@ -1354,7 +1335,7 @@ class Request
     }
 
     /**
-     * Converte a requisição para array (útil para debugging).
+     * Convert the request to an array (useful for debugging).
      *
      * @return array
      */
@@ -1393,7 +1374,7 @@ class Request
     }
 
     /**
-     * Debug da requisição (retorna informações formatadas).
+     * Debug the request (returns formatted information).
      *
      * @return string
      */
@@ -1403,7 +1384,7 @@ class Request
     }
 
     /**
-     * Converte a requisição para string (para logs).
+     * Convert the request to string (for logs).
      *
      * @return string
      */
@@ -1420,10 +1401,10 @@ class Request
     }
 
     /**
-     * Gera um fingerprint único da requisição com base em IP, User-Agent e outros sinais.
+     * Generate a unique request fingerprint based on IP, User-Agent, and other signals.
      *
-     * @param bool $includeSession Inclui o ID de sessão no fingerprint
-     * @return string Hash SHA-256
+     * @param bool $includeSession Include session ID in the fingerprint
+     * @return string SHA-256 hash
      */
     public function fingerprint(bool $includeSession = false): string
     {
@@ -1449,7 +1430,8 @@ class Request
     }
 
     /**
-     * Gera fingerprint parcial (mais leve, apenas IP + UA).
+     * Generate partial fingerprint (lightweight, IP + UA only).
+     * 
      * @return string
      */
     public function lightFingerprint(): string
@@ -1458,7 +1440,7 @@ class Request
     }
 
     /**
-     * Parse dos cabeçalhos HTTP.
+     * Parse HTTP headers.
      *
      * @return void
      */
@@ -1473,7 +1455,7 @@ class Request
             }
         }
 
-        // Adiciona cabeçalhos especiais que não começam com HTTP_
+        // Add special headers that don't start with HTTP_
         $specialHeaders = [
             'CONTENT_TYPE' => 'CONTENT-TYPE',
             'CONTENT_LENGTH' => 'CONTENT-LENGTH',
@@ -1489,7 +1471,7 @@ class Request
     }
 
     /**
-     * Parse do corpo da requisição baseado no Content-Type.
+     * Parse the request body based on Content-Type.
      *
      * @return void
      */
@@ -1518,21 +1500,21 @@ class Request
             } elseif (str_contains($contentType, 'application/xml') || str_contains($contentType, 'text/xml')) {
                 $this->parseXmlBody($input);
             } elseif (str_contains($contentType, 'multipart/form-data')) {
-                // Para multipart, os dados já estão em $_POST
+                // For multipart, data is already in $_POST
                 $this->parsedBody = $_POST;
             } else {
-                // Para outros tipos, armazena o conteúdo bruto
+                // For other types, store the raw content
                 $this->parsedBody = ['_raw' => $input];
             }
         } catch (\JsonException $e) {
-            throw new InvalidArgumentException('JSON inválido: ' . $e->getMessage());
+            throw new InvalidArgumentException('Invalid JSON: ' . $e->getMessage());
         } catch (\Exception $e) {
-            throw new InvalidArgumentException('Erro ao processar corpo da requisição: ' . $e->getMessage());
+            throw new InvalidArgumentException('Error processing request body: ' . $e->getMessage());
         }
     }
 
     /**
-     * Parse do corpo XML.
+     * Parse XML body.
      *
      * @param string $input
      * @return void
@@ -1551,7 +1533,7 @@ class Request
             $this->parsedBody = json_decode(json_encode($xml), true) ?? [];
         } else {
             $errors = libxml_get_errors();
-            $errorMessage = 'XML inválido';
+            $errorMessage = 'Invalid XML';
             if (!empty($errors)) {
                 $errorMessage .= ': ' . $errors[0]->message;
             }
@@ -1561,7 +1543,7 @@ class Request
     }
 
     /**
-     * Normaliza nome de cabeçalho.
+     * Normalize header name.
      *
      * @param string $name
      * @return string
@@ -1572,35 +1554,35 @@ class Request
     }
 
     /**
-     * Valida requisição básica.
+     * Validate basic request.
      *
      * @return void
      * @throws InvalidArgumentException
      */
     private function validateRequest(): void
     {
-        // Valida método HTTP
+        // Validate HTTP method
         $method = $this->method();
         $allowedMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 
         if (!in_array($method, $allowedMethods)) {
-            throw new InvalidArgumentException("Método HTTP inválido: {$method}");
+            throw new InvalidArgumentException("Invalid HTTP method: {$method}");
         }
 
-        // Valida Content-Length se presente
+        // Validate Content-Length if present
         $contentLength = $this->getHeader('Content-Length');
         if ($contentLength !== null && !is_numeric($contentLength)) {
-            throw new InvalidArgumentException('Content-Length inválido');
+            throw new InvalidArgumentException('Invalid Content-Length');
         }
 
-        // Valida tamanho máximo do corpo se configurado
+        // Validate maximum body size if configured
         if ($contentLength && (int) $contentLength > $this->maxInputSize) {
-            throw new InvalidArgumentException('Corpo da requisição muito grande');
+            throw new InvalidArgumentException('Request body is too large');
         }
     }
 
     /**
-     * Verifica se um IP é válido.
+     * Check if an IP is valid.
      *
      * @param string $ip
      * @return bool
@@ -1611,7 +1593,7 @@ class Request
     }
 
     /**
-     * Obtém IP de headers de proxy.
+     * Get IP from proxy headers.
      *
      * @return string|null
      */
@@ -1639,7 +1621,7 @@ class Request
     }
 
     /**
-     * Verifica se o IP é de um proxy confiável.
+     * Check if the IP is from a trusted proxy.
      *
      * @param string $ip
      * @return bool
@@ -1660,7 +1642,7 @@ class Request
     }
 
     /**
-     * Verifica se um IP está dentro de um range CIDR.
+     * Check if an IP is within a CIDR range.
      *
      * @param string $ip
      * @param string $range
@@ -1684,7 +1666,7 @@ class Request
     }
 
     /**
-     * Verifica se um IPv4 está no range.
+     * Check if an IPv4 is within range.
      *
      * @param string $ip
      * @param string $subnet
@@ -1701,7 +1683,7 @@ class Request
     }
 
     /**
-     * Verifica se um IPv6 está no range.
+     * Check if an IPv6 is within range.
      *
      * @param string $ip
      * @param string $subnet
@@ -1725,7 +1707,7 @@ class Request
     }
 
     /**
-     * Detecta se é dispositivo móvel.
+     * Detect if the device is mobile.
      *
      * @param string $userAgent
      * @return bool
@@ -1754,7 +1736,7 @@ class Request
     }
 
     /**
-     * Detecta se é tablet.
+     * Detect if the device is a tablet.
      *
      * @param string $userAgent
      * @return bool
@@ -1773,7 +1755,7 @@ class Request
     }
 
     /**
-     * Detecta o sistema operacional.
+     * Detect the operating system.
      *
      * @param string $userAgent
      * @return string
@@ -1805,7 +1787,7 @@ class Request
     }
 
     /**
-     * Detecta o navegador.
+     * Detect the browser.
      *
      * @param string $userAgent
      * @return string
@@ -1832,7 +1814,7 @@ class Request
     }
 
     /**
-     * Cria um slug a partir de uma string.
+     * Create a slug from a string.
      *
      * @param string $text
      * @return string

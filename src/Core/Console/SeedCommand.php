@@ -318,14 +318,11 @@ class {$name} extends Factory
         return [
             'name'       => Fake::name(),
             'email'      => Fake::email(),
+            'password'      => Fake::password(),
             'created_at' => Fake::dateTime(),
             'updated_at' => Fake::dateTime(),
         ];
     }
-
-    // =========================================================
-    // Custom States (Optional)
-    // =========================================================
 
     // public function admin(): static
     // {

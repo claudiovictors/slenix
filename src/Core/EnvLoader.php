@@ -5,9 +5,9 @@
 | EnvLoader Class — Slenix Framework
 |--------------------------------------------------------------------------
 |
-| This class is responsible for loading environment variables from a .env file.
-| It parses the file line by line, ignores comments and empty lines, and 
-| populates $_ENV, $_SERVER, and putenv().
+| Responsible for loading, parsing and resolving environment variables
+| from a .env file. Supports inline comments, variable interpolation,
+| quoted values, type casting, and validation.
 |
 */
 
@@ -20,54 +20,263 @@ class EnvLoader
     /** @var string Path to the .env file. */
     private static string $path_env = '';
 
+    /** @var array<string, mixed> Parsed variables cache. */
+    private static array $loaded = [];
+
     /**
-     * Loads environment variables from the specified file.
-     * * @param string $path_env Full path to the .env file.
-     * @throws \Exception If the .env file is not found.
+     * Loads environment variables from the specified .env file.
+     *
+     * @param  string $path_env Full path to the .env file.
+     * @param  bool   $override Whether to override existing env vars.
+     * @throws \RuntimeException If the file is not found or unreadable.
      * @return void
      */
-    public static function load(string $path_env): void
+    public static function load(string $path_env, bool $override = false): void
     {
         self::$path_env = $path_env;
 
-        if (!file_exists(self::$path_env)) {
-            throw new \Exception('.env file not found at: ' . self::$path_env);
+        if (!file_exists(self::$path_env) || !is_readable(self::$path_env)) {
+            throw new \RuntimeException('.env file not found or unreadable at: ' . self::$path_env);
         }
 
         $lines = file(self::$path_env, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 
+        if ($lines === false) {
+            throw new \RuntimeException('Failed to read .env file at: ' . self::$path_env);
+        }
+
         foreach ($lines as $line) {
-            $line = trim($line);
-
-            // Skip comments
-            if (str_starts_with($line, '#')) {
-                continue;
-            }
-
-            if (str_contains($line, '=')) {
-                list($variable, $value) = explode('=', $line, 2);
-                
-                $variable = trim($variable);
-                $value    = trim($value);
-
-                // Register variables if they don't already exist in globals
-                if (!array_key_exists($variable, $_ENV) && !array_key_exists($variable, $_SERVER)) {
-                    putenv("$variable=$value");
-                    $_ENV[$variable] = $value;
-                    $_SERVER[$variable] = $value;
-                }
-            }
+            self::parseLine(trim($line), $override);
         }
     }
 
     /**
-     * Retrieves the value of a loaded environment variable.
-     * * @param string $name
-     * @param mixed  $default
+     * Parses a single line from the .env file.
+     *
+     * @param  string $line
+     * @param  bool   $override
+     * @return void
+     */
+    private static function parseLine(string $line, bool $override): void
+    {
+        // Skip empty lines and full-line comments
+        if ($line === '' || str_starts_with($line, '#')) {
+            return;
+        }
+
+        if (!str_contains($line, '=')) {
+            return;
+        }
+
+        [$variable, $value] = explode('=', $line, 2);
+
+        $variable = trim($variable);
+        $value    = trim($value);
+
+        // Strip inline comments (e.g. VALUE=something # comment)
+        $value = self::stripInlineComment($value);
+
+        // Remove surrounding quotes (" or ')
+        $value = self::unquote($value);
+
+        // Resolve variable interpolation: ${VAR} or $VAR
+        $value = self::interpolate($value);
+
+        // Skip if already set and not overriding
+        if (!$override && (array_key_exists($variable, $_ENV) || array_key_exists($variable, $_SERVER))) {
+            return;
+        }
+
+        $castValue = self::castValue($value);
+
+        putenv("$variable=$value");
+        $_ENV[$variable]    = $castValue;
+        $_SERVER[$variable] = $castValue;
+
+        self::$loaded[$variable] = $castValue;
+    }
+
+    /**
+     * Strips inline comments from a value.
+     * Handles quoted strings (won't strip # inside quotes).
+     *
+     * @param  string $value
+     * @return string
+     */
+    private static function stripInlineComment(string $value): string
+    {
+        // If value is quoted, don't strip comments inside quotes
+        if (preg_match('/^(["\']).*\1$/', $value)) {
+            return $value;
+        }
+
+        // Remove everything from the first unquoted # 
+        $result = preg_replace('/\s+#.*$/', '', $value);
+
+        return $result ?? $value;
+    }
+
+    /**
+     * Removes surrounding single or double quotes from a value.
+     *
+     * @param  string $value
+     * @return string
+     */
+    private static function unquote(string $value): string
+    {
+        if (strlen($value) >= 2) {
+            $first = $value[0];
+            $last  = $value[-1];
+
+            if (($first === '"' && $last === '"') || ($first === "'" && $last === "'")) {
+                return substr($value, 1, -1);
+            }
+        }
+
+        return $value;
+    }
+
+    /**
+     * Resolves variable interpolation: ${VAR_NAME} and $VAR_NAME.
+     *
+     * Example:
+     *   APP_NAME=Slenix
+     *   APP_FULL=${APP_NAME}_Framework → "Slenix_Framework"
+     *
+     * @param  string $value
+     * @return string
+     */
+    private static function interpolate(string $value): string
+    {
+        // ${VAR_NAME}
+        $value = preg_replace_callback('/\$\{([A-Z_][A-Z0-9_]*)\}/', function (array $matches): string {
+            return (string) self::get($matches[1], $matches[0]);
+        }, $value) ?? $value;
+
+        // $VAR_NAME (without braces)
+        $value = preg_replace_callback('/\$([A-Z_][A-Z0-9_]*)/', function (array $matches): string {
+            return (string) self::get($matches[1], $matches[0]);
+        }, $value) ?? $value;
+
+        return $value;
+    }
+
+    /**
+     * Casts string values to their appropriate PHP types.
+     *
+     * - "true" / "false" → bool
+     * - "null" → null
+     * - Numeric strings → int or float
+     * - Everything else → string
+     *
+     * @param  string $value
      * @return mixed
      */
-    public function get(string $name, mixed $default = null): mixed
+    private static function castValue(string $value): mixed
     {
-        return getenv($name) ?: $default;
+        $lower = strtolower($value);
+
+        return match (true) {
+            $lower === 'true'        => true,
+            $lower === 'false'       => false,
+            $lower === 'null'        => null,
+            $lower === 'empty'       => '',
+            ctype_digit($value)      => (int) $value,
+            is_numeric($value)       => (float) $value,
+            default                  => $value,
+        };
+    }
+
+    /**
+     * Retrieves the value of an environment variable with optional type casting.
+     *
+     * @param  string $name    Variable name.
+     * @param  mixed  $default Default value if not found.
+     * @param  string|null $cast  Optional: 'int', 'float', 'bool', 'string', 'array'
+     * @return mixed
+     */
+    public static function get(string $name, mixed $default = null, ?string $cast = null): mixed
+    {
+        $value = self::$loaded[$name] ?? getenv($name);
+
+        if ($value === false || $value === null) {
+            return $default;
+        }
+
+        if ($cast !== null) {
+            return match ($cast) {
+                'int'    => (int) $value,
+                'float'  => (float) $value,
+                'bool'   => filter_var($value, FILTER_VALIDATE_BOOLEAN),
+                'string' => (string) $value,
+                'array'  => array_map('trim', explode(',', (string) $value)),
+                default  => $value,
+            };
+        }
+
+        return $value;
+    }
+
+    /**
+     * Checks whether an environment variable exists.
+     *
+     * @param  string $name
+     * @return bool
+     */
+    public static function has(string $name): bool
+    {
+        return isset(self::$loaded[$name]) || getenv($name) !== false;
+    }
+
+    /**
+     * Returns all loaded environment variables.
+     *
+     * @return array<string, mixed>
+     */
+    public static function all(): array
+    {
+        return self::$loaded;
+    }
+
+    /**
+     * Validates that required environment variables are present and non-empty.
+     *
+     * @param  string[] $required List of required variable names.
+     * @throws \RuntimeException If any required variables are missing.
+     * @return void
+     */
+    public static function validate(array $required): void
+    {
+        $missing = [];
+
+        foreach ($required as $key) {
+            if (!self::has($key) || self::get($key) === '' || self::get($key) === null) {
+                $missing[] = $key;
+            }
+        }
+
+        if (!empty($missing)) {
+            throw new \RuntimeException(
+                'Missing required environment variables: ' . implode(', ', $missing)
+            );
+        }
+    }
+
+    /**
+     * Reloads the .env file from scratch, clearing all previously loaded vars.
+     *
+     * @param  bool $override Whether to override existing env vars on reload.
+     * @return void
+     */
+    public static function reload(bool $override = true): void
+    {
+        foreach (self::$loaded as $key => $_) {
+            putenv($key);
+            unset($_ENV[$key], $_SERVER[$key]);
+        }
+
+        self::$loaded = [];
+
+        self::load(self::$path_env, $override);
     }
 }

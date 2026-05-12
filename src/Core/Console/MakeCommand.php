@@ -102,7 +102,9 @@ class MakeCommand extends Command
         echo PHP_EOL;
         self::success("APP_KEY generated and saved to .env.");
         echo PHP_EOL;
-        self::info("Key: {$key}");
+        echo '  '
+            . self::console()->muted($key)
+            . PHP_EOL;
         echo PHP_EOL;
     }
 
@@ -726,7 +728,8 @@ EOT;
     {
         if (file_exists($path)) {
             echo PHP_EOL;
-            self::error("{$type} '{$name}' already exists at {$path}.");
+            self::error("{$type} '{$name}' already exists.");
+            echo '  ' . self::console()->muted($path) . PHP_EOL;
             echo PHP_EOL;
             exit(1);
         }

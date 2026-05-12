@@ -10,11 +10,6 @@
 |
 | Supported DB drivers: mysql | pgsql | sqlite
 |
-| SQLite usage:
-|   DB_CONNECTION=sqlite
-|   DB_HOST=/absolute/path/to/database.sqlite
-|       or DB_HOST=:memory: for an in-memory database (tests only)
-|
 */
 
 declare(strict_types=1);

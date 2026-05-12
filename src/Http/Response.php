@@ -41,6 +41,13 @@ class Response
     /** @var array Queued cookies to be sent */
     private array $cookies = [];
 
+    /**
+     * Registered macro methods, keyed by name.
+     *
+     * @var array<string, callable>
+     */
+    private static array $macros = [];
+
     /** @var array<int, string> */
     private static array $statusTexts = [
         100 => 'Continue',
@@ -63,9 +70,12 @@ class Response
         405 => 'Method Not Allowed',
         408 => 'Request Timeout',
         409 => 'Conflict',
+        410 => 'Gone',
         413 => 'Payload Too Large',
         415 => 'Unsupported Media Type',
+        419 => 'Page Expired',
         422 => 'Unprocessable Entity',
+        423 => 'Locked',
         429 => 'Too Many Requests',
         500 => 'Internal Server Error',
         501 => 'Not Implemented',
@@ -862,6 +872,360 @@ class Response
             ->sendHeaders();
 
         $callback();
+        $this->sent = true;
+    }
+
+    /**
+     * Register a custom macro method on the Response class.
+     *
+     * Macros allow third-party packages or application code to extend the
+     * Response class without inheritance. The callable receives the Response
+     * instance as its first argument followed by any arguments passed at
+     * call time.
+     *
+     * @example
+     *   Response::macro('teapot', fn(Response $res) => $res->status(418)->send("I'm a teapot"));
+     *   $res->teapot();
+     *
+     * @param  string   $name      Method name to register.
+     * @param  callable $callback  Callable with signature: fn(Response $res, mixed ...$args): mixed
+     * @return void
+     */
+    public static function macro(string $name, callable $callback): void
+    {
+        self::$macros[$name] = $callback;
+    }
+
+    /**
+     * Check whether a macro with the given name has been registered.
+     *
+     * @param  string $name Macro method name.
+     * @return bool
+     */
+    public static function hasMacro(string $name): bool
+    {
+        return isset(self::$macros[$name]);
+    }
+
+    /**
+     * Dispatch calls to registered macros.
+     *
+     * @param  string  $name      Macro name.
+     * @param  array   $arguments Arguments forwarded to the macro callable.
+     * @throws \BadMethodCallException When no macro with the given name exists.
+     * @return mixed
+     */
+    public function __call(string $name, array $arguments): mixed
+    {
+        if (!isset(self::$macros[$name])) {
+            throw new \BadMethodCallException("Response macro [{$name}] is not defined.");
+        }
+
+        return (self::$macros[$name])($this, ...$arguments);
+    }
+
+    /**
+     * Execute a callback with this Response instance and return the instance.
+     *
+     * Useful for performing side effects (logging, auditing, debugging) inside
+     * a fluent method chain without breaking it.
+     *
+     * @example
+     *   $res->tap(fn($r) => logger()->info((string) $r))->json($data);
+     *
+     * @param  callable $callback  Callable with signature: fn(Response $res): void
+     * @return self
+     */
+    public function tap(callable $callback): self
+    {
+        $callback($this);
+        return $this;
+    }
+
+    /**
+     * Conditionally apply a callback to the Response when the condition is truthy.
+     *
+     * The callback receives the Response instance and must return it (or a new
+     * Response). When the condition is falsy, the Response is returned unchanged.
+     * An optional $default callback runs when the condition is false.
+     *
+     * @example
+     *   $res->when($req->wantsJson(), fn($r) => $r->withHeader('X-Api', '1'))->json($data);
+     *
+     * @param  mixed         $condition  Truthy/falsy value that controls branching.
+     * @param  callable      $callback   Applied when $condition is truthy: fn(Response): Response
+     * @param  callable|null $default    Applied when $condition is falsy: fn(Response): Response
+     * @return self
+     */
+    public function when(mixed $condition, callable $callback, ?callable $default = null): self
+    {
+        if ($condition) {
+            return $callback($this) ?? $this;
+        }
+
+        if ($default !== null) {
+            return $default($this) ?? $this;
+        }
+
+        return $this;
+    }
+
+    /**
+     * Apply standard rate-limit headers to the response.
+     *
+     * Accepts the array returned by {@see \Slenix\Supports\Security\RateLimit::attempt()}
+     * and maps its fields to the de-facto standard {@code X-\RateLimit-*} headers.
+     * When the limit has been exceeded, a {@code Retry-After} header is also added.
+     *
+     * @example
+     *   $limit = $req->rateLimit('api', 100, 60);
+     *   $res->withRateLimitHeaders($limit)->json($data);
+     *
+     * @param  array{
+     *     allowed: bool,
+     *     attempts: int,
+     *     max_attempts: int,
+     *     remaining: int,
+     *     reset_at: int,
+     *     retry_after: int
+     * } $limit  Result array from RateLimit::attempt().
+     * @return self
+     */
+    public function withRateLimitHeaders(array $limit): self
+    {
+        $this->withHeaders([
+            'X-RateLimit-Limit' => (string) $limit['max_attempts'],
+            'X-RateLimit-Remaining' => (string) $limit['remaining'],
+            'X-RateLimit-Reset' => (string) $limit['reset_at'],
+            'X-RateLimit-Used' => (string) $limit['attempts'],
+        ]);
+
+        if (!$limit['allowed'] && $limit['retry_after'] > 0) {
+            $this->withHeader('Retry-After', (string) $limit['retry_after']);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Send a 405 Method Not Allowed response.
+     *
+     * The {@code Allow} header is required by RFC 9110 §15.5.6 and must list
+     * every method the resource supports.
+     *
+     * @param  string[] $allowedMethods  HTTP methods accepted by this endpoint.
+     * @param  string   $message         Optional custom message.
+     * @return void
+     */
+    public function methodNotAllowed(
+        array $allowedMethods = [],
+        string $message = 'Method Not Allowed.'
+    ): void {
+        if (!empty($allowedMethods)) {
+            $this->withHeader('Allow', implode(', ', array_map('strtoupper', $allowedMethods)));
+        }
+
+        $this->error($message, 405);
+    }
+
+    /**
+     * Send a 409 Conflict response.
+     *
+     * Use when the request conflicts with the current state of the resource
+     * (e.g. duplicate unique key, optimistic-lock mismatch).
+     *
+     * @param  string $message  Human-readable description of the conflict.
+     * @param  array  $details  Optional structured details (e.g. conflicting field).
+     * @return void
+     */
+    public function conflict(string $message = 'Conflict.', array $details = []): void
+    {
+        $this->error($message, 409, $details);
+    }
+
+    /**
+     * Send a 410 Gone response.
+     *
+     * Indicates that the resource has been permanently removed and no
+     * forwarding address is known. Prefer this over 404 when the removal
+     * is intentional and permanent.
+     *
+     * @param  string $message
+     * @return void
+     */
+    public function gone(string $message = 'Gone.'): void
+    {
+        $this->error($message, 410);
+    }
+
+    /**
+     * Send a 423 Locked response.
+     *
+     * Indicates that the resource is currently locked (e.g. being edited
+     * by another user, or locked by a distributed lock).
+     *
+     * @param  string $message
+     * @return void
+     */
+    public function locked(string $message = 'Resource is locked.'): void
+    {
+        $this->error($message, 423);
+    }
+
+    /**
+     * Send a 501 Not Implemented response.
+     *
+     * Use for endpoints that are planned but not yet built, so clients
+     * can distinguish "doesn't exist" (404) from "not ready yet" (501).
+     *
+     * @param  string $message
+     * @return void
+     */
+    public function notImplemented(string $message = 'Not Implemented.'): void
+    {
+        $this->error($message, 501);
+    }
+
+    /**
+     * Send a 503 Service Unavailable response.
+     *
+     * Optionally sets a {@code Retry-After} header so well-behaved clients
+     * know when to retry. Pass null to omit the header.
+     *
+     * @param  string   $message     Human-readable reason (e.g. "Maintenance window").
+     * @param  int|null $retryAfter  Seconds until the service is expected to recover.
+     * @return void
+     */
+    public function serviceUnavailable(
+        string $message = 'Service Unavailable.',
+        ?int $retryAfter = null
+    ): void {
+        if ($retryAfter !== null) {
+            $this->withHeader('Retry-After', (string) $retryAfter);
+        }
+
+        $this->error($message, 503);
+    }
+
+    /**
+     * Store key/value pairs in the session for retrieval on the next request (flash data).
+     *
+     * Flash data is automatically available in the next request and then discarded.
+     * Follows the standard PRG (Post / Redirect / Get) pattern.
+     *
+     * @example
+     *   $res->withFlash('success', 'Profile updated!')->redirect('/profile');
+     *
+     * @param  string $key    Flash key.
+     * @param  mixed  $value  Any serialisable value to flash.
+     * @return self
+     */
+    public function withFlash(string $key, mixed $value): self
+    {
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            session_start();
+        }
+
+        $_SESSION['_flash'][$key] = $value;
+
+        return $this;
+    }
+
+    /**
+     * Store multiple flash entries in a single call.
+     *
+     * @param  array<string, mixed> $data  Associative array of key → value pairs to flash.
+     * @return self
+     */
+    public function withFlashData(array $data): self
+    {
+        foreach ($data as $key => $value) {
+            $this->withFlash($key, $value);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Redirect to a named application route.
+     *
+     * Resolves the route name through the global {@code route()} helper (if
+     * available) and falls back to using the name as a raw URL when the helper
+     * is not registered.
+     *
+     * @example
+     *   $res->redirectRoute('user.profile', ['id' => 42]);
+     *
+     * @param  string $name        Named route identifier.
+     * @param  array  $params      Route parameters forwarded to the resolver.
+     * @param  int    $statusCode  HTTP redirect status (301, 302, 303, 307, 308).
+     * @return void
+     */
+    public function redirectRoute(string $name, array $params = [], int $statusCode = 302): void
+    {
+        $url = function_exists('route') ? route($name, $params) : $name;
+        $this->redirect($url, $statusCode);
+    }
+
+    /**
+     * Initiate a Server-Sent Events (SSE) stream.
+     *
+     * Configures the correct headers for an SSE connection, disables output
+     * buffering, and invokes the callback with a pre-built sender callable.
+     * The sender callable accepts the event data, an optional event name,
+     * and an optional event ID.
+     *
+     * @example
+     *   $res->sse(function(callable $send) {
+     *       foreach ($notifications as $n) {
+     *           $send($n->toArray(), 'notification', $n->id);
+     *       }
+     *   });
+     *
+     * @param  callable $callback     Receives fn(mixed $data, string $event, string|int|null $id): void
+     * @param  int      $retryMs      Client reconnection interval in milliseconds (default: 3000).
+     * @param  int      $statusCode   HTTP status for the SSE response (default: 200).
+     * @return void
+     */
+    public function sse(callable $callback, int $retryMs = 3_000, int $statusCode = 200): void
+    {
+        $this->status($statusCode)
+            ->withContentType('text/event-stream')
+            ->withHeaders([
+                'Cache-Control' => 'no-cache',
+                'X-Accel-Buffering' => 'no',
+                'Connection' => 'keep-alive',
+            ])
+            ->sendHeaders();
+
+        // Disable all output buffering layers
+        while (ob_get_level() > 0) {
+            ob_end_flush();
+        }
+
+        echo "retry: {$retryMs}\n\n";
+        flush();
+
+        $send = function (mixed $data, string $event = 'message', string|int|null $id = null) {
+            if ($id !== null) {
+                echo "id: {$id}\n";
+            }
+
+            echo "event: {$event}\n";
+
+            $encoded = is_string($data) ? $data : json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+            // Each data line must be prefixed — newlines inside data must be split
+            foreach (explode("\n", $encoded) as $line) {
+                echo "data: {$line}\n";
+            }
+
+            echo "\n";
+            flush();
+        };
+
+        $callback($send);
+
         $this->sent = true;
     }
 

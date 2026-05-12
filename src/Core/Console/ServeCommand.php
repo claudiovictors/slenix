@@ -50,10 +50,11 @@ class ServeCommand extends Command
     }
 
     /**
-     * Parses CLI flags and starts the appropriate server(s).
+     * Executes the console command to start the development server.
      *
-     * When --ws is supplied, the WebSocket server is started in a child process
-     * (no files written to disk) and the HTTP server runs in the foreground.
+     * This method parses incoming flags, validates port ranges, and renders
+     * a clean, minimalist CLI interface inspired by Laravel. It supports
+     * both the standard HTTP server and the optional WebSocket process.
      *
      * @return void
      */
@@ -64,6 +65,7 @@ class ServeCommand extends Command
         $wsPort = self::DEFAULT_WS_PORT;
         $withWs = false;
 
+        // Parse arguments for ports and flags
         foreach ($this->args as $arg) {
             if ($arg === '--ws') {
                 $withWs = true;
@@ -76,48 +78,48 @@ class ServeCommand extends Command
             }
         }
 
+        // Validation logic
         if ($port < 1 || $port > 65535) {
-            self::error('Invalid HTTP port. Use a number between 1 and 65535.');
-            exit(1);
-        }
-
-        if ($withWs && ($wsPort < 1 || $wsPort > 65535)) {
-            self::error('Invalid WebSocket port. Use a number between 1 and 65535.');
+            self::error('Invalid HTTP port (1-65535).');
             exit(1);
         }
 
         $host      = '127.0.0.1';
         $publicDir = PUBLIC_PATH;
 
-        echo PHP_EOL;
-        echo $c->colorize("  ▾ Celestial Dev Server", 'white', true) . PHP_EOL;
+        // Clean Laravel-style Header
+        self::newLine();
+        echo "  " . $c->colorize("SLENIX", 'primary', true) . $c->white(" Development Server") . PHP_EOL;
+        self::newLine();
 
+        // Directory check (silent if exists, muted if creating)
         if (!is_dir($publicDir)) {
-            echo $c->colorize("  - Creating public directory...", 'white') . PHP_EOL;
-            if (!mkdir($publicDir, 0755, true)) {
-                self::error('Failed to create public directory.');
-                exit(1);
-            }
+            echo "  " . $c->muted("Creating public directory...") . PHP_EOL;
+            mkdir($publicDir, 0755, true);
         }
 
-        echo PHP_EOL;
-        echo $c->colorize("  ➜ Local:   ", 'cyan') . "http://{$host}:{$port}" . PHP_EOL;
-        echo $c->colorize("  ➜ Network: ", 'cyan') . "http://0.0.0.0:{$port}" . PHP_EOL;
-
+        // Main Information Block
+        echo "  " . $c->muted("Server running on ") . $c->white("http://{$host}:{$port}") . PHP_EOL;
+        
         if ($withWs) {
-            echo $c->colorize("  ➜ WS:      ", 'cyan') . "ws://{$host}:{$wsPort}" . PHP_EOL;
+            echo "  " . $c->muted("WebSockets active ") . $c->colorize("ws://{$host}:{$wsPort}", 'purple') . PHP_EOL;
         }
 
-        echo PHP_EOL;
-        echo $c->colorize("   press Ctrl+C to stop", 'red') . PHP_EOL;
-        echo PHP_EOL;
+        self::newLine();
+        
+        // Minimalist footer
+        echo "  " . $c->muted("Press ") . $c->colorize("Ctrl+C", 'warning') . $c->muted(" to stop the server.") . PHP_EOL;
+        
+        self::newLine();
 
         if ($withWs) {
             $this->startWithWebSocket($host, $port, $wsPort, $publicDir);
         } else {
+            // Start the built-in PHP server
             passthru("php -S {$host}:{$port} -t {$publicDir}");
         }
     }
+    
 
     /**
      * Starts the WebSocket server in a child process and the HTTP server in

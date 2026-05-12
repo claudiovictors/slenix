@@ -234,10 +234,6 @@ class Luna
         return new self('');
     }
 
-    // =========================================================================
-    // Cache Management
-    // =========================================================================
-
     /**
      * Clears both in-memory and disk caches.
      * Called by: php celestial view:clear
@@ -312,10 +308,6 @@ class Luna
             'directory'  => self::$cacheDir,
         ];
     }
-
-    // =========================================================================
-    // Constructor & Rendering
-    // =========================================================================
 
     /**
      * Creates a new Luna template instance.
@@ -445,10 +437,6 @@ class Luna
         }
     }
 
-    // =========================================================================
-    // Static Helpers
-    // =========================================================================
-
     /**
      * Static factory — renders a template and returns the output string.
      *
@@ -506,10 +494,6 @@ class Luna
         }
         throw new RuntimeException('None of the specified views exist: ' . implode(', ', $views));
     }
-
-    // =========================================================================
-    // Compilation Pipeline
-    // =========================================================================
 
     /**
      * Retrieves compiled template source — from memory cache, disk cache, or compiles fresh.
@@ -601,7 +585,7 @@ class Luna
             mkdir($dir, 0755, true);
         }
 
-        $header = "<?php /* Luna Cache | v2.6 | Source: {$viewPath} | Generated: " . date('Y-m-d H:i:s') . " */ ?>\n";
+        $header = "<?php /* Luna Cache | v2.7 | Source: {$viewPath} | Generated: " . date('Y-m-d H:i:s') . " */ ?>\n";
         $result = file_put_contents($cachePath, $header . $compiled, LOCK_EX);
 
         if ($result === false) {
@@ -653,10 +637,6 @@ class Luna
 
         return ob_get_clean() ?: '';
     }
-
-    // =========================================================================
-    // Compile Pipeline
-    // =========================================================================
 
     /**
      * Runs the full compilation pipeline on raw template source.
@@ -839,10 +819,6 @@ class Luna
         return $source;
     }
 
-    // =========================================================================
-    // Directive Compilers
-    // =========================================================================
-
     // ---- @extends -----------------------------------------------------------
 
     private function compileLayouts(string $source): string
@@ -965,9 +941,9 @@ class Luna
         $source = preg_replace('/@break\b/',     '<?php break; ?>',     $source) ?? $source;
 
         // @auth / @guest
-        $source = preg_replace('/@auth\b/',     "<?php if(!empty(\$_SESSION['auth_id'])): ?>", $source) ?? $source;
+        $source = preg_replace('/@auth\b/',     "<?php if(!empty(auth()->check()): ?>", $source) ?? $source;
         $source = preg_replace('/@endauth\b/',  '<?php endif; ?>',                             $source) ?? $source;
-        $source = preg_replace('/@guest\b/',    "<?php if(empty(\$_SESSION['auth_id'])): ?>",  $source) ?? $source;
+        $source = preg_replace('/@guest\b/',    "<?php if(empty(auth()->check()): ?>",  $source) ?? $source;
         $source = preg_replace('/@endguest\b/', '<?php endif; ?>',                             $source) ?? $source;
 
         // @role('admin') — checks $_SESSION['auth_role']

@@ -70,6 +70,62 @@ class QueryBuilder
         return $this;
     }
 
+    /**
+     * Updates rows matching the current WHERE constraints.
+     *
+     * @param  array<string, mixed> $data Column => value pairs.
+     * @return int                  Number of affected rows.
+     * @throws \LogicException      When called without any WHERE constraint.
+     */
+    public function update(array $data): int
+    {
+        if (empty($this->wheres)) {
+            throw new \LogicException(
+                'Calling update() without a WHERE clause would affect every row. ' .
+                'Use a WHERE constraint or call updateAll() if that is intentional.'
+            );
+        }
+
+        $setParts = [];
+        $bindings = [];
+
+        foreach ($data as $col => $val) {
+            $p = $this->generateParamName();
+            $setParts[] = "`{$col}` = :{$p}";
+            $bindings[$p] = $val;
+        }
+
+        $sql = "UPDATE `{$this->table}` SET " . implode(', ', $setParts);
+        $sql .= ' WHERE ' . $this->buildWhereClause();
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute(array_merge($bindings, $this->bindings));
+
+        return $stmt->rowCount();
+    }
+
+    /**
+     * Deletes rows matching the current WHERE constraints.
+     *
+     * @return int Number of deleted rows.
+     * @throws \LogicException When called without any WHERE clause.
+     */
+    public function delete(): int
+    {
+        if (empty($this->wheres)) {
+            throw new \LogicException(
+                'Calling delete() without a WHERE clause would truncate the table. ' .
+                'Use truncate() if that is intentional.'
+            );
+        }
+
+        $sql = "DELETE FROM `{$this->table}` WHERE " . $this->buildWhereClause();
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($this->bindings);
+
+        return $stmt->rowCount();
+    }
+
     // =========================================================
     // WHERE
     // =========================================================
@@ -101,8 +157,66 @@ class QueryBuilder
         return $this;
     }
 
-    public function orWhere(string $column, mixed $operator = null, mixed $value = null): static
+    /**
+     * Adds a nested WHERE group using a callback (AND boolean).
+     *
+     * The callback receives a fresh QueryBuilder instance. Any wheres
+     * added inside it are wrapped in parentheses in the final SQL.
+     *
+     * @example
+     * User::where('active', 1)
+     *     ->where(function($q) {
+     *         $q->where('role', 'admin')
+     *           ->orWhere('role', 'moderator');
+     *     })
+     *     ->get();
+     * // WHERE `active` = 1 AND (`role` = 'admin' OR `role` = 'moderator')
+     *
+     * @param  callable $callback Receives QueryBuilder $query.
+     * @return static
+     */
+    public function whereCallback(callable $callback): static
     {
+        return $this->whereNested($callback, 'AND');
+    }
+
+    /**
+     * Adds a nested WHERE group using a callback (OR boolean).
+     *
+     * @example
+     * User::where('active', 1)
+     *     ->orWhereCallback(function($q) {
+     *         $q->where('role', 'admin')
+     *           ->where('verified', 1);
+     *     })
+     *     ->get();
+     * // WHERE `active` = 1 OR (`role` = 'admin' AND `verified` = 1)
+     *
+     * @param  callable $callback Receives QueryBuilder $query.
+     * @return static
+     */
+    public function orWhereCallback(callable $callback): static
+    {
+        return $this->whereNested($callback, 'OR');
+    }
+
+    /**
+     * Adds an OR WHERE clause. Accepts a callback for grouped conditions.
+     *
+     * @example ->orWhere('role', 'admin')
+     * @example ->orWhere(fn($q) => $q->where('role', 'admin')->where('active', 1))
+     *
+     * @param  string|callable $column
+     * @param  mixed           $operator
+     * @param  mixed           $value
+     * @return static
+     */
+    public function orWhere(string|callable $column, mixed $operator = null, mixed $value = null): static
+    {
+        if (is_callable($column)) {
+            return $this->whereNested($column, 'OR');
+        }
+
         return $this->where($column, $operator, $value, 'OR');
     }
 

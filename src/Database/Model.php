@@ -987,6 +987,255 @@ abstract class Model implements \JsonSerializable
     }
 
     /**
+     * Adds a nested WHERE group using a callback (AND boolean).
+     *
+     * The callback receives a QueryBuilder instance. All conditions added
+     * inside it are wrapped in parentheses in the final SQL.
+     *
+     * @example
+     * User::where('active', 1)
+     *     ->where(function($q) {
+     *         $q->where('role', 'admin')
+     *           ->orWhere('role', 'moderator');
+     *     })
+     *     ->get();
+     * // WHERE `active` = 1 AND (`role` = 'admin' OR `role` = 'moderator')
+     *
+     * @param  callable $callback Receives QueryBuilder $query.
+     * @return QueryBuilder
+     */
+    public static function whereNested(callable $callback): QueryBuilder
+    {
+        return static::newQuery()->whereNested($callback, 'AND');
+    }
+
+    /**
+     * Adds a nested OR WHERE group using a callback.
+     *
+     * @example
+     * User::where('suspended', 0)
+     *     ->orWhere(function($q) {
+     *         $q->where('role', 'admin')
+     *           ->where('verified', 1);
+     *     })
+     *     ->get();
+     * // WHERE `suspended` = 0 OR (`role` = 'admin' AND `verified` = 1)
+     *
+     * @param  callable $callback Receives QueryBuilder $query.
+     * @return QueryBuilder
+     */
+    public static function orWhereNested(callable $callback): QueryBuilder
+    {
+        return static::newQuery()->whereNested($callback, 'OR');
+    }
+
+    /**
+     * Updates all records matching the given WHERE conditions.
+     *
+     * Unlike the instance method update(), this is a static bulk operation
+     * that never triggers model hooks or dirty tracking.
+     *
+     * @example User::updateWhere(['active' => 0], ['banned_at' => now()])
+     *
+     * @param  array<string, mixed> $conditions Column => value pairs used as WHERE constraints.
+     * @param  array<string, mixed> $data       Column => value pairs to set.
+     * @return int                              Number of affected rows.
+     */
+    public static function updateWhere(array $conditions, array $data): int
+    {
+        $query = static::newQuery();
+        foreach ($conditions as $col => $val) {
+            $query->where($col, '=', $val);
+        }
+        return $query->update($data);
+    }
+
+    /**
+     * Deletes all records matching the given WHERE conditions.
+     *
+     * Respects soft delete — sets `deleted_at` instead of removing rows
+     * when the model has soft delete enabled.
+     *
+     * @example Post::deleteWhere(['user_id' => 5])
+     *
+     * @param  array<string, mixed> $conditions Column => value pairs used as WHERE constraints.
+     * @return int                              Number of affected rows.
+     */
+    public static function deleteWhere(array $conditions): int
+    {
+        $instance = new static();
+        $query = static::newQuery();
+
+        foreach ($conditions as $col => $val) {
+            $query->where($col, '=', $val);
+        }
+
+        if ($instance->softDelete) {
+            return $query->update([$instance->deletedAt => date('Y-m-d H:i:s')]);
+        }
+
+        return $query->delete();
+    }
+
+    /**
+     * Registers multiple lifecycle hooks at once from an array map.
+     *
+     * Useful in service providers or boot() methods to keep hook
+     * registration compact and readable.
+     *
+     * @example
+     * User::registerHooks([
+     *     'creating' => fn($u) => $u->uuid = Str::uuid(),
+     *     'deleting' => fn($u) => logger("Deleting user {$u->id}"),
+     * ]);
+     *
+     * @param  array<string, callable> $hooks Event name => callback map.
+     * @return void
+     */
+    public static function registerHooks(array $hooks): void
+    {
+        foreach ($hooks as $event => $callback) {
+            static::on($event, $callback);
+        }
+    }
+
+    /**
+     * Temporarily disables all lifecycle hooks for the duration of the callback.
+     *
+     * Useful for seeding, migrations, or bulk operations where hooks
+     * would cause side-effects or performance issues.
+     *
+     * @example
+     * User::withoutHooks(function() {
+     *     User::create(['name' => 'Seed User', 'email' => 'seed@example.com']);
+     * });
+     *
+     * @param  callable $callback Operations to execute without hook firing.
+     * @return void
+     */
+    public static function withoutHooks(callable $callback): void
+    {
+        $backup = static::$hooks[static::class] ?? [];
+        static::$hooks[static::class] = [];
+
+        try {
+            $callback();
+        } finally {
+            static::$hooks[static::class] = $backup;
+        }
+    }
+
+    /**
+     * Converts a Collection of models to a plain array of arrays.
+     *
+     * Shorthand for $collection->map(fn($m) => $m->toArray())->all()
+     *
+     * @example User::all()->toArrayOfArrays()
+     *
+     * @param  Collection $collection
+     * @return array<int, array<string, mixed>>
+     */
+    public static function toArrayOfArrays(Collection $collection): array
+    {
+        return array_map(fn($model) => $model->toArray(), $collection->all());
+    }
+
+    /**
+     * Returns the model as a stdClass object (plain object, not model instance).
+     *
+     * Useful when passing data to third-party libraries that expect plain objects.
+     *
+     * @return \stdClass
+     */
+    public function toObject(): \stdClass
+    {
+        return (object) $this->toArray();
+    }
+
+    /**
+     * Appends one or more computed attributes to the serialization output
+     * at runtime, without modifying the model's $appends property.
+     *
+     * @example $user->append(['full_name', 'avatar_url'])->toArray()
+     *
+     * @param  string|string[] $attributes Accessor names (without get/Attribute).
+     * @return static Fluent.
+     */
+    public function append(string|array $attributes): static
+    {
+        $this->appends = array_unique(
+            array_merge($this->appends, (array) $attributes)
+        );
+        return $this;
+    }
+
+    /**
+     * Hides one or more attributes from serialization at runtime,
+     * without modifying the model's $hidden property.
+     *
+     * @example $user->makeHidden('password')->toArray()
+     *
+     * @param  string|string[] $attributes Attribute name(s) to hide.
+     * @return static Fluent.
+     */
+    public function makeHidden(string|array $attributes): static
+    {
+        $this->hidden = array_unique(
+            array_merge($this->hidden, (array) $attributes)
+        );
+        return $this;
+    }
+
+    /**
+     * Exposes one or more hidden attributes for serialization at runtime,
+     * without modifying the model's $hidden property.
+     *
+     * @example $user->makeVisible('password')->toArray()
+     *
+     * @param  string|string[] $attributes Attribute name(s) to expose.
+     * @return static Fluent.
+     */
+    public function makeVisible(string|array $attributes): static
+    {
+        $this->hidden = array_values(
+            array_diff($this->hidden, (array) $attributes)
+        );
+        return $this;
+    }
+
+    /**
+     * Executes a callback inside a database transaction.
+     *
+     * Automatically commits on success and rolls back on any exception.
+     * Re-throws the original exception after rollback so the caller can handle it.
+     *
+     * @example
+     * User::transaction(function() {
+     *     $user = User::create([...]);
+     *     Profile::create(['user_id' => $user->id, ...]);
+     * });
+     *
+     * @param  callable $callback Operations to execute inside the transaction.
+     * @return mixed              Return value of the callback.
+     *
+     * @throws \Throwable Re-throws any exception raised inside the callback.
+     */
+    public static function transaction(callable $callback): mixed
+    {
+        $pdo = Connection::getInstance();
+        $pdo->beginTransaction();
+
+        try {
+            $result = $callback();
+            $pdo->commit();
+            return $result;
+        } catch (\Throwable $e) {
+            $pdo->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
      * Add an "order by" clause for the most recent record.
      *
      * @param string $column

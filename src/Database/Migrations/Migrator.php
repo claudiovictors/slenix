@@ -25,6 +25,7 @@ declare(strict_types=1);
 namespace Slenix\Database\Migrations;
 
 use PDO;
+use PDOException;
 use RuntimeException;
 use Slenix\Database\Connection;
 
@@ -41,29 +42,182 @@ class Migrator
     protected string $migrationsPath;
 
     /**
+     * Callable that receives a string question and returns the user's input.
+     * Used for interactive prompts (database creation confirmation, etc.).
+     * Defaults to reading from STDIN.
+     *
+     * @var callable
+     */
+    protected $promptHandler;
+
+    /**
+     * When true, SQL is printed but never executed (dry-run / pretend mode).
+     *
+     * @var bool
+     */
+    protected bool $pretend = false;
+
+    /**
+     * Collected SQL statements when running in pretend mode.
+     *
+     * @var string[]
+     */
+    protected array $pretendLog = [];
+
+    /**
      * @param string|null $migrationsPath Absolute path to migrations directory.
      *                                    Defaults to <project_root>/database/migrations.
      */
     public function __construct(?string $migrationsPath = null)
     {
-        // No database connection here — kept lazy for CLI environments where
-        // the framework may be bootstrapped before a DB is available.
         $this->migrationsPath = $migrationsPath
             ?? dirname(__DIR__, 5) . '/database/migrations';
+
+        // Default prompt handler reads from STDIN
+        $this->promptHandler = static function (string $question): string {
+            echo $question;
+            return trim((string) fgets(STDIN));
+        };
+    }
+
+    /**
+     * Replaces the default STDIN prompt handler with a custom one.
+     * Useful for testing or GUI-backed CLIs.
+     *
+     * @param callable $handler fn(string $question): string
+     * @return static Fluent.
+     */
+    public function setPromptHandler(callable $handler): static
+    {
+        $this->promptHandler = $handler;
+        return $this;
+    }
+
+    /**
+     * Enables / disables pretend (dry-run) mode.
+     * When enabled, SQL is collected but never executed.
+     *
+     * @param bool $pretend
+     * @return static Fluent.
+     */
+    public function setPretend(bool $pretend): static
+    {
+        $this->pretend = $pretend;
+        return $this;
+    }
+
+    /**
+     * Returns collected SQL statements from the last pretend run.
+     *
+     * @return string[]
+     */
+    public function getPretendLog(): array
+    {
+        return $this->pretendLog;
     }
 
     /**
      * Returns the PDO instance, creating the connection on first call.
+     * When the database is missing, offers to create it interactively.
      *
      * @return PDO Active PDO connection.
      */
     protected function pdo(): PDO
     {
         if ($this->pdo === null) {
-            $this->pdo = Connection::getInstance();
+            $this->pdo = $this->connectWithAutoCreate();
         }
 
         return $this->pdo;
+    }
+
+    /**
+     * Attempts to connect to the database.
+     * If the database does not exist, prompts the user and optionally creates it.
+     *
+     * @return PDO
+     */
+    protected function connectWithAutoCreate(): PDO
+    {
+        try {
+            return Connection::getInstance();
+        } catch (PDOException $e) {
+            if (!DatabaseCreator::isMissingDatabase($e)) {
+                throw $e;
+            }
+
+            return $this->handleMissingDatabase($e);
+        }
+    }
+
+    /**
+     * Handles the case where the database does not yet exist.
+     * Prompts the user for confirmation, creates the DB, and reconnects.
+     *
+     * @param PDOException $e Original connection error.
+     * @return PDO Fresh PDO connection to the newly created database.
+     *
+     * @throws RuntimeException When the user declines or creation fails.
+     */
+    protected function handleMissingDatabase(PDOException $e): PDO
+    {
+        $config = $this->getDatabaseConfig();
+        $dbName = $config['database'] ?? '(unknown)';
+        $driver = strtoupper($config['driver'] ?? 'database');
+
+        echo PHP_EOL;
+        echo "\033[33m  ⚠  {$driver} database \033[1m\"{$dbName}\"\033[0m\033[33m was not found.\033[0m" . PHP_EOL;
+        echo PHP_EOL;
+
+        $answer = ($this->promptHandler)(
+            "  \033[36mWould you like to create it now?\033[0m \033[90m[yes/no]\033[0m: "
+        );
+
+        echo PHP_EOL;
+
+        if (!$this->isAffirmative($answer)) {
+            throw new RuntimeException(
+                "Database \"{$dbName}\" does not exist. Aborting."
+            );
+        }
+
+        try {
+            DatabaseCreator::create($config);
+        } catch (\Throwable $createError) {
+            throw new RuntimeException(
+                "Could not create database \"{$dbName}\": " . $createError->getMessage(),
+                0,
+                $createError
+            );
+        }
+
+        echo "\033[32m  ✔  Database \"{$dbName}\" created successfully.\033[0m" . PHP_EOL;
+        echo PHP_EOL;
+
+        // Reset the Connection singleton so it reconnects to the new database
+        Connection::reset();
+
+        return Connection::getInstance();
+    }
+
+    /**
+     * Returns the database configuration array.
+     * Reads from environment variables (compatible with Slenix EnvLoader).
+     *
+     * @return array{driver: string, host: string, port: int, database: string, username: string, password: string}
+     */
+    protected function getDatabaseConfig(): array
+    {
+        return [
+            'driver'    => $_ENV['DB_CONNECTION'] ?? getenv('DB_CONNECTION') ?: 'mysql',
+            'host'      => $_ENV['DB_HOST']       ?? getenv('DB_HOST')       ?: '127.0.0.1',
+            'port'      => (int) ($_ENV['DB_PORT'] ?? getenv('DB_PORT')      ?: 3306),
+            'database'  => $_ENV['DB_DATABASE']   ?? getenv('DB_DATABASE')   ?: '',
+            'username'  => $_ENV['DB_USERNAME']   ?? getenv('DB_USERNAME')   ?: '',
+            'password'  => $_ENV['DB_PASSWORD']   ?? getenv('DB_PASSWORD')   ?: '',
+            'charset'   => $_ENV['DB_CHARSET']    ?? getenv('DB_CHARSET')    ?: 'utf8mb4',
+            'collation' => $_ENV['DB_COLLATION']  ?? getenv('DB_COLLATION')  ?: 'utf8mb4_unicode_ci',
+        ];
     }
 
     /**
@@ -90,7 +244,7 @@ class Migrator
     public function ensureMigrationsTableExists(): void
     {
         $sql = $this->grammar()->compileMigrationsTable();
-        $this->pdo()->exec($sql);
+        $this->exec($sql);
     }
 
     /**
@@ -143,7 +297,7 @@ class Migrator
         }
 
         $files = glob($this->migrationsPath . '/*.php') ?: [];
-        sort($files); // Ensures timestamp-prefix ordering
+        sort($files);
 
         $result = [];
         foreach ($files as $file) {
@@ -206,16 +360,22 @@ class Migrator
     protected function runMigration(string $name, string $file, int $batch): void
     {
         $migration     = $this->resolveMigration($file);
-        $inTransaction = $this->beginTransaction();
+        $useTransaction = $migration->withinTransaction ?? true;
+        $inTransaction  = $useTransaction ? $this->beginTransaction() : false;
 
         try {
-            // Enable deferred FK checks for SQLite when inside a transaction
             if ($this->grammar()->isSQLite() && $inTransaction) {
-                $this->pdo()->exec('PRAGMA defer_foreign_keys = ON');
+                $this->exec('PRAGMA defer_foreign_keys = ON');
             }
 
-            $migration->up();
-            $this->logMigration($name, $batch);
+            if ($this->pretend) {
+                $this->pretendLog[] = "-- [{$name}] up()";
+                // We can't truly introspect SQL without running it,
+                // but we record the intent for display.
+            } else {
+                $migration->up();
+                $this->logMigration($name, $batch);
+            }
 
             $this->commitTransaction($inTransaction);
         } catch (\Throwable $e) {
@@ -262,8 +422,7 @@ class Migrator
     }
 
     /**
-     * Reverts ALL executed migrations (oldest-first safety is preserved by
-     * fetching in DESC order).
+     * Reverts ALL executed migrations (newest-first for safe FK teardown).
      *
      * @return string[] Names of the migrations that were reverted.
      */
@@ -308,6 +467,26 @@ class Migrator
     }
 
     /**
+     * Rolls back the last N batches, then re-runs all migrations.
+     * Equivalent to rollback(N) + run().
+     *
+     * @param int $steps Number of batches to roll back before re-running.
+     * @return array{reverted: string[], executed: string[]}
+     */
+    public function refresh(int $steps = 0): array
+    {
+        if ($steps > 0) {
+            $reverted = $this->rollback($steps);
+        } else {
+            $reverted = $this->reset();
+        }
+
+        $executed = $this->run();
+
+        return compact('reverted', 'executed');
+    }
+
+    /**
      * Reverts a single migration inside a transaction (best-effort).
      *
      * @param string $name Migration name.
@@ -318,16 +497,21 @@ class Migrator
      */
     protected function rollbackMigration(string $name, string $file): void
     {
-        $migration     = $this->resolveMigration($file);
-        $inTransaction = $this->beginTransaction();
+        $migration      = $this->resolveMigration($file);
+        $useTransaction = $migration->withinTransaction ?? true;
+        $inTransaction  = $useTransaction ? $this->beginTransaction() : false;
 
         try {
             if ($this->grammar()->isSQLite() && $inTransaction) {
-                $this->pdo()->exec('PRAGMA defer_foreign_keys = ON');
+                $this->exec('PRAGMA defer_foreign_keys = ON');
             }
 
-            $migration->down();
-            $this->deleteLog($name);
+            if ($this->pretend) {
+                $this->pretendLog[] = "-- [{$name}] down()";
+            } else {
+                $migration->down();
+                $this->deleteLog($name);
+            }
 
             $this->commitTransaction($inTransaction);
         } catch (\Throwable $e) {
@@ -445,58 +629,6 @@ class Migrator
     }
 
     /**
-     * Begins a database transaction if one is not already active.
-     * Returns false when a transaction could not be started (e.g. SQLite
-     * already has an implicit one, or the driver does not support them).
-     *
-     * @return bool True when a new transaction was started.
-     */
-    protected function beginTransaction(): bool
-    {
-        try {
-            if (!$this->pdo()->inTransaction()) {
-                $this->pdo()->beginTransaction();
-                return true;
-            }
-        } catch (\Throwable) {
-            // Driver does not support transactions (very unlikely with PDO)
-        }
-
-        return false;
-    }
-
-    /**
-     * Commits the current transaction if $inTransaction is true.
-     *
-     * @param bool $inTransaction Whether we own the current transaction.
-     * @return void
-     */
-    protected function commitTransaction(bool $inTransaction): void
-    {
-        if ($inTransaction && $this->pdo()->inTransaction()) {
-            $this->pdo()->commit();
-        }
-    }
-
-    /**
-     * Rolls back the current transaction if $inTransaction is true.
-     * Errors during rollback are silenced intentionally (MySQL DDL).
-     *
-     * @param bool $inTransaction Whether we own the current transaction.
-     * @return void
-     */
-    protected function rollbackTransaction(bool $inTransaction): void
-    {
-        if ($inTransaction && $this->pdo()->inTransaction()) {
-            try {
-                $this->pdo()->rollBack();
-            } catch (\Throwable) {
-                // MySQL DDL causes implicit commit; rollback will fail — that is expected.
-            }
-        }
-    }
-
-    /**
      * Returns a status report for all discovered migrations.
      *
      * @return array<int, array{migration: string, status: string, batch: int|null}>
@@ -530,6 +662,72 @@ class Migrator
     }
 
     /**
+     * Begins a database transaction if one is not already active.
+     *
+     * @return bool True when a new transaction was started.
+     */
+    protected function beginTransaction(): bool
+    {
+        try {
+            if (!$this->pdo()->inTransaction()) {
+                $this->pdo()->beginTransaction();
+                return true;
+            }
+        } catch (\Throwable) {
+            // Driver does not support transactions
+        }
+
+        return false;
+    }
+
+    /**
+     * Commits the current transaction if $inTransaction is true.
+     *
+     * @param bool $inTransaction Whether we own the current transaction.
+     * @return void
+     */
+    protected function commitTransaction(bool $inTransaction): void
+    {
+        if ($inTransaction && $this->pdo()->inTransaction()) {
+            $this->pdo()->commit();
+        }
+    }
+
+    /**
+     * Rolls back the current transaction if $inTransaction is true.
+     * Errors during rollback are silenced intentionally (MySQL DDL).
+     *
+     * @param bool $inTransaction Whether we own the current transaction.
+     * @return void
+     */
+    protected function rollbackTransaction(bool $inTransaction): void
+    {
+        if ($inTransaction && $this->pdo()->inTransaction()) {
+            try {
+                $this->pdo()->rollBack();
+            } catch (\Throwable) {
+                // MySQL DDL causes implicit commit — expected.
+            }
+        }
+    }
+
+    /**
+     * Executes a SQL statement, respecting pretend mode.
+     *
+     * @param string $sql
+     * @return void
+     */
+    protected function exec(string $sql): void
+    {
+        if ($this->pretend) {
+            $this->pretendLog[] = $sql;
+            return;
+        }
+
+        $this->pdo()->exec($sql);
+    }
+
+    /**
      * Generates a timestamped migration file name.
      *
      * @example Migrator::generateName('create_users_table')
@@ -551,5 +749,16 @@ class Migrator
     public function getMigrationsPath(): string
     {
         return $this->migrationsPath;
+    }
+
+    /**
+     * Returns true for common affirmative answers.
+     *
+     * @param string $answer
+     * @return bool
+     */
+    protected function isAffirmative(string $answer): bool
+    {
+        return in_array(strtolower(trim($answer)), ['y', 'yes', 'sim', 's', '1', 'true'], true);
     }
 }

@@ -21,6 +21,22 @@ namespace Slenix\Database\Migrations;
 abstract class Migration
 {
     /**
+     * The database connection that should be used by the migration.
+     * When null, the default connection is used.
+     *
+     * @var string|null
+     */
+    public ?string $connection = null;
+
+    /**
+     * Whether the migration should run within a transaction.
+     * Set to false for DDL-heavy migrations on MySQL where auto-commit applies.
+     *
+     * @var bool
+     */
+    public bool $withinTransaction = true;
+
+    /**
      * Applies the migration (creates or alters tables, inserts seed data, etc.).
      *
      * @return void

@@ -16,6 +16,8 @@ declare(strict_types=1);
 namespace Slenix\Http;
 
 use InvalidArgumentException;
+use Slenix\Supports\Security\CSRF;
+use Slenix\Supports\Security\RateLimit;
 use Slenix\Supports\Uploads\Upload;
 
 class Request
@@ -23,28 +25,37 @@ class Request
     // -------------------------------------------------------------------------
     // Core properties
     // -------------------------------------------------------------------------
-    private array   $params     = [];
-    private array   $server     = [];
-    private array   $headers    = [];
-    private array   $attributes = [];
-    private array   $queryParams = [];
+    private array $params = [];
+    private array $server = [];
+    private array $headers = [];
+    private array $attributes = [];
+    private array $queryParams = [];
 
     // -------------------------------------------------------------------------
     // Cache / lazy loading
     // -------------------------------------------------------------------------
-    private ?array   $parsedBody          = null;
-    private ?array   $uploadedFiles       = null;
-    private ?string  $rawBody             = null;
-    private ?array   $deviceInfo          = null;
-    private ?array   $acceptableLanguages = null;
-    private ?string  $fingerprint         = null;
-    private mixed    $authenticatedUser   = null;
-    private bool     $userResolved        = false;
+    private ?array $parsedBody = null;
+    private ?array $uploadedFiles = null;
+    private ?string $rawBody = null;
+    private ?array $deviceInfo = null;
+    private ?array $acceptableLanguages = null;
+    private ?string $fingerprint = null;
+    private mixed $authenticatedUser = null;
+    private bool $userResolved = false;
+
+    /** CSRF helper instance (lazy-loaded) */
+    private ?CSRF $csrf = null;
+
+    /** Cached bearer token extracted from Authorization header */
+    private ?string $bearerToken = null;
+
+    /** Whether bearer token has been parsed (allows null as valid result) */
+    private bool $bearerTokenParsed = false;
 
     // -------------------------------------------------------------------------
     // Configuration
     // -------------------------------------------------------------------------
-    private int   $maxInputSize   = 8_388_608; // 8 MB
+    private int $maxInputSize = 8_388_608; // 8 MB
     private array $trustedProxies = [];
     private array $trustedHeaders = [
         'X-Forwarded-For',
@@ -67,15 +78,15 @@ class Request
      * @param array $files Uploaded files (default $_FILES)
      */
     public function __construct(
-        array $params  = [],
-        array $server  = [],
-        array $query   = [],
+        array $params = [],
+        array $server = [],
+        array $query = [],
         array $cookies = [],
-        array $files   = []
+        array $files = []
     ) {
-        $this->params      = $params;
-        $this->server      = $server ?: $_SERVER;
-        $this->queryParams = $query  ?: ($_GET ?? []);
+        $this->params = $params;
+        $this->server = $server ?: $_SERVER;
+        $this->queryParams = $query ?: ($_GET ?? []);
 
         $this->parseHeaders();
     }
@@ -258,7 +269,7 @@ class Request
         return $default;
     }
 
-     /**
+    /**
      * Returns all input data merged.
      *
      * @return array
@@ -1260,7 +1271,7 @@ class Request
         return $this;
     }
 
-   /**
+    /**
      * Set the maximum request body size.
      *
      * @param int $size Size in bytes
@@ -1270,6 +1281,403 @@ class Request
     {
         $this->maxInputSize = $size;
         return $this;
+    }
+
+    /**
+     * Set a static callable that resolves the authenticated user for this request.
+     *
+     * The resolver receives the current Request instance and should return the
+     * authenticated user entity or null when no user is authenticated.
+     *
+     * @example
+     *   Request::setAuthResolver(fn(Request $req) => Auth::resolve()->user());
+     *
+     * @param  callable $resolver  Callable with signature: fn(Request): mixed
+     * @return void
+     */
+    public static function setAuthResolver(callable $resolver): void
+    {
+        self::$authResolver = $resolver;
+    }
+
+    /**
+     * Resolve and return the currently authenticated user.
+     *
+     * The result is cached on the instance so the resolver is invoked at most
+     * once per request. Returns null when no auth resolver has been registered
+     * or when the resolver itself returns null.
+     *
+     * @template TUser
+     * @return TUser|null
+     */
+    public function user(): mixed
+    {
+        if (!$this->userResolved) {
+            $this->userResolved = true;
+            $this->authenticatedUser = self::$authResolver !== null
+                ? (self::$authResolver)($this)
+                : null;
+        }
+
+        return $this->authenticatedUser;
+    }
+
+    /**
+     * Determine whether the current request is authenticated (a user is present).
+     *
+     * @return bool True when a user could be resolved, false otherwise.
+     */
+    public function check(): bool
+    {
+        return $this->user() !== null;
+    }
+
+    /**
+     * Determine whether the current request is unauthenticated (no user resolved).
+     *
+     * @return bool True when no user is present, false otherwise.
+     */
+    public function guest(): bool
+    {
+        return !$this->check();
+    }
+
+    /**
+     * Return the authenticated user or throw when the request is unauthenticated.
+     *
+     * @throws \RuntimeException When no user is resolved by the auth resolver.
+     * @return mixed The authenticated user entity.
+     */
+    public function userOrFail(): mixed
+    {
+        $user = $this->user();
+
+        if ($user === null) {
+            throw new \RuntimeException('Unauthenticated request.', 401);
+        }
+
+        return $user;
+    }
+
+    /**
+     * Extract the bearer token from the Authorization header.
+     *
+     * Parses the standard {@see https://datatracker.ietf.org/doc/html/rfc6750 RFC 6750}
+     * Authorization header of the form: {@code Authorization: Bearer <token>}.
+     * The result is cached so the header is parsed only once per request.
+     *
+     * @return string|null The raw token string, or null when no bearer token is present.
+     */
+    public function bearerToken(): ?string
+    {
+        if ($this->bearerTokenParsed) {
+            return $this->bearerToken;
+        }
+
+        $this->bearerTokenParsed = true;
+        $authorization = $this->getHeader('Authorization', '');
+
+        if (is_string($authorization) && str_starts_with($authorization, 'Bearer ')) {
+            $this->bearerToken = substr($authorization, 7);
+        }
+
+        return $this->bearerToken;
+    }
+
+    /**
+     * Retrieve an API key from a named request header or query parameter.
+     *
+     * Checks the header first; falls back to the query string when absent.
+     * This covers both {@code X-Api-Key: <key>} and {@code ?api_key=<key>} conventions.
+     *
+     * @param  string $header     Header name to inspect (default: 'X-Api-Key').
+     * @param  string $queryParam Query-string parameter name to fall back to (default: 'api_key').
+     * @return string|null The API key string, or null when not found in either location.
+     */
+    public function apiKey(string $header = 'X-Api-Key', string $queryParam = 'api_key'): ?string
+    {
+        $fromHeader = $this->getHeader($header);
+
+        if ($fromHeader !== null && $fromHeader !== '') {
+            return $fromHeader;
+        }
+
+        $fromQuery = $this->query($queryParam);
+
+        return ($fromQuery !== null && $fromQuery !== '') ? (string) $fromQuery : null;
+    }
+
+    /**
+     * Determine whether the request carries any form of authentication token.
+     *
+     * Returns true when any of the following are present:
+     * - A bearer token in the Authorization header.
+     * - An API key in the configured header or query parameter.
+     * - An authenticated user resolved by the auth resolver.
+     *
+     * @return bool
+     */
+    public function hasToken(): bool
+    {
+        return $this->bearerToken() !== null
+            || $this->apiKey() !== null
+            || $this->check();
+    }
+
+    /**
+     * Attempt a rate-limited action for the current request.
+     *
+     * Delegates to {@see \Slenix\Supports\Security\RateLimit::attempt()} using the
+     * resolved identity key for this request. The identity key is built automatically
+     * from the authenticated user (when available) or the client IP address.
+     *
+     * @param  string $route         Short label scoping this limit to a route or action
+     *                               (e.g. {@code 'api'}, {@code 'login'}, {@code 'otp'}).
+     * @param  int    $maxAttempts   Maximum number of hits allowed within the window.
+     * @param  int    $decaySeconds  Duration of the time window in seconds.
+     * @return array{
+     *     allowed: bool,
+     *     attempts: int,
+     *     max_attempts: int,
+     *     remaining: int,
+     *     reset_at: int,
+     *     retry_after: int
+     * }
+     */
+    public function rateLimit(string $route, int $maxAttempts, int $decaySeconds): array
+    {
+        $key = RateLimit::buildKey(
+            route: $route,
+            ip: $this->ip(),
+        );
+
+        return RateLimit::attempt($key, $maxAttempts, $decaySeconds);
+    }
+
+    /**
+     * Determine whether the current request has exceeded the rate limit.
+     *
+     * This is a read-only check — it does not increment the counter.
+     * Use {@see rateLimit()} to both check and increment in one call.
+     *
+     * @param  string $route        Action label matching the one used in {@see rateLimit()}.
+     * @param  int    $maxAttempts  The configured limit to compare against.
+     * @return bool True when the limit has been exceeded, false otherwise.
+     */
+    public function isRateLimited(string $route, int $maxAttempts): bool
+    {
+        $key = RateLimit::buildKey(route: $route, ip: $this->ip());
+
+        return RateLimit::tooManyAttempts($key, $maxAttempts);
+    }
+
+    /**
+     * Return the number of remaining allowed attempts for the given route.
+     *
+     * Non-destructive — does not modify the stored counter.
+     *
+     * @param  string $route        Action label matching the one used in {@see rateLimit()}.
+     * @param  int    $maxAttempts  The configured ceiling to calculate remaining hits.
+     * @return int Remaining attempts available (0 when the limit has been reached).
+     */
+    public function remainingAttempts(string $route, int $maxAttempts): int
+    {
+        $key = RateLimit::buildKey(route: $route, ip: $this->ip());
+
+        return RateLimit::remaining($key, $maxAttempts);
+    }
+
+    /**
+     * Clear all recorded rate-limit attempts for the given route.
+     *
+     * Useful after a successful login or any action that should lift
+     * a throttle penalty for the current request's identity.
+     *
+     * @param  string $route  Action label matching the one used in {@see rateLimit()}.
+     * @return void
+     */
+    public function clearRateLimit(string $route): void
+    {
+        $key = RateLimit::buildKey(route: $route, ip: $this->ip());
+        RateLimit::clear($key);
+    }
+
+    /**
+     * Return the lazy-loaded CSRF helper instance.
+     *
+     * The instance is created once and reused for the lifetime of the request.
+     *
+     * @return \Slenix\Supports\Security\CSRF
+     */
+    private function csrf(): CSRF
+    {
+        if ($this->csrf === null) {
+            $this->csrf = new CSRF();
+        }
+
+        return $this->csrf;
+    }
+
+    /**
+     * Retrieve the active CSRF token for the current session.
+     *
+     * Generates and stores a new token when none exists yet.
+     * Delegates to {@see \Slenix\Supports\Security\CSRF::token()}.
+     *
+     * @return string The hex-encoded CSRF token.
+     */
+    public function csrfToken(): string
+    {
+        return CSRF::token();
+    }
+
+    /**
+     * Verify the CSRF token carried by the current request.
+     *
+     * Checks the token against the value stored in the session using a
+     * constant-time comparison to prevent timing attacks.
+     * Returns false when the request method is safe (GET, HEAD, OPTIONS),
+     * when the route is excluded, or when no token is found.
+     *
+     * @return bool True when the token is valid, false otherwise.
+     */
+    public function verifyCsrf(): bool
+    {
+        if (CSRF::isSafeMethod() || CSRF::isExcluded()) {
+            return true;
+        }
+
+        return CSRF::verify();
+    }
+
+    /**
+     * Verify the CSRF token or throw a RuntimeException on failure.
+     *
+     * Responds with HTTP 419 (Page Expired) and halts execution when the
+     * token is absent or does not match the session value.
+     *
+     * @throws \RuntimeException HTTP 419 when the CSRF token is invalid or missing.
+     * @return void
+     */
+    public function verifyCsrfOrFail(): void
+    {
+        if (CSRF::isSafeMethod() || CSRF::isExcluded()) {
+            return;
+        }
+
+        CSRF::verifyOrFail();
+    }
+
+    /**
+     * Determine whether the current route is excluded from CSRF verification.
+     *
+     * @return bool True when the request path matches a registered exclusion pattern.
+     */
+    public function isCsrfExcluded(): bool
+    {
+        return CSRF::isExcluded();
+    }
+
+    /**
+     * Return the requested page number from the query string.
+     *
+     * Clamps the result to a minimum of 1, so callers never receive
+     * a zero or negative page number regardless of the input.
+     *
+     * @param  string $key      Query-string parameter name (default: {@code 'page'}).
+     * @param  int    $default  Fallback page when the parameter is absent (default: 1).
+     * @return int The resolved page number (always ≥ 1).
+     */
+    public function page(string $key = 'page', int $default = 1): int
+    {
+        return max(1, $this->integer($key, $default));
+    }
+
+    /**
+     * Return the requested number of items per page from the query string.
+     *
+     * Enforces a configurable upper bound so clients cannot request an
+     * arbitrarily large page that would overload the database or serializer.
+     *
+     * @param  string $key      Query-string parameter name (default: {@code 'per_page'}).
+     * @param  int    $default  Fallback per-page count when the parameter is absent (default: 15).
+     * @param  int    $max      Maximum allowed value; clamped silently (default: 100).
+     * @return int The resolved per-page count (always in the range [1, $max]).
+     */
+    public function perPage(string $key = 'per_page', int $default = 15, int $max = 100): int
+    {
+        return min($max, max(1, $this->integer($key, $default)));
+    }
+
+    /**
+     * Execute a callback when the given field is present and filled.
+     *
+     * The callback receives the field value as its first argument and the
+     * current Request instance as its second. Returns the callback's return
+     * value when the field is filled, or {@code $default} otherwise.
+     *
+     * @template TReturn
+     * @param  string   $key       Input field name to inspect.
+     * @param  callable $callback  Callable with signature: {@code fn(mixed $value, Request $req): TReturn}
+     * @param  mixed    $default   Value to return when the field is absent or empty (default: null).
+     * @return mixed
+     */
+    public function whenFilled(string $key, callable $callback, mixed $default = null): mixed
+    {
+        if ($this->filled($key)) {
+            return $callback($this->input($key), $this);
+        }
+
+        return $default;
+    }
+
+    /**
+     * Execute a callback when the given field key is present in the input.
+     *
+     * Unlike {@see whenFilled()}, this fires even when the field value is an
+     * empty string or null — presence in the payload is the only condition.
+     *
+     * @template TReturn
+     * @param  string   $key       Input field name to inspect.
+     * @param  callable $callback  Callable with signature: {@code fn(mixed $value, Request $req): TReturn}
+     * @param  mixed    $default   Value to return when the field is absent (default: null).
+     * @return mixed
+     */
+    public function whenHas(string $key, callable $callback, mixed $default = null): mixed
+    {
+        if ($this->has($key)) {
+            return $callback($this->input($key), $this);
+        }
+
+        return $default;
+    }
+
+    /**
+     * Determine whether the request originates from the same host as the application.
+     *
+     * Compares the {@code Origin} header against the current request host.
+     * Falls back to comparing the {@code Referer} header when {@code Origin} is absent.
+     * Returns false when neither header is present.
+     *
+     * @return bool True when the origin matches the application host.
+     */
+    public function isFromSameOrigin(): bool
+    {
+        $origin = $this->getHeader('Origin');
+
+        if ($origin) {
+            $host = parse_url((string) $origin, PHP_URL_HOST);
+            return $host === $this->getHost();
+        }
+
+        $referer = $this->referer();
+
+        if ($referer) {
+            $host = parse_url($referer, PHP_URL_HOST);
+            return $host === $this->getHost();
+        }
+
+        return false;
     }
 
     /**

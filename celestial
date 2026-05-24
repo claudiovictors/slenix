@@ -114,7 +114,7 @@ final class Celestial
                 case 'make:factory':
                     (new SeedCommand($this->args))->makeFactory();
                     break;
-                
+
                 case 'veil:install':
                     require_once __DIR__ . '/vendor/slenix/veil/src/Console/VeilInstallCommand.php';
                     (new \Slenix\Veil\Console\VeilInstallCommand($this->args))->install();
@@ -229,7 +229,7 @@ final class Celestial
      */
     private function startWebSocketServer(): void
     {
-        $c    = self::getConsole();
+        $c = self::getConsole();
         $host = '127.0.0.1';
         $port = 8081;
 
@@ -294,8 +294,8 @@ final class Celestial
         echo str_repeat('-', 80) . PHP_EOL;
 
         foreach ($routes as $route) {
-            $handler     = $this->formatHandler($route['handler']);
-            $name        = $route['name'] ?? '';
+            $handler = $this->formatHandler($route['handler']);
+            $name = $route['name'] ?? '';
             $middlewares = !empty($route['middleware'])
                 ? ' [' . implode(', ', $route['middleware']) . ']'
                 : '';

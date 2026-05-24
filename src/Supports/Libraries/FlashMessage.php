@@ -2,17 +2,25 @@
 
 /*
 |--------------------------------------------------------------------------
-| FlashMessage Class — Slenix Framework
+| FlashMessage Class
 |--------------------------------------------------------------------------
 |
-| Manages typed flash messages within the session. Flash messages are
-| temporary notifications that persist only until the next request.
+| Typed flash message interface. All reads come from $_SESSION['_flash_previous'],
+| which is populated by Session::age() at the start of each request.
+| All writes go to $_SESSION['_flash'] for the next request.
 |
 | Usage:
-|   flash()->success('Salvo com sucesso!');
-|   flash()->error('Algo correu mal.');
-|   flash()->has('success');
-|   flash()->get('success');
+|   // Writing (current request → next request)
+|   flash()->success('Saved successfully!');
+|   flash()->error('Something went wrong.');
+|   flash()->warning('Please review your input.');
+|   flash()->info('You have 3 new messages.');
+|
+|   // Reading (populated by the previous request)
+|   flash()->has('error')        → bool
+|   flash()->get('error')        → string|null
+|   flash()->all()               → ['success' => '...', 'error' => '...']
+|   flash()->typed()             → only success|error|warning|info keys
 |
 */
 
@@ -24,153 +32,124 @@ use Slenix\Supports\Security\Session;
 
 class FlashMessage
 {
-    /**
-     * Supported built-in message types.
-     * Each type maps to the session key '_flash_{type}'.
-     */
+    /** @var string[] Built-in typed message keys. */
     private const TYPES = ['success', 'error', 'warning', 'info'];
 
     // -------------------------------------------------------------------------
-    // Built-in message types
+    // Typed Writers
     // -------------------------------------------------------------------------
 
     /**
-     * Store a success flash message.
+     * Store a success flash message for the next request.
      *
      * @param  string $message
      * @return static
      */
     public function success(string $message): static
     {
-        return $this->write('_flash_success', $message);
+        return $this->write('success', $message);
     }
 
     /**
-     * Store an error flash message.
+     * Store an error flash message for the next request.
      *
      * @param  string $message
      * @return static
      */
     public function error(string $message): static
     {
-        return $this->write('_flash_error', $message);
+        return $this->write('error', $message);
     }
 
     /**
-     * Store a warning flash message.
+     * Store a warning flash message for the next request.
      *
      * @param  string $message
      * @return static
      */
     public function warning(string $message): static
     {
-        return $this->write('_flash_warning', $message);
+        return $this->write('warning', $message);
     }
 
     /**
-     * Store an info flash message.
+     * Store an info flash message for the next request.
      *
      * @param  string $message
      * @return static
      */
     public function info(string $message): static
     {
-        return $this->write('_flash_info', $message);
+        return $this->write('info', $message);
     }
 
     // -------------------------------------------------------------------------
-    // Generic write / read
+    // Generic Write / Read
     // -------------------------------------------------------------------------
 
     /**
-     * Write a value to a custom flash key.
+     * Write a flash message under any key for the next request.
      *
-     * Normalizes the key: 'success' and '_flash_success' both map to the
-     * same underlying session key '_flash_success'.
+     * The key is normalized to always carry the '_flash_' prefix so that
+     * 'success' and '_flash_success' resolve to the same session slot.
      *
-     * @param  string $key
-     * @param  mixed  $value
+     * @param  string $key   Short key ('error') or prefixed key ('_flash_error').
+     * @param  mixed  $value Any serializable value.
      * @return static
      */
     public function write(string $key, mixed $value): static
     {
-        Session::flash($this->normalizeKey($key), $value);
+        Session::flash($this->normalize($key), $value);
         return $this;
     }
 
     /**
-     * Get the value of a flash message (consumed on first read).
+     * Read a flash message available in the current request.
      *
-     * Accepts both shorthand ('success') and full keys ('_flash_success').
+     * Reads from $_SESSION['_flash_previous'], which was populated by
+     * Session::age() at the start of this request. Non-destructive — safe
+     * to call multiple times for the same key.
      *
-     * @param  string $key
-     * @param  mixed  $default
+     * @param  string $key     Short or prefixed key.
+     * @param  mixed  $default Returned when the key does not exist.
      * @return mixed
      */
     public function get(string $key, mixed $default = null): mixed
     {
-        return Session::getFlash($this->normalizeKey($key), $default);
+        return $_SESSION['_flash_previous'][$this->normalize($key)] ?? $default;
     }
 
     /**
-     * Peek at a flash value without consuming it.
+     * Check whether a flash message is available in the current request.
      *
-     * Unlike get(), the value remains available for the current request.
+     * Reads from $_SESSION['_flash_previous'].
      *
-     * @param  string $key
-     * @param  mixed  $default
-     * @return mixed
-     */
-    public function peek(string $key, mixed $default = null): mixed
-    {
-        return $_SESSION['_flash'][$this->normalizeKey($key)] ?? $default;
-    }
-
-    /**
-     * Check if a flash message exists.
-     *
-     * @param  string $key
+     * @param  string $key Short or prefixed key.
      * @return bool
      */
     public function has(string $key): bool
     {
-        return Session::hasFlash($this->normalizeKey($key));
+        return isset($_SESSION['_flash_previous'][$this->normalize($key)]);
     }
 
     /**
-     * Returns all current flash messages as an associative array.
+     * Return all flash messages available in the current request.
      *
-     * Keys are stripped of the '_flash_' prefix for convenience.
-     * Example: ['success' => 'Salvo!', 'error' => 'Falhou.']
+     * Keys are returned without the '_flash_' prefix.
+     *
+     * Example return value:
+     *   ['success' => 'Saved!', 'error' => 'Failed.']
      *
      * @return array<string, mixed>
      */
     public function all(): array
     {
-        $flash = $_SESSION['_flash'] ?? [];
-        $result = [];
+        $previous = $_SESSION['_flash_previous'] ?? [];
+        $result   = [];
 
-        foreach ($flash as $key => $value) {
-            $cleanKey = str_starts_with($key, '_flash_') ? substr($key, 7) : $key;
-            $result[$cleanKey] = $value;
-        }
-
-        return $result;
-    }
-
-    /**
-     * Returns only the built-in typed messages (success, error, warning, info).
-     *
-     * @return array<string, string>
-     */
-    public function typed(): array
-    {
-        $result = [];
-
-        foreach (self::TYPES as $type) {
-            $key = '_flash_' . $type;
-            if (Session::hasFlash($key)) {
-                $result[$type] = Session::getFlash($key);
+        foreach ($previous as $key => $value) {
+            if (str_starts_with((string) $key, '_flash_')) {
+                $result[substr($key, 7)] = $value;
             }
         }
 
@@ -178,19 +157,60 @@ class FlashMessage
     }
 
     /**
-     * Remove a specific flash message without reading it.
+     * Return only the four built-in typed messages that are present.
+     *
+     * Example return value:
+     *   ['success' => 'Saved!', 'warning' => 'Check your input.']
+     *
+     * @return array<string, mixed>
+     */
+    public function typed(): array
+    {
+        $result = [];
+
+        foreach (self::TYPES as $type) {
+            $key = $this->normalize($type);
+            if (isset($_SESSION['_flash_previous'][$key])) {
+                $result[$type] = $_SESSION['_flash_previous'][$key];
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Peek at a flash value written in the CURRENT request before it is aged.
+     *
+     * Reads from $_SESSION['_flash']. Useful right after write() when you need
+     * to verify the value was stored without waiting for the next request.
      *
      * @param  string $key
+     * @param  mixed  $default
+     * @return mixed
+     */
+    public function peek(string $key, mixed $default = null): mixed
+    {
+        return $_SESSION['_flash'][$this->normalize($key)] ?? $default;
+    }
+
+    /**
+     * Remove a flash message written in the current request before it is aged.
+     *
+     * Has no effect on messages already in $_SESSION['_flash_previous'].
+     *
+     * @param  string $key Short or prefixed key.
      * @return static
      */
     public function forget(string $key): static
     {
-        unset($_SESSION['_flash'][$this->normalizeKey($key)]);
+        unset($_SESSION['_flash'][$this->normalize($key)]);
         return $this;
     }
 
     /**
-     * Clear all flash messages.
+     * Clear all flash messages written in the current request.
+     *
+     * Does not affect messages already aged into $_SESSION['_flash_previous'].
      *
      * @return static
      */
@@ -205,16 +225,17 @@ class FlashMessage
     // -------------------------------------------------------------------------
 
     /**
-     * Normalizes a flash key to always use the '_flash_' prefix.
+     * Normalize a key to always carry the '_flash_' prefix.
      *
-     * 'success'        → '_flash_success'
-     * '_flash_success' → '_flash_success'
-     * 'my_custom'      → '_flash_my_custom'
+     * Examples:
+     *   'error'         → '_flash_error'
+     *   '_flash_error'  → '_flash_error'
+     *   'my_alert'      → '_flash_my_alert'
      *
      * @param  string $key
      * @return string
      */
-    private function normalizeKey(string $key): string
+    private function normalize(string $key): string
     {
         return str_starts_with($key, '_flash_') ? $key : '_flash_' . $key;
     }

@@ -9,6 +9,9 @@
 | Works with MySQL, PostgreSQL and SQLite through the Grammar-aware
 | Migrator and Schema classes.
 |
+| Interactive prompts are shown when required arguments are missing,
+| styled consistently with the rest of the Slenix CLI.
+|
 */
 
 declare(strict_types=1);
@@ -20,7 +23,6 @@ use Slenix\Database\Migrations\DatabaseCreator;
 
 class MigrateCommand extends Command
 {
-
     /** @var array<int, string> CLI arguments received from argv. */
     private array $args;
 
@@ -34,29 +36,29 @@ class MigrateCommand extends Command
     private bool $force;
 
     /**
-     * Initialises the command with the CLI argument list and configures
-     * the Migrator with the correct migrations directory path.
-     *
      * @param array<int, string> $args CLI argument list (argv).
      */
     public function __construct(array $args)
     {
-        $this->args = $args;
+        $this->args    = $args;
         $this->pretend = in_array('--pretend', $args, true);
-        $this->force = in_array('--force', $args, true);
+        $this->force   = in_array('--force', $args, true);
 
-        $projectRoot = dirname(__DIR__, 3);
+        $projectRoot    = dirname(__DIR__, 3);
         $this->migrator = new Migrator($projectRoot . '/database/migrations');
 
         if ($this->pretend) {
             $this->migrator->setPretend(true);
         }
 
-        // When --force is set, auto-confirm any interactive prompts
         if ($this->force) {
             $this->migrator->setPromptHandler(static fn(string $q): string => 'yes');
         }
     }
+
+    // =========================================================================
+    // Migration runners (unchanged logic, same output style)
+    // =========================================================================
 
     /**
      * Runs all pending migrations in chronological order.
@@ -109,7 +111,6 @@ class MigrateCommand extends Command
 
     /**
      * Rolls back the last migration batch.
-     * Supports --step=N to roll back N batches at once.
      *
      * @return void
      */
@@ -225,8 +226,7 @@ class MigrateCommand extends Command
     }
 
     /**
-     * Rolls back the last N batches (or all) then re-runs all migrations.
-     * Supports --step=N to limit the rollback scope.
+     * Rolls back then re-runs all migrations (refresh).
      *
      * @return void
      */
@@ -234,12 +234,15 @@ class MigrateCommand extends Command
     {
         $this->ensureDatabase();
 
-        $steps = $this->parseStep(0); // 0 = full reset
+        $steps = $this->parseStep(0);
 
         echo PHP_EOL;
 
         if (!$this->force && !$this->pretend) {
-            $scope = $steps > 0 ? "the last \033[1m{$steps}\033[0m batch(es)" : '\033[1mall\033[0m migrations';
+            $scope = $steps > 0
+                ? "the last \033[1m{$steps}\033[0m batch(es)"
+                : '\033[1mall\033[0m migrations';
+
             if (!$this->confirm("  This will roll back {$scope} and re-run. Continue?")) {
                 self::warning('Refresh cancelled.');
                 echo PHP_EOL;
@@ -292,9 +295,7 @@ class MigrateCommand extends Command
     }
 
     /**
-     * Performs a full database reset followed by a fresh migration run.
-     * Equivalent to migrate:reset + migrate.
-     * Pass --seed to also run the database seeder after.
+     * Drops all tables and re-runs every migration (fresh).
      *
      * @return void
      */
@@ -357,9 +358,7 @@ class MigrateCommand extends Command
     }
 
     /**
-     * Renders the migration status as a formatted ASCII table in the terminal.
-     *
-     * Columns: STATUS | BATCH | MIGRATION
+     * Renders the migration status table.
      *
      * @return void
      */
@@ -381,57 +380,47 @@ class MigrateCommand extends Command
                 return;
             }
 
-            // ── Column widths ────────────────────────────────────────────────
-            $statusWidth = 10;
-            $batchWidth = 8;
+            $statusWidth    = 10;
+            $batchWidth     = 8;
             $migrationWidth = 60;
 
             foreach ($rows as $row) {
                 $migrationWidth = max($migrationWidth, strlen($row['migration']) + 2);
             }
 
-            $total = count($rows);
-            $ran = count(array_filter($rows, fn($r) => $r['status'] === 'Ran'));
+            $total   = count($rows);
+            $ran     = count(array_filter($rows, fn($r) => $r['status'] === 'Ran'));
             $pending = $total - $ran;
 
-            // ── Separator ────────────────────────────────────────────────────
             $separator = '+'
                 . str_repeat('-', $statusWidth + 2) . '+'
                 . str_repeat('-', $batchWidth + 2) . '+'
                 . str_repeat('-', $migrationWidth + 2) . '+';
 
-            // ── Header ───────────────────────────────────────────────────────
             echo $separator . PHP_EOL;
             printf(
                 "| %-{$statusWidth}s | %-{$batchWidth}s | %-{$migrationWidth}s |\n",
-                'STATUS',
-                'BATCH',
-                'MIGRATION'
+                'STATUS', 'BATCH', 'MIGRATION'
             );
             echo $separator . PHP_EOL;
 
-            // ── Rows ─────────────────────────────────────────────────────────
             foreach ($rows as $row) {
-                $isRan = $row['status'] === 'Ran';
-                $batch = $row['batch'] ?? '-';
-                $statusText = $isRan ? 'Ran' : 'Pending';
+                $isRan        = $row['status'] === 'Ran';
+                $batch        = $row['batch'] ?? '-';
+                $statusText   = $isRan ? 'Ran' : 'Pending';
                 $statusPadded = str_pad($statusText, $statusWidth);
-                $statusColor = $isRan
-                    ? "\033[32m{$statusPadded}\033[0m"  // green
-                    : "\033[33m{$statusPadded}\033[0m"; // yellow
+                $statusColor  = $isRan
+                    ? "\033[32m{$statusPadded}\033[0m"
+                    : "\033[33m{$statusPadded}\033[0m";
 
                 printf(
                     "| %s | %-{$batchWidth}s | %-{$migrationWidth}s |\n",
-                    $statusColor,
-                    $batch,
-                    $row['migration']
+                    $statusColor, $batch, $row['migration']
                 );
             }
 
             echo $separator . PHP_EOL;
             echo PHP_EOL;
-
-            // ── Summary ───────────────────────────────────────────────────────
             self::info("  Total: {$total}  |  \033[32mRan: {$ran}\033[0m  |  \033[33mPending: {$pending}\033[0m");
             echo PHP_EOL;
 
@@ -441,28 +430,34 @@ class MigrateCommand extends Command
         }
     }
 
+    // =========================================================================
+    // make:migration — with interactive prompt
+    // =========================================================================
+
     /**
-     * Generates a new migration file stub in the migrations directory.
-     * The file name is automatically prefixed with the current timestamp.
+     * Generates a new migration file stub.
      *
-     * @example php celestial make:migration create_users_table
-     * @example php celestial make:migration add_phone_to_users
-     * @example php celestial make:migration drop_legacy_table
+     * When called without a name argument, an interactive prompt is shown:
+     *
+     *   ┌ What should the migration be named? ──────────────────┐
+     *   │ E.g. create_users_table                               │
+     *   └───────────────────────────────────────────────────────┘
      *
      * @return void
      */
     public function makeMigration(): void
     {
-        if (count($this->args) < 3) {
-            self::error('Migration name is required.');
-            self::info('Example: php celestial make:migration create_users_table');
-            exit(1);
-        }
+        // Resolve the migration name: CLI arg or interactive prompt
+        $rawName = $this->resolveArgument(
+            index:       2,
+            question:    'What should the migration be named?',
+            placeholder: 'E.g. create_users_table',
+            example:     'php celestial make:migration create_users_table'
+        );
 
-        $rawName = $this->args[2];
-        $name = Migrator::generateName($rawName);
-        $stub = $this->resolveStub($rawName);
-        $dir = dirname(__DIR__, 3) . '/database/migrations';
+        $name  = Migrator::generateName($rawName);
+        $stub  = $this->resolveStub($rawName);
+        $dir   = dirname(__DIR__, 3) . '/database/migrations';
 
         if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
             self::error("Could not create directory: {$dir}");
@@ -482,17 +477,22 @@ class MigrateCommand extends Command
         }
 
         echo PHP_EOL;
-        self::success('Migration created successfully:');
+        self::success('Migration created successfully.');
         echo PHP_EOL;
-        echo "  \033[90m{$filePath}\033[0m" . PHP_EOL;
+        echo '  ' . self::console()->muted($filePath) . PHP_EOL;
         echo PHP_EOL;
     }
+
+    // =========================================================================
+    // Stubs (unchanged from original)
+    // =========================================================================
 
     /**
      * Selects the appropriate migration stub based on naming conventions.
      *
-     * @param string $name Raw migration name (snake_case, no timestamp).
-     * @return string PHP source code for the migration file.
+     * @param string $name Raw migration name.
+     *
+     * @return string PHP source code.
      */
     protected function resolveStub(string $name): string
     {
@@ -519,12 +519,7 @@ class MigrateCommand extends Command
         return $this->stubBlank();
     }
 
-    /**
-     * Returns a CREATE TABLE migration stub.
-     *
-     * @param string $table Inferred table name.
-     * @return string PHP source code.
-     */
+    /** @return string */
     protected function stubCreate(string $table): string
     {
         return <<<PHP
@@ -538,26 +533,16 @@ use Slenix\Database\Migrations\Blueprint;
 
 return new class extends Migration
 {
-    /**
-     * Run the migration — creates the {$table} table.
-     *
-     * Compatible with MySQL, PostgreSQL and SQLite.
-     * Column types are automatically translated by Schema/Grammar.
-     */
     public function up(): void
     {
         Schema::create('{$table}', function (Blueprint \$table) {
             \$table->id();
             // \$table->string('name');
             // \$table->string('email')->unique();
-            // \$table->string('password');
             \$table->timestamps();
         });
     }
 
-    /**
-     * Reverse the migration — drops the {$table} table.
-     */
     public function down(): void
     {
         Schema::dropIfExists('{$table}');
@@ -566,12 +551,7 @@ return new class extends Migration
 PHP;
     }
 
-    /**
-     * Returns an ALTER TABLE migration stub.
-     *
-     * @param string $table Inferred table name.
-     * @return string PHP source code.
-     */
+    /** @return string */
     protected function stubAlter(string $table): string
     {
         return <<<PHP
@@ -585,12 +565,6 @@ use Slenix\Database\Migrations\Blueprint;
 
 return new class extends Migration
 {
-    /**
-     * Run the migration — alters the {$table} table.
-     *
-     * Note: SQLite only supports ADD COLUMN and RENAME COLUMN.
-     * MODIFY / CHANGE COLUMN requires table recreation on SQLite.
-     */
     public function up(): void
     {
         Schema::table('{$table}', function (Blueprint \$table) {
@@ -598,9 +572,6 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Reverse the migration.
-     */
     public function down(): void
     {
         Schema::table('{$table}', function (Blueprint \$table) {
@@ -611,12 +582,7 @@ return new class extends Migration
 PHP;
     }
 
-    /**
-     * Returns a DROP TABLE migration stub.
-     *
-     * @param string $table Inferred table name.
-     * @return string PHP source code.
-     */
+    /** @return string */
     protected function stubDrop(string $table): string
     {
         return <<<PHP
@@ -630,20 +596,11 @@ use Slenix\Database\Migrations\Blueprint;
 
 return new class extends Migration
 {
-    /**
-     * Run the migration — drops the {$table} table.
-     *
-     * Uses Schema::dropIfExists() which automatically handles
-     * FK-check disabling (MySQL) and CASCADE (PostgreSQL).
-     */
     public function up(): void
     {
         Schema::dropIfExists('{$table}');
     }
 
-    /**
-     * Reverse the migration — recreates the {$table} table.
-     */
     public function down(): void
     {
         Schema::create('{$table}', function (Blueprint \$table) {
@@ -655,11 +612,7 @@ return new class extends Migration
 PHP;
     }
 
-    /**
-     * Returns a blank migration stub with empty up() and down() methods.
-     *
-     * @return string PHP source code.
-     */
+    /** @return string */
     protected function stubBlank(): string
     {
         return <<<'PHP'
@@ -673,17 +626,11 @@ use Slenix\Database\Migrations\Blueprint;
 
 return new class extends Migration
 {
-    /**
-     * Run the migration.
-     */
     public function up(): void
     {
         //
     }
 
-    /**
-     * Reverse the migration.
-     */
     public function down(): void
     {
         //
@@ -692,34 +639,69 @@ return new class extends Migration
 PHP;
     }
 
+    // =========================================================================
+    // Interactive argument resolution
+    // =========================================================================
+
     /**
-     * Probes the configured database and, when it does not exist, offers to
-     * create it interactively. Aborts with exit(1) if the user declines or if
-     * creation fails. Propagates any non-"missing database" PDO exception so
-     * the caller can handle credential / host / driver errors normally.
+     * Returns the CLI argument at the given index, or prompts the user.
      *
-     * Respects --force (auto-confirms) and --pretend (skips the probe entirely,
-     * since pretend mode never touches the database).
+     * @param int    $index       Index in $this->args.
+     * @param string $question    Prompt question.
+     * @param string $placeholder Hint text inside the box.
+     * @param string $example     Example shown on empty input.
+     *
+     * @return string
+     */
+    private function resolveArgument(
+        int    $index,
+        string $question,
+        string $placeholder = '',
+        string $example = ''
+    ): string {
+        if (isset($this->args[$index]) && trim($this->args[$index]) !== '') {
+            return $this->args[$index];
+        }
+
+        $prompt = new Prompt();
+        $value  = $prompt->text($question, $placeholder);
+
+        if (trim($value) === '') {
+            echo PHP_EOL;
+            self::error('A name is required.');
+            if ($example !== '') {
+                self::info("Example: {$example}");
+            }
+            echo PHP_EOL;
+            exit(1);
+        }
+
+        return $value;
+    }
+
+    // =========================================================================
+    // Database helpers (unchanged)
+    // =========================================================================
+
+    /**
+     * Probes the configured database and offers to create it if missing.
      *
      * @return void
      */
     private function ensureDatabase(): void
     {
-        // Pretend mode never connects to the database — nothing to check.
         if ($this->pretend) {
             return;
         }
 
         $config = $this->resolveDatabaseConfig();
-        $error = DatabaseCreator::probe($config);
+        $error  = DatabaseCreator::probe($config);
 
         if ($error === null) {
-            return; // database is reachable
+            return;
         }
 
         if (!DatabaseCreator::isMissingDatabase($error)) {
-            // Connection error unrelated to a missing database (bad credentials,
-            // wrong host, unsupported driver, etc.) — let it bubble up.
             throw $error;
         }
 
@@ -748,44 +730,29 @@ PHP;
     }
 
     /**
-     * Builds the database configuration array from environment variables.
+     * Builds the database config array from environment variables.
      *
-     * Falls back to sensible defaults so the command works even when some
-     * variables are not defined (e.g. during generator-only usage).
-     *
-     * @return array{
-     *   driver: string,
-     *   host: string,
-     *   port: int,
-     *   database: string,
-     *   username: string,
-     *   password: string,
-     *   charset: string,
-     *   collation: string,
-     * }
+     * @return array
      */
     private function resolveDatabaseConfig(): array
     {
         return [
-            'driver' => $_ENV['DB_CONNECTION'] ?? 'mysql',
-            'host' => $_ENV['DB_HOST'] ?? '127.0.0.1',
-            'port' => (int) ($_ENV['DB_PORT'] ?? 3306),
-            'database' => $_ENV['DB_DATABASE'] ?? '',
-            'username' => $_ENV['DB_USERNAME'] ?? '',
-            'password' => $_ENV['DB_PASSWORD'] ?? '',
-            'charset' => $_ENV['DB_CHARSET'] ?? 'utf8mb4',
-            'collation' => $_ENV['DB_COLLATION'] ?? 'utf8mb4_unicode_ci',
+            'driver'    => env('DB_CONNECTION') ?? 'mysql',
+            'host'      => env('DB_HOST') ?? '127.0.0.1',
+            'port'      => (int) env('DB_PORT') ?? 3306,
+            'database'  => env('DB_DATABASE') ?? '',
+            'username'  => env('DB_USERNAME') ?? '',
+            'password'  => env('DB_PASSWORD') ?? '',
+            'charset'   => env('DB_CHARSET') ?? 'utf8mb4',
+            'collation' => env('DB_COLLATION') ?? 'utf8mb4_unicode_ci',
         ];
     }
 
-    // =========================================================================
-    // Internal helpers
-    // =========================================================================
-
     /**
-     * Parses the --step=N flag from the argument list.
+     * Parses the --step=N flag.
      *
-     * @param int $default Value to return when the flag is absent.
+     * @param int $default Fallback when the flag is absent.
+     *
      * @return int
      */
     private function parseStep(int $default): int
@@ -800,10 +767,10 @@ PHP;
     }
 
     /**
-     * Prints a yes/no confirmation prompt and returns the boolean result.
-     * Always returns true when --force is active.
+     * Prints a yes/no confirmation prompt.
      *
-     * @param string $question Question to display.
+     * @param string $question
+     *
      * @return bool
      */
     private function confirm(string $question): bool
@@ -821,7 +788,7 @@ PHP;
     }
 
     /**
-     * Prints the collected pretend-mode SQL log.
+     * Prints the pretend-mode SQL log.
      *
      * @return void
      */

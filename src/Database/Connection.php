@@ -8,7 +8,17 @@
 | Manages the PDO connection using the Singleton pattern to ensure a single
 | active connection per process. Supports MySQL, PostgreSQL and SQLite.
 |
-| SQLite requires only a file path (or ':memory:') as the hostname.
+| Config keys (app.php → db_connect):
+|   driver    — 'mysql' | 'pgsql' | 'sqlite'
+|   host      — server host (MySQL/PgSQL) — ignored for SQLite
+|   port      — server port (MySQL/PgSQL) — ignored for SQLite
+|   database  — database name (MySQL/PgSQL) or file path (SQLite)
+|               use ':memory:' for an in-memory SQLite database
+|               relative paths are resolved from the project root
+|   username  — database user  (MySQL/PgSQL) — ignored for SQLite
+|   password  — database password (MySQL/PgSQL) — ignored for SQLite
+|   charset   — connection charset, MySQL only (default 'utf8mb4')
+|   collation — table collation,   MySQL only (default 'utf8mb4_unicode_ci')
 |
 */
 
@@ -22,7 +32,6 @@ use Slenix\Core\Exceptions\ErrorHandler;
 
 class Connection extends ErrorHandler
 {
-
     /** @var Connection|null Singleton instance. */
     private static ?Connection $connection = null;
 
@@ -32,47 +41,70 @@ class Connection extends ErrorHandler
     /**
      * Builds the PDO connection from a configuration array.
      *
-     * Required config keys:
-     *   drive    — 'mysql' | 'pgsql' | 'sqlite'
-     *   hostname — host (MySQL/PgSQL) or file path (SQLite, use ':memory:' for in-memory)
-     *   port     — port number (MySQL/PgSQL; ignored for SQLite)
-     *   dbname   — database name (MySQL/PgSQL; ignored for SQLite)
-     *   username — database user (MySQL/PgSQL; ignored for SQLite)
-     *   password — database password (MySQL/PgSQL; ignored for SQLite)
-     *   charset  — connection charset (MySQL only, default 'utf8mb4')
+     * When $config is null the connection parameters are loaded from
+     * src/Config/app.php under the 'db_connect' key.
      *
-     * @param array|null $config Configuration array; null loads from app.php.
-     *
-     * @throws \Exception              When the configuration file is missing.
+     * @param  array<string, mixed>|null $config Configuration array.
+     * @throws \Exception                When the configuration file is missing.
      * @throws \InvalidArgumentException When an unsupported driver is requested.
      */
     public function __construct(?array $config = null)
     {
         if ($config === null) {
-            $configFile = __DIR__ . '/../Config/app.php';
+            // src/Database/Connection.php → dirname 2x → src/ → dirname 1x → project root
+            $configFile = dirname(__DIR__, 2) . '/src/Config/app.php';
 
             if (!file_exists($configFile)) {
                 throw new \Exception('Configuration file not found: ' . $configFile);
             }
 
-            $config = require_once $configFile;
-            $config = $config['db_connect'];
+            $appConfig = require $configFile;
+            $config    = $appConfig['db_connect'] ?? [];
         }
 
-        $driver = strtolower(trim($config['drive'] ?? ''));
+        // ── Normalise legacy key names so old configs keep working ──────────
+        // drive    → driver
+        // hostname → host
+        // dbname   → database
+        if (!isset($config['driver'])   && isset($config['drive']))    $config['driver']   = $config['drive'];
+        if (!isset($config['host'])     && isset($config['hostname'])) $config['host']     = $config['hostname'];
+        if (!isset($config['database']) && isset($config['dbname']))   $config['database'] = $config['dbname'];
+        // ────────────────────────────────────────────────────────────────────
+
+        $driver = strtolower(trim($config['driver'] ?? 'sqlite'));
 
         if (!in_array($driver, ['mysql', 'pgsql', 'sqlite'], true)) {
             throw new \InvalidArgumentException(
-                "Unsupported database driver: '{$config['drive']}'. Supported: mysql, pgsql, sqlite."
+                "Unsupported database driver: '{$driver}'. Supported: mysql, pgsql, sqlite."
             );
         }
+
+        // ── Resolve SQLite path ──────────────────────────────────────────────
+        // Relative paths (e.g. 'database/database.sqlite') are resolved from
+        // the project root, which is three levels above src/Database/.
+        if ($driver === 'sqlite' && ($config['database'] ?? '') !== ':memory:') {
+            $path = $config['database'] ?? 'database/database.sqlite';
+
+            if (!str_starts_with($path, '/')) {
+                // src/Database/Connection.php → 3 levels up = project root
+                $path = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . ltrim($path, '/\\');
+            }
+
+            // Create the directory automatically if it does not exist yet
+            $dir = dirname($path);
+            if (!is_dir($dir)) {
+                mkdir($dir, 0755, true);
+            }
+
+            $config['database'] = $path;
+        }
+        // ────────────────────────────────────────────────────────────────────
 
         try {
             $dsn     = $this->buildDsn($config, $driver);
             $options = $this->getPdoOptions($driver);
 
             if ($driver === 'sqlite') {
-                // SQLite does not use username / password
                 $this->pdo = new PDO($dsn, null, null, $options);
             } else {
                 $this->pdo = new PDO(
@@ -82,20 +114,27 @@ class Connection extends ErrorHandler
                     $options
                 );
             }
+
+            $this->applyPostConnectSettings($driver);
+
         } catch (PDOException $e) {
             $this->handleException($e);
         }
     }
 
+    // -------------------------------------------------------------------------
+    // DSN Builder
+    // -------------------------------------------------------------------------
+
     /**
      * Assembles the DSN string for the given driver and configuration.
      *
      * MySQL  → mysql:host=…;port=…;dbname=…;charset=…
-     * PgSQL  → pgsql:host=… port=… dbname=… options='--client_encoding=UTF8'
-     * SQLite → sqlite:/path/to/file  or  sqlite::memory:
+     * PgSQL  → pgsql:host=…;port=…;dbname=…;options='--client_encoding=UTF8'
+     * SQLite → sqlite:/absolute/path/to/file  or  sqlite::memory:
      *
-     * @param array  $config Validated configuration array.
-     * @param string $driver Normalised driver name.
+     * @param  array<string, mixed> $config Validated configuration array.
+     * @param  string               $driver Normalised driver name.
      * @return string PDO DSN string.
      */
     private function buildDsn(array $config, string $driver): string
@@ -103,40 +142,40 @@ class Connection extends ErrorHandler
         return match ($driver) {
             'mysql' => sprintf(
                 'mysql:host=%s;port=%s;dbname=%s;charset=%s',
-                $config['hostname'] ?? '127.0.0.1',
+                $config['host']     ?? '127.0.0.1',
                 $config['port']     ?? 3306,
-                $config['dbname']   ?? '',
+                $config['database'] ?? '',
                 $config['charset']  ?? 'utf8mb4'
             ),
 
             'pgsql' => sprintf(
                 "pgsql:host=%s;port=%s;dbname=%s;options='--client_encoding=UTF8'",
-                $config['hostname'] ?? '127.0.0.1',
+                $config['host']     ?? '127.0.0.1',
                 $config['port']     ?? 5432,
-                $config['dbname']   ?? ''
+                $config['database'] ?? ''
             ),
 
-            // SQLite: hostname is the file path (or ':memory:')
-            'sqlite' => 'sqlite:' . ($config['hostname'] ?? ':memory:'),
+            'sqlite' => 'sqlite:' . ($config['database'] ?? ':memory:'),
         };
     }
+
+    // -------------------------------------------------------------------------
+    // PDO Options
+    // -------------------------------------------------------------------------
 
     /**
      * Returns PDO connection options tailored to the active driver.
      *
-     * Common options (all drivers):
-     *   ERRMODE_EXCEPTION       — always throw PDOException on error
-     *   FETCH_OBJ               — default fetch mode returns stdClass objects
-     *   EMULATE_PREPARES false  — use native prepared statements
+     * All drivers:
+     *   ERRMODE_EXCEPTION      — always throw PDOException on error
+     *   FETCH_OBJ              — default fetch mode returns stdClass objects
+     *   EMULATE_PREPARES false — use native prepared statements
      *
      * PgSQL extras:
      *   STRINGIFY_FETCHES false — preserve native PHP types (int, float, bool)
      *
-     * SQLite extras:
-     *   Enable WAL journal mode and foreign-key enforcement via PRAGMA.
-     *
-     * @param string $driver Normalised driver name.
-     * @return array<int, mixed> PDO options array.
+     * @param  string $driver Normalised driver name.
+     * @return array<int, mixed>
      */
     private function getPdoOptions(string $driver): array
     {
@@ -153,19 +192,18 @@ class Connection extends ErrorHandler
         return $options;
     }
 
-    // =========================================================
-    // POST-CONNECTION SETUP
-    // =========================================================
+    // -------------------------------------------------------------------------
+    // Post-connection Setup
+    // -------------------------------------------------------------------------
 
     /**
-     * Applies driver-specific PRAGMA / session settings after connection.
-     * Called internally once the PDO object is constructed.
+     * Applies driver-specific settings that require an open connection.
      *
      * SQLite:
-     *   PRAGMA journal_mode = WAL  — improves concurrent read performance
-     *   PRAGMA foreign_keys = ON   — enforce referential integrity
+     *   PRAGMA journal_mode = WAL — better concurrent read performance
+     *   PRAGMA foreign_keys = ON  — enforce referential integrity
      *
-     * @param string $driver Normalised driver name.
+     * @param  string $driver Normalised driver name.
      * @return void
      */
     private function applyPostConnectSettings(string $driver): void
@@ -176,8 +214,12 @@ class Connection extends ErrorHandler
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Static Interface
+    // -------------------------------------------------------------------------
+
     /**
-     * Returns the shared PDO instance, creating the connection on first call.
+     * Returns the shared PDO instance, creating the connection on the first call.
      *
      * @return PDO Active PDO connection.
      */
@@ -191,8 +233,9 @@ class Connection extends ErrorHandler
     }
 
     /**
-     * Resets the singleton, forcing a new connection on the next call to
-     * getInstance(). Useful in tests that need a fresh connection.
+     * Resets the singleton, forcing a fresh connection on the next getInstance() call.
+     *
+     * Useful in tests that need an isolated connection.
      *
      * @return void
      */
@@ -202,11 +245,11 @@ class Connection extends ErrorHandler
     }
 
     /**
-     * Executes a raw SQL query and returns all results as objects.
+     * Executes a raw SQL query and returns all results as stdClass objects.
      *
-     * @param string  $sql    Raw SQL string with optional named placeholders.
-     * @param mixed[] $params Bind parameters (named).
-     * @return mixed[] Fetched rows as stdClass objects.
+     * @param  string         $sql    Raw SQL with optional named placeholders.
+     * @param  mixed[]        $params Bind parameters (named).
+     * @return mixed[]        Fetched rows as stdClass objects.
      */
     public static function raw(string $sql, array $params = []): array
     {
@@ -220,7 +263,7 @@ class Connection extends ErrorHandler
     /**
      * Returns the underlying PDO object for this instance.
      *
-     * @return PDO The active PDO connection.
+     * @return PDO
      */
     public function getPdo(): PDO
     {
@@ -229,9 +272,8 @@ class Connection extends ErrorHandler
 
     /**
      * Returns the PDO driver name for the active connection.
-     * e.g. 'mysql', 'pgsql', 'sqlite'
      *
-     * @return string Driver name.
+     * @return string e.g. 'mysql', 'pgsql', 'sqlite'
      */
     public static function getDriver(): string
     {

@@ -67,7 +67,7 @@ class DatabaseCreator
                 if ($path !== ':memory:' && !file_exists($path)) {
                     return new PDOException(
                         "SQLite database file not found: {$path}",
-                        '1049'
+                        1049
                     );
                 }
                 return null;

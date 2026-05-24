@@ -941,9 +941,9 @@ class Luna
         $source = preg_replace('/@break\b/',     '<?php break; ?>',     $source) ?? $source;
 
         // @auth / @guest
-        $source = preg_replace('/@auth\b/',     "<?php if(!empty(auth()->check()): ?>", $source) ?? $source;
+        $source = preg_replace('/@auth\b/',     "<?php if(!empty(auth()->check())): ?>", $source) ?? $source;
         $source = preg_replace('/@endauth\b/',  '<?php endif; ?>',                             $source) ?? $source;
-        $source = preg_replace('/@guest\b/',    "<?php if(empty(auth()->check()): ?>",  $source) ?? $source;
+        $source = preg_replace('/@guest\b/',    "<?php if(empty(auth()->check())): ?>",  $source) ?? $source;
         $source = preg_replace('/@endguest\b/', '<?php endif; ?>',                             $source) ?? $source;
 
         // @role('admin') — checks $_SESSION['auth_role']
@@ -1305,7 +1305,7 @@ class Luna
 
         // @csrf / @csrf_meta
         $source = str_replace('@csrf',      '<?php echo csrf_field(); ?>', $source);
-        $source = str_replace('@csrf_meta', '<?php echo csrf_meta(); ?>',  $source);
+        $source = str_replace('@csrf_meta', '<?php csrf_meta(); ?>',  $source);
 
         // @method('PUT')
         $source = preg_replace_callback(

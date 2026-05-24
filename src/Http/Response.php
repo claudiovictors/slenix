@@ -1333,6 +1333,8 @@ class Response
 
     /**
      * Automatically formats the response based on the request's "Accept" header.
+     * @param mixed $data
+     * @return void
      */
     public function auto(mixed $data): void
     {

@@ -166,7 +166,7 @@ class Migrator
         $driver = strtoupper($config['driver'] ?? 'database');
 
         echo PHP_EOL;
-        echo "\033[33m  ⚠  {$driver} database \033[1m\"{$dbName}\"\033[0m\033[33m was not found.\033[0m" . PHP_EOL;
+        echo "\033[33m {$driver} database \033[1m\"{$dbName}\"\033[0m\033[33m was not found.\033[0m" . PHP_EOL;
         echo PHP_EOL;
 
         $answer = ($this->promptHandler)(

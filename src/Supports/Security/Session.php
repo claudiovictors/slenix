@@ -8,6 +8,12 @@
 | Secure session management interface. Handles cookie security,
 | data persistence, and one-time flash data.
 |
+| Flash lifecycle (mirrors Laravel):
+|   1. Data is written to $_SESSION['_flash'] during a request.
+|   2. At the START of the NEXT request, age() moves _flash → _flash_previous
+|      and clears _flash. Views read from _flash_previous.
+|   3. At the start of the request after that, _flash_previous is cleared.
+|
 */
 
 declare(strict_types=1);
@@ -16,8 +22,15 @@ namespace Slenix\Supports\Security;
 
 class Session
 {
+    // -------------------------------------------------------------------------
+    // Bootstrap
+    // -------------------------------------------------------------------------
+
     /**
      * Initializes the session with security flags.
+     *
+     * Safe to call multiple times — checks session status before starting.
+     *
      * @return void
      */
     public static function start(): void
@@ -29,15 +42,21 @@ class Session
                 'cookie_samesite' => 'Lax',
                 'use_strict_mode' => true,
                 'use_cookies'     => true,
-                'use_only_cookies'=> true,
+                'use_only_cookies' => true,
             ]);
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Core CRUD
+    // -------------------------------------------------------------------------
+
     /**
-     * Stores a value in the session.
-     * @param string $key
-     * @param mixed $value
+     * Store a value in the session.
+     *
+     * @param  string $key
+     * @param  mixed  $value
+     * @return void
      */
     public static function set(string $key, mixed $value): void
     {
@@ -46,9 +65,10 @@ class Session
     }
 
     /**
-     * Retrieves a value from the session.
-     * @param string $key
-     * @param mixed $default
+     * Retrieve a value from the session.
+     *
+     * @param  string $key
+     * @param  mixed  $default Returned when the key does not exist.
      * @return mixed
      */
     public static function get(string $key, mixed $default = null): mixed
@@ -58,8 +78,9 @@ class Session
     }
 
     /**
-     * Checks for existence of a key.
-     * @param string $key
+     * Check whether a key exists in the session.
+     *
+     * @param  string $key
      * @return bool
      */
     public static function has(string $key): bool
@@ -69,8 +90,9 @@ class Session
     }
 
     /**
-     * Returns all session variables.
-     * @return array
+     * Return all session variables.
+     *
+     * @return array<string, mixed>
      */
     public static function all(): array
     {
@@ -79,8 +101,10 @@ class Session
     }
 
     /**
-     * Removes a specific item from the session.
-     * @param string $key
+     * Remove a specific key from the session.
+     *
+     * @param  string $key
+     * @return void
      */
     public static function remove(string $key): void
     {
@@ -88,9 +112,25 @@ class Session
         unset($_SESSION[$key]);
     }
 
+    // -------------------------------------------------------------------------
+    // Identity
+    // -------------------------------------------------------------------------
+
     /**
-     * Regenerates the session ID to prevent fixation attacks.
-     * @param bool $deleteOldSession
+     * Return the current session ID.
+     *
+     * @return string
+     */
+    public static function id(): string
+    {
+        self::start();
+        return session_id();
+    }
+
+    /**
+     * Regenerate the session ID to prevent session fixation attacks.
+     *
+     * @param  bool $deleteOldSession Whether to delete the old session file.
      * @return bool
      */
     public static function regenerateId(bool $deleteOldSession = false): bool
@@ -99,8 +139,28 @@ class Session
         return session_regenerate_id($deleteOldSession);
     }
 
+    // -------------------------------------------------------------------------
+    // Lifecycle
+    // -------------------------------------------------------------------------
+
     /**
-     * Clears and destroys the current session.
+     * Clear all session data without destroying the session itself.
+     *
+     * Unlike destroy(), the session ID and cookie are preserved.
+     *
+     * @return void
+     */
+    public static function flush(): void
+    {
+        self::start();
+        $_SESSION = [];
+    }
+
+    /**
+     * Clear and destroy the current session completely.
+     *
+     * Expires the session cookie and calls session_destroy().
+     *
      * @return void
      */
     public static function destroy(): void
@@ -108,22 +168,35 @@ class Session
         self::start();
         $_SESSION = [];
 
-        if (ini_get("session.use_cookies")) {
+        if (ini_get('session.use_cookies')) {
             $params = session_get_cookie_params();
             setcookie(
-                session_name(), '', time() - 42000,
-                $params["path"], $params["domain"],
-                $params["secure"], $params["httponly"]
+                session_name(),
+                '',
+                time() - 42000,
+                $params['path'],
+                $params['domain'],
+                $params['secure'],
+                $params['httponly']
             );
         }
 
         session_destroy();
     }
 
+    // -------------------------------------------------------------------------
+    // Flash — Write
+    // -------------------------------------------------------------------------
+
     /**
-     * Stores flash data for the next request only.
-     * @param string $key
-     * @param mixed $value
+     * Store a flash value that will be available for the next request only.
+     *
+     * Data is written to $_SESSION['_flash']. On the next request, age()
+     * promotes it to $_SESSION['_flash_previous'] where views can read it.
+     *
+     * @param  string $key
+     * @param  mixed  $value
+     * @return void
      */
     public static function flash(string $key, mixed $value): void
     {
@@ -132,60 +205,67 @@ class Session
     }
 
     /**
-     * Retrieves flash data and deletes it immediately.
-     * @param string $key
-     * @param mixed $default
+     * Flash an associative array of old form input for repopulation via old().
+     *
+     * Stores under the single key '_old_input' so old() can retrieve it
+     * as an array. Sensitive fields must be stripped by the caller.
+     *
+     * @param  array<string, mixed> $data Form input to store.
+     * @return void
+     */
+    public static function flashInput(array $data): void
+    {
+        self::flash('_old_input', $data);
+    }
+
+    // -------------------------------------------------------------------------
+    // Flash — Read
+    // -------------------------------------------------------------------------
+
+    /**
+     * Read a flash value that was stored in the PREVIOUS request.
+     *
+     * Reads from $_SESSION['_flash_previous'], which is populated by age()
+     * at the start of each request. Safe to call multiple times — non-destructive.
+     *
+     * @param  string $key
+     * @param  mixed  $default
      * @return mixed
      */
     public static function getFlash(string $key, mixed $default = null): mixed
     {
         self::start();
-        $value = $_SESSION['_flash'][$key] ?? $default;
-        unset($_SESSION['_flash'][$key]);
-        if (empty($_SESSION['_flash'])) unset($_SESSION['_flash']);
-        return $value;
+        return $_SESSION['_flash_previous'][$key] ?? $default;
     }
 
     /**
-     * Checks if flash data exists for a key.
-     * @param string $key
+     * Check whether a flash value exists for the current request.
+     *
+     * Reads from $_SESSION['_flash_previous'].
+     *
+     * @param  string $key
      * @return bool
      */
     public static function hasFlash(string $key): bool
     {
         self::start();
-        return isset($_SESSION['_flash'][$key]);
-    }
-
-    /**
-     * Flashes an array of input (useful for forms).
-     * @param array $data
-     */
-    public static function flashOldInput(array $data): void
-    {
-        self::start();
-        foreach ($data as $key => $value) {
-            $_SESSION['_flash']['_old_input_' . $key] = $value;
-        }
+        return isset($_SESSION['_flash_previous'][$key]);
     }
 
     // -------------------------------------------------------------------------
-    // Flash Lifecycle
+    // Flash — Lifecycle
     // -------------------------------------------------------------------------
 
     /**
-     * Ages the flash data by one request cycle.
+     * Age the flash data by one request cycle.
      *
-     * Moves current flash data to a "_previous" bucket and clears the
-     * previous bucket. This must be called once per request (e.g. in a
-     * middleware or at the start of the Kernel) so flash data lives for
-     * exactly one request.
+     * Must be called ONCE at the very start of each request (in the Kernel),
+     * BEFORE any route or controller runs.
      *
-     * Without this, old() data from a login form will still be present
-     * when the user visits the dashboard after logout.
-     *
-     * Usage in Kernel or Middleware:
-     *   Session::age();
+     * What it does:
+     *   1. Discards $_SESSION['_flash_previous'] (data from two requests ago).
+     *   2. Promotes $_SESSION['_flash'] → $_SESSION['_flash_previous'].
+     *   3. Clears $_SESSION['_flash'] so it is ready for new writes.
      *
      * @return void
      */
@@ -193,29 +273,25 @@ class Session
     {
         self::start();
 
-        // Discard data that already survived one request
+        // Discard data that already survived one full cycle
         unset($_SESSION['_flash_previous']);
 
-        // Promote current flash to previous
+        // Promote current flash → previous
         if (!empty($_SESSION['_flash'])) {
             $_SESSION['_flash_previous'] = $_SESSION['_flash'];
         }
 
-        // Clear current flash — it has been consumed
+        // Clear current flash bucket for new writes this request
         unset($_SESSION['_flash']);
     }
 
     /**
-     * Keeps flash data alive for one more request cycle (reflash).
+     * Re-flash all or specific keys from the previous request into the current
+     * flash bucket so they survive one more request cycle.
      *
-     * Useful when a redirect chain is longer than one hop and you need
-     * the flash data to survive an extra request.
+     * Useful when a redirect chain spans more than one hop.
      *
-     * Usage:
-     *   Session::keepFlash();           // keep all flash
-     *   Session::keepFlash(['email']);   // keep specific keys only
-     *
-     * @param  array<string>|null $keys Specific keys to keep, or null to keep all.
+     * @param  array<string>|null $keys Specific keys to keep, or null for all.
      * @return void
      */
     public static function keepFlash(?array $keys = null): void
@@ -228,48 +304,12 @@ class Session
             return;
         }
 
-        if ($keys === null) {
-            // Re-flash everything from previous
-            foreach ($previous as $key => $value) {
-                $_SESSION['_flash'][$key] = $value;
+        $targets = $keys === null ? array_keys($previous) : $keys;
+
+        foreach ($targets as $key) {
+            if (array_key_exists($key, $previous)) {
+                $_SESSION['_flash'][$key] = $previous[$key];
             }
-        } else {
-            // Re-flash only the requested keys
-            foreach ($keys as $key) {
-                if (array_key_exists($key, $previous)) {
-                    $_SESSION['_flash'][$key] = $previous[$key];
-                }
-            }
-        }
-    }
-
-    /**
-     * Clears all old input flash data without touching the rest of the session.
-     *
-     * Useful after a successful form submission or login to ensure stale
-     * input values do not bleed into subsequent views.
-     *
-     * Usage:
-     *   Session::clearOldInput();
-     *
-     * @return void
-     */
-    public static function clearOldInput(): void
-    {
-        self::start();
-
-        if (!isset($_SESSION['_flash'])) {
-            return;
-        }
-
-        foreach (array_keys($_SESSION['_flash']) as $key) {
-            if (str_starts_with((string) $key, '_old_input_')) {
-                unset($_SESSION['_flash'][$key]);
-            }
-        }
-
-        if (empty($_SESSION['_flash'])) {
-            unset($_SESSION['_flash']);
         }
     }
 
@@ -278,13 +318,9 @@ class Session
     // -------------------------------------------------------------------------
 
     /**
-     * Retrieves a value and immediately removes it from the session (get + remove).
+     * Retrieve a value and immediately remove it from the session.
      *
-     * Useful for one-time tokens, nonces, or any value that should be
-     * consumed on first read.
-     *
-     * Usage:
-     *   $token = Session::pull('pending_token');
+     * Useful for one-time tokens or nonces that should be consumed on first read.
      *
      * @param  string $key
      * @param  mixed  $default
@@ -299,14 +335,9 @@ class Session
     }
 
     /**
-     * Appends a value to a session key that holds an array.
+     * Append a value to a session key that holds an array.
      *
-     * If the key does not exist yet, it is initialized as an empty array.
-     * If the key exists but is not an array, a TypeError is thrown.
-     *
-     * Usage:
-     *   Session::push('cart', ['id' => 5, 'qty' => 1]);
-     *   Session::push('roles', 'editor');
+     * Initializes the key as an empty array if it does not exist yet.
      *
      * @param  string $key
      * @param  mixed  $value
@@ -328,17 +359,13 @@ class Session
     }
 
     /**
-     * Increments a numeric session value by a given amount.
+     * Increment a numeric session value by a given amount.
      *
-     * Initializes the key to 0 before incrementing if it does not exist.
-     *
-     * Usage:
-     *   Session::increment('login_attempts');
-     *   Session::increment('login_attempts', 2);
+     * Initializes the key to 0 if it does not exist.
      *
      * @param  string $key
-     * @param  int    $by
-     * @return int New value.
+     * @param  int    $by  Amount to add (default: 1).
+     * @return int         New value.
      */
     public static function increment(string $key, int $by = 1): int
     {
@@ -349,17 +376,13 @@ class Session
     }
 
     /**
-     * Decrements a numeric session value by a given amount.
+     * Decrement a numeric session value by a given amount.
      *
-     * Initializes the key to 0 before decrementing if it does not exist.
-     *
-     * Usage:
-     *   Session::decrement('credits');
-     *   Session::decrement('credits', 5);
+     * Initializes the key to 0 if it does not exist.
      *
      * @param  string $key
-     * @param  int    $by
-     * @return int New value.
+     * @param  int    $by  Amount to subtract (default: 1).
+     * @return int         New value.
      */
     public static function decrement(string $key, int $by = 1): int
     {
@@ -374,10 +397,7 @@ class Session
     // -------------------------------------------------------------------------
 
     /**
-     * Returns a subset of session data for the given keys only.
-     *
-     * Usage:
-     *   $data = Session::only(['user_id', 'locale']);
+     * Return a subset of session data for the given keys only.
      *
      * @param  array<string> $keys
      * @return array<string, mixed>
@@ -389,10 +409,7 @@ class Session
     }
 
     /**
-     * Returns all session data except the given keys.
-     *
-     * Usage:
-     *   $safe = Session::except(['_flash', '_token']);
+     * Return all session data except the given keys.
      *
      * @param  array<string> $keys
      * @return array<string, mixed>
@@ -404,49 +421,15 @@ class Session
     }
 
     // -------------------------------------------------------------------------
-    // Utilities
+    // Security
     // -------------------------------------------------------------------------
 
     /**
-     * Clears all session data without destroying the session itself.
+     * Return the CSRF token stored in the session.
      *
-     * Unlike destroy(), the session ID and cookie are preserved.
-     * Useful when you want to reset state but keep the session alive
-     * (e.g. switching user context in tests).
+     * Generates and stores a new token if one does not exist yet.
      *
-     * Usage:
-     *   Session::flush();
-     *
-     * @return void
-     */
-    public static function flush(): void
-    {
-        self::start();
-        $_SESSION = [];
-    }
-
-    /**
-     * Returns the current session ID.
-     *
-     * @return string
-     */
-    public static function id(): string
-    {
-        self::start();
-        return session_id();
-    }
-
-    /**
-     * Returns the CSRF token stored in the session.
-     *
-     * Creates and stores a new token if one does not exist yet.
-     * This complements the CSRF class which handles verification.
-     *
-     * Usage:
-     *   $token = Session::token();
-     *   // In views: <input type="hidden" name="_token" value="<?= Session::token() ?>">
-     *
-     * @return string
+     * @return string 64-character hex token.
      */
     public static function token(): string
     {

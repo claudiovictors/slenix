@@ -388,6 +388,370 @@ class Str
     }
 
     /**
+     * Validates whether the given string is a valid proper name.
+     * Accepts letters, spaces, hyphens, and apostrophes (UTF-8).
+     * Str::isName("Joan D'Arc Silva-Mendes") → true
+     * Str::isName("Joan123") → false
+     *
+     * @param string $value     The string to validate.
+     * @param int    $minWords  The minimum number of words required (e.g., 2 for first + last name).
+     * @param int    $maxLength The maximum allowable length.
+     * @return bool             True if the string is a valid name, false otherwise.
+     */
+    public static function isName(string $value, int $minWords = 1, int $maxLength = 100): bool
+    {
+        $value = trim($value);
+
+        if (mb_strlen($value) < 2 || mb_strlen($value) > $maxLength) {
+            return false;
+        }
+
+        // Only allow Unicode letters, spaces, hyphens, and apostrophes
+        if (!preg_match("/^[\pL\s\-']+$/u", $value)) {
+            return false;
+        }
+
+        // Verify minimum word count
+        $words = array_filter(explode(' ', $value));
+        if (count($words) < $minWords) {
+            return false;
+        }
+
+        // Ensure no word is shorter than 2 characters (excluding specific name particles)
+        $particles = ['de', 'da', 'do', 'dos', 'das', 'e', 'y', 'of', 'van', 'von', 'di', 'du'];
+        foreach ($words as $word) {
+            if (mb_strlen($word) < 2 && !in_array(mb_strtolower($word), $particles, true)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Validates whether the given string is a valid username.
+     * Rules: Alphanumeric characters, underscores, and hyphens only. No spaces.
+     * Str::isUsername('claudio_victor-98') → true
+     *
+     * @param string $value The string to validate.
+     * @param int    $min   Minimum length constraint (default: 3).
+     * @param int    $max   Maximum length constraint (default: 32).
+     * @return bool         True if the string is a valid username, false otherwise.
+     */
+    public static function isUsername(string $value, int $min = 3, int $max = 32): bool
+    {
+        $len = mb_strlen($value);
+        if ($len < $min || $len > $max) {
+            return false;
+        }
+
+        // Cannot start or end with a hyphen or an underscore
+        if (preg_match('/^[-_]|[-_]$/', $value)) {
+            return false;
+        }
+
+        return (bool) preg_match('/^[a-zA-Z0-9_\-]+$/', $value);
+    }
+
+    /**
+     * Validates whether the given string is a valid phone number (International format).
+     * Accepts: +244923000000, +1 (555) 000-0000, 923000000, etc.
+     * Str::isPhone('+244923456789') → true
+     *
+     * @param string $value The string to validate.
+     * @return bool         True if the string is a valid phone number, false otherwise.
+     */
+    public static function isPhone(string $value): bool
+    {
+        // Strip spaces, parentheses, hyphens, and dots to normalize the string
+        $normalized = preg_replace('/[\s\-\.\(\)]/', '', $value) ?? $value;
+
+        // International format: '+' followed by 7 to 15 digits
+        if (str_starts_with($normalized, '+')) {
+            return (bool) preg_match('/^\+[1-9]\d{6,14}$/', $normalized);
+        }
+
+        // Local format: 7 to 15 digits
+        return (bool) preg_match('/^[1-9]\d{6,14}$/', $normalized);
+    }
+
+    /**
+     * Validates whether the given string is a valid postal/zip code.
+     * Supports multiple format structures per country (PT, AO, BR, US, UK, ES, FR, DE).
+     * Str::isPostalCode('1000-001', 'PT') → true
+     * Str::isPostalCode('10001', 'US') → true
+     *
+     * @param string $value   The string to validate.
+     * @param string $country The ISO country code.
+     * @return bool           True if the string is a valid postal code, false otherwise.
+     */
+    public static function isPostalCode(string $value, string $country = 'PT'): bool
+    {
+        $value = trim($value);
+
+        $patterns = [
+            'PT' => '/^\d{4}-\d{3}$/',                           // 1000-001
+            'AO' => '/^\d{4}$/',                                 // 1234
+            'BR' => '/^\d{5}-?\d{3}$/',                          // 01310-100
+            'US' => '/^\d{5}(-\d{4})?$/',                        // 10001 or 10001-1234
+            'UK' => '/^[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}$/i',   // SW1A 1AA
+            'ES' => '/^\d{5}$/',                                 // 28001
+            'FR' => '/^\d{5}$/',                                 // 75001
+            'DE' => '/^\d{5}$/',                                 // 10115
+        ];
+
+        $pattern = $patterns[strtoupper($country)] ?? '/^\d{4,10}$/';
+
+        return (bool) preg_match($pattern, $value);
+    }
+
+    /**
+     * Validates regional taxpayer identification numbers (NIF/NIT/CPF/NUIT).
+     * Str::isTaxId('5417023LA041', 'AO') → true (Angola)
+     *
+     * @param string $value   The string to validate.
+     * @param string $country The targeted country code ('AO' | 'BR' | 'PT').
+     * @return bool           True if the string matches the regional tax ID constraints.
+     */
+    public static function isTaxId(string $value, string $country = 'AO'): bool
+    {
+        $value = preg_replace('/[\s\.\-\/]/', '', $value) ?? $value;
+
+        return match (strtoupper($country)) {
+            // Angola NIF: 9 to 14 alphanumeric characters
+            'AO' => (bool) preg_match('/^[0-9A-Z]{9,14}$/i', $value),
+
+            // Brazil CPF: 11 digits with verification digit calculations
+            'BR' => static::isValidCpf($value),
+
+            // Portugal NIF: 9 digits
+            'PT' => (bool) preg_match('/^[0-9]{9}$/', $value),
+
+            default => mb_strlen($value) >= 6 && mb_strlen($value) <= 20,
+        };
+    }
+
+    /**
+     * Validates a Brazilian CPF (Verification Digits Checksum).
+     * Helper method for isTaxId().
+     * 
+     * @param string $cpf The normalized CPF string.
+     * @return bool       True if valid, false otherwise.
+     */
+    private static function isValidCpf(string $cpf): bool
+    {
+        if (!preg_match('/^\d{11}$/', $cpf)) {
+            return false;
+        }
+
+        // Reject known invalid sequential patterns (e.g., 00000000000)
+        if (preg_match('/^(\d)\1{10}$/', $cpf)) {
+            return false;
+        }
+
+        // Compute first verification digit
+        $sum = 0;
+        for ($i = 0; $i < 9; $i++) {
+            $sum += (int) $cpf[$i] * (10 - $i);
+        }
+        $d1 = $sum % 11 < 2 ? 0 : 11 - ($sum % 11);
+
+        // Compute second verification digit
+        $sum = 0;
+        for ($i = 0; $i < 10; $i++) {
+            $sum += (int) $cpf[$i] * (11 - $i);
+        }
+        $d2 = $sum % 11 < 2 ? 0 : 11 - ($sum % 11);
+
+        return (int) $cpf[9] === $d1 && (int) $cpf[10] === $d2;
+    }
+
+    /**
+     * Validates whether the given string is a valid IP address (v4 or v6).
+     * Str::isIp('192.168.1.1') → true
+     * Str::isIp('::1', 'v6') → true
+     *
+     * @param string $value   The string to validate.
+     * @param string $version The IP protocol version context ('v4' | 'v6' | 'any').
+     * @return bool           True if valid, false otherwise.
+     */
+    public static function isIp(string $value, string $version = 'any'): bool
+    {
+        return match ($version) {
+            'v4' => filter_var($value, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false,
+            'v6' => filter_var($value, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false,
+            default => filter_var($value, FILTER_VALIDATE_IP) !== false,
+        };
+    }
+
+    /**
+     * Validates whether the given string is a valid MAC address.
+     * Str::isMac('00:1A:2B:3C:4D:5E') → true
+     * 
+     * @param string $value The string to validate.
+     * @return bool         True if valid, false otherwise.
+     */
+    public static function isMac(string $value): bool
+    {
+        return (bool) preg_match('/^([0-9A-Fa-f]{2}[:\-]){5}[0-9A-Fa-f]{2}$/', $value);
+    }
+
+    /**
+     * Validates whether the given string represents a valid date.
+     * Str::isDate('2026-12-31') → true
+     * Str::isDate('31/12/2026', 'd/m/Y') → true
+     *
+     * @param string $value  The string to validate.
+     * @param string $format The expected date format matching DateTime tokens.
+     * @return bool          True if the date matches the structure and is valid, false otherwise.
+     */
+    public static function isDate(string $value, string $format = 'Y-m-d'): bool
+    {
+        $dt = \DateTime::createFromFormat($format, $value);
+        return $dt !== false && $dt->format($format) === $value;
+    }
+
+    /**
+     * Validates whether the given string is a valid time notation (HH:MM or HH:MM:SS).
+     * Str::isTime('23:59') → true
+     * Str::isTime('25:00') → false
+     * 
+     * @param string $value The string to validate.
+     * @return bool         True if valid, false otherwise.
+     */
+    public static function isTime(string $value): bool
+    {
+        return (bool) preg_match('/^([01]\d|2[0-3]):([0-5]\d)(:([0-5]\d))?$/', $value);
+    }
+
+    /**
+     * Validates whether the given string is a valid hexadecimal color representation.
+     * Str::isHexColor('#FF2D20') → true
+     * Str::isHexColor('FF2D20') → true
+     * Str::isHexColor('#FFF') → true
+     * 
+     * @param string $value The string to validate.
+     * @return bool         True if valid, false otherwise.
+     */
+    public static function isHexColor(string $value): bool
+    {
+        return (bool) preg_match('/^#?([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/', $value);
+    }
+
+    /**
+     * Validates whether a password meets specific security strength rules.
+     * Str::isStrongPassword('Slenix@2026') → true
+     *
+     * @param string $value         The string to evaluate.
+     * @param int    $minLength     Minimum character length (default: 8).
+     * @param bool   $requireUpper  Enforce at least one uppercase letter.
+     * @param bool   $requireNumber Enforce at least one digit character.
+     * @param bool   $requireSymbol Enforce at least one special character symbol.
+     * @return bool                 True if all conditions are satisfied, false otherwise.
+     */
+    public static function isStrongPassword(
+        string $value,
+        int $minLength = 8,
+        bool $requireUpper = true,
+        bool $requireNumber = true,
+        bool $requireSymbol = true
+    ): bool {
+        if (mb_strlen($value) < $minLength) {
+            return false;
+        }
+        if ($requireUpper && !preg_match('/[A-Z]/', $value)) {
+            return false;
+        }
+        if ($requireNumber && !preg_match('/[0-9]/', $value)) {
+            return false;
+        }
+        if ($requireSymbol && !preg_match('/[^a-zA-Z0-9]/', $value)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Evaluates the structural complexity of a password and returns a classification string.
+     * Classifications: 'weak' | 'fair' | 'strong' | 'very_strong'
+     * Str::passwordStrength('Slenix@2026') → 'very_strong'
+     * 
+     * @param string $value The string to evaluate.
+     * @return string       The complexity category string.
+     */
+    public static function passwordStrength(string $value): string
+    {
+        $score = 0;
+
+        if (mb_strlen($value) >= 8)
+            $score++;
+        if (mb_strlen($value) >= 12)
+            $score++;
+        if (preg_match('/[A-Z]/', $value))
+            $score++;
+        if (preg_match('/[a-z]/', $value))
+            $score++;
+        if (preg_match('/[0-9]/', $value))
+            $score++;
+        if (preg_match('/[^a-zA-Z0-9]/', $value))
+            $score++;
+        if (mb_strlen($value) >= 16 && preg_match('/[^a-zA-Z0-9]/', $value))
+            $score++;
+
+        return match (true) {
+            $score >= 6 => 'very_strong',
+            $score >= 4 => 'strong',
+            $score >= 2 => 'fair',
+            default => 'weak',
+        };
+    }
+
+    /**
+     * Validates whether the given string is a valid URL-friendly slug pattern.
+     * Str::isSlug('my-post-title') → true
+     * Str::isSlug('My Post') → false
+     * 
+     * @param string $value The string to evaluate.
+     * @return bool         True if valid, false otherwise.
+     */
+    public static function isSlug(string $value): bool
+    {
+        return (bool) preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $value);
+    }
+
+    /**
+     * Validates whether the given string matches the structure and check digit criteria of an IBAN string.
+     * Str::isIban('PT50000201231234567890154') → true
+     * 
+     * @param string $value The string to evaluate.
+     * @return bool         True if valid, false otherwise.
+     */
+    public static function isIban(string $value): bool
+    {
+        $value = strtoupper(preg_replace('/\s+/', '', $value) ?? $value);
+
+        if (!preg_match('/^[A-Z]{2}\d{2}[A-Z0-9]{4,}$/', $value)) {
+            return false;
+        }
+
+        // Shift the first 4 characters to the end and map letters to integers
+        $rearranged = substr($value, 4) . substr($value, 0, 4);
+        $numeric = '';
+        foreach (str_split($rearranged) as $char) {
+            $numeric .= ctype_alpha($char) ? (string) (ord($char) - 55) : $char;
+        }
+
+        // Chunk split Mod 97 processing loops to safely avoid integer overflows without bcmath
+        $remainder = 0;
+        foreach (str_split($numeric, 9) as $chunk) {
+            $remainder = (int) (($remainder . $chunk) % 97);
+        }
+
+        return $remainder === 1;
+    }
+
+    /**
      * Verifica se a string é um e-mail válido.
      */
     public static function isEmail(string $value): bool
@@ -447,9 +811,6 @@ class Str
         );
     }
 
-    // =========================================================================
-    // EXTRAÇÃO
-    // =========================================================================
 
     /**
      * Retorna tudo antes da primeira ocorrência do valor.

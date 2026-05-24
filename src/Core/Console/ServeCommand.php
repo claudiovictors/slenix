@@ -7,7 +7,13 @@
 |
 | Starts the Slenix HTTP development server using PHP's built-in server.
 | When the --ws flag is provided it also starts the WebSocket server
-| in a child process — no temporary files are written to disk.
+| in a child process.
+|
+| Request logs are formatted in the same style as Laravel Artisan serve:
+|
+|   2026-05-23 07:17:00 GET /users ............................................~ 2ms
+|   2026-05-23 07:17:01 POST /api/login .......................................~ 12ms
+|   2026-05-23 07:17:02 GET /favicon.ico .....................................~ 0.4ms
 |
 */
 
@@ -20,25 +26,10 @@ use Slenix\Core\WebSocket\WebSocketServer;
 
 class ServeCommand extends Command
 {
-    /**
-     * CLI arguments received from the Celestial entry point.
-     *
-     * @var array
-     */
+    /** @var array CLI arguments received from the Celestial entry point. */
     private array $args;
 
-    /**
-     * Default HTTP server port.
-     *
-     * @var int
-     */
-    private const DEFAULT_PORT = 8080;
-
-    /**
-     * Default WebSocket server port.
-     *
-     * @var int
-     */
+    private const DEFAULT_PORT    = 8080;
     private const DEFAULT_WS_PORT = 8081;
 
     /**
@@ -49,12 +40,12 @@ class ServeCommand extends Command
         $this->args = $args;
     }
 
+    // =========================================================================
+    // Public API
+    // =========================================================================
+
     /**
-     * Executes the console command to start the development server.
-     *
-     * This method parses incoming flags, validates port ranges, and renders
-     * a clean, minimalist CLI interface inspired by Laravel. It supports
-     * both the standard HTTP server and the optional WebSocket process.
+     * Parses flags, renders the header and starts the development server.
      *
      * @return void
      */
@@ -65,7 +56,6 @@ class ServeCommand extends Command
         $wsPort = self::DEFAULT_WS_PORT;
         $withWs = false;
 
-        // Parse arguments for ports and flags
         foreach ($this->args as $arg) {
             if ($arg === '--ws') {
                 $withWs = true;
@@ -78,7 +68,6 @@ class ServeCommand extends Command
             }
         }
 
-        // Validation logic
         if ($port < 1 || $port > 65535) {
             self::error('Invalid HTTP port (1-65535).');
             exit(1);
@@ -87,58 +76,190 @@ class ServeCommand extends Command
         $host      = '127.0.0.1';
         $publicDir = PUBLIC_PATH;
 
-        // Clean Laravel-style Header
-        self::newLine();
-        echo "  " . $c->colorize("SLENIX", 'primary', true) . $c->white(" Development Server") . PHP_EOL;
+        // ── Header ────────────────────────────────────────────────────────────
         self::newLine();
 
-        // Directory check (silent if exists, muted if creating)
+        $c->separator();
+        echo ' ' . $c->white('Slenix') . $c->muted(' Development Server') . PHP_EOL;
+        $c->separator();
+
+        self::newLine();
+
         if (!is_dir($publicDir)) {
-            echo "  " . $c->muted("Creating public directory...") . PHP_EOL;
             mkdir($publicDir, 0755, true);
         }
 
-        // Main Information Block
-        echo "  " . $c->muted("Server running on ") . $c->white("http://{$host}:{$port}") . PHP_EOL;
-        
+        echo '  ' . $c->badge('INFO', 'primary')
+            . ' ' . $c->muted('Server running on ')
+            . $c->colorize("http://{$host}:{$port}", 'success', true)
+            . PHP_EOL;
+
         if ($withWs) {
-            echo "  " . $c->muted("WebSockets active ") . $c->colorize("ws://{$host}:{$wsPort}", 'purple') . PHP_EOL;
+            echo '  ' . $c->badge('INFO', 'primary')
+                . ' ' . $c->muted('WebSocket active on ')
+                . $c->colorize("ws://{$host}:{$wsPort}", 'purple', true)
+                . PHP_EOL;
         }
 
         self::newLine();
-        
-        // Minimalist footer
-        echo "  " . $c->muted("Press ") . $c->colorize("Ctrl+C", 'warning') . $c->muted(" to stop the server.") . PHP_EOL;
-        
+
+        echo '  ' . $c->muted('Press ')
+            . $c->colorize('Ctrl+C', 'warning')
+            . $c->muted(' to stop the server.')
+            . PHP_EOL;
+
         self::newLine();
 
+        // ── Router ────────────────────────────────────────────────────────────
         if ($withWs) {
             $this->startWithWebSocket($host, $port, $wsPort, $publicDir);
-        } else {
-            // Start the built-in PHP server
-            passthru("php -S {$host}:{$port} -t {$publicDir}");
+            return;
         }
+
+        $this->startHttp($host, $port, $publicDir);
     }
-    
+
+    // =========================================================================
+    // HTTP server
+    // =========================================================================
+
+    /**
+     * Starts the PHP built-in server with a custom router script that logs
+     * each request in the Laravel style before dispatching to the public dir.
+     *
+     * Format:
+     *   2026-05-23 07:17:00 GET /path ..............................~ 2ms
+     *
+     * @param string $host      Bind address.
+     * @param int    $port      HTTP port.
+     * @param string $publicDir Document root.
+     *
+     * @return void
+     */
+    private function startHttp(string $host, int $port, string $publicDir): void
+    {
+        $router = $this->writeRouterScript($publicDir);
+
+        // -t sets the document root so PHP finds static files (CSS, SVG, JS…)
+        // relative to public/. The router intercepts every request first; when
+        // it returns false the server serves the static file directly from -t.
+        passthru(
+            PHP_BINARY
+            . ' -S ' . escapeshellarg("{$host}:{$port}")
+            . ' -t ' . escapeshellarg($publicDir)
+            . ' '    . escapeshellarg($router)
+        );
+    }
+
+    /**
+     * Writes a temporary router PHP script that logs requests then serves
+     * static files or falls back to index.php.
+     *
+     * The public directory path is interpolated directly into the script source
+     * so the router never relies on __DIR__ (which would point to /tmp).
+     *
+     * The file is placed in the system temp directory and auto-deleted on
+     * server shutdown via register_shutdown_function.
+     *
+     * @param string $publicDir Absolute path to the document root.
+     *
+     * @return string Absolute path to the router script.
+     */
+    private function writeRouterScript(string $publicDir): string
+    {
+        // Escape once for safe embedding inside single-quoted PHP strings.
+        $safeDir = str_replace("'", "\\'", rtrim($publicDir, '/'));
+
+        // The script is built with a regular double-quoted heredoc so that
+        // $safeDir is interpolated at generation time — no post-processing.
+        $script = <<<PHP
+<?php
+// Slenix development server router — auto-generated, do not edit.
+// Public directory: {$safeDir}
+
+\$_SLENIX_PUBLIC = '{$safeDir}';
+
+\$start  = microtime(true);
+\$uri    = \$_SERVER['REQUEST_URI'] ?? '/';
+\$method = \$_SERVER['REQUEST_METHOD'] ?? 'GET';
+\$path   = parse_url(\$uri, PHP_URL_PATH);
+\$file   = \$_SLENIX_PUBLIC . \$path;
+
+// ── Static file passthrough ───────────────────────────────────────────────────
+// Return false so PHP's built-in server handles the file itself (correct MIME,
+// range requests, ETags). Only skip when the path is exactly '/' or the file
+// genuinely does not exist (application routes).
+if (\$path !== '/' && file_exists(\$file) && !is_dir(\$file)) {
+    return false;
+}
+
+// ── Boot the application ──────────────────────────────────────────────────────
+\$index = \$_SLENIX_PUBLIC . '/index.php';
+if (file_exists(\$index)) {
+    require \$index;
+}
+
+// ── Request log ───────────────────────────────────────────────────────────────
+\$elapsed = round((microtime(true) - \$start) * 1000, 2);
+\$date    = date('Y-m-d H:i:s');
+\$status  = http_response_code() ?: 200;
+
+\$statusColor = match (true) {
+    \$status >= 500 => "\033[1;38;2;255;85;85m",
+    \$status >= 400 => "\033[1;38;2;255;184;108m",
+    \$status >= 300 => "\033[1;38;2;80;170;255m",
+    default         => "\033[1;38;2;80;250;123m",
+};
+
+\$methodColor = match (\$method) {
+    'POST'          => "\033[38;2;255;184;108m",
+    'PUT', 'PATCH'  => "\033[38;2;189;147;249m",
+    'DELETE'        => "\033[38;2;255;85;85m",
+    default         => "\033[38;2;80;170;255m",
+};
+
+\$reset     = "\033[0m";
+\$muted     = "\033[38;2;120;120;120m";
+\$methodPad = str_pad(\$method, 7);
+\$right     = "~ {\$elapsed}ms";
+\$left      = "{\$date} {\$methodPad} {\$path}";
+\$dots      = max(3, 72 - strlen(\$left) - strlen(\$right));
+
+\$line = \$muted . \$date . ' '
+      . \$reset . \$methodColor . \$methodPad . \$reset
+      . ' ' . \$muted . \$path . ' ' . str_repeat('.', \$dots) . ' '
+      . \$statusColor . \$right . \$reset
+      . PHP_EOL;
+
+file_put_contents('php://stderr', \$line);
+PHP;
+
+        $tmp = sys_get_temp_dir() . '/slenix_router_' . getmypid() . '.php';
+
+        file_put_contents($tmp, $script);
+
+        // Clean up on exit so /tmp does not accumulate stale scripts.
+        register_shutdown_function(static function () use ($tmp): void {
+            if (file_exists($tmp)) {
+                @unlink($tmp);
+            }
+        });
+
+        return $tmp;
+    }
+
+    // =========================================================================
+    // WebSocket
+    // =========================================================================
 
     /**
      * Starts the WebSocket server in a child process and the HTTP server in
-     * the foreground — no temporary files are written to disk at any point.
+     * the foreground.
      *
-     * Strategy:
-     *   1. pcntl_fork()  — preferred on Unix/Linux/macOS. Forks the current
-     *                      PHP process in memory. The child process boots the
-     *                      WebSocket server directly using the already-loaded
-     *                      classes. Zero disk I/O.
-     *   2. proc_open()   — fallback when pcntl is unavailable (e.g. Windows or
-     *                      PHP compiled without --enable-pcntl). Spawns a new
-     *                      PHP process that re-bootstraps via the autoloader
-     *                      and runs the WebSocket server inline.
-     *
-     * @param string $host      Host address to bind both servers to.
-     * @param int    $httpPort  Port for the HTTP development server.
-     * @param int    $wsPort    Port for the WebSocket server.
-     * @param string $publicDir Absolute path to the public document root.
+     * @param string $host
+     * @param int    $httpPort
+     * @param int    $wsPort
+     * @param string $publicDir
      *
      * @return void
      */
@@ -148,37 +269,22 @@ class ServeCommand extends Command
         int    $wsPort,
         string $publicDir
     ): void {
-        $c = self::console();
-
-        echo $c->colorize(
-            "  Starting WebSocket server on ws://{$host}:{$wsPort}...",
-            'cyan'
-        ) . PHP_EOL . PHP_EOL;
-
         if (function_exists('pcntl_fork')) {
             $this->forkWebSocket($host, $wsPort);
         } else {
             $this->spawnWebSocket($host, $wsPort);
         }
 
-        // HTTP server runs in the foreground (blocks until Ctrl+C).
-        passthru("php -S {$host}:{$httpPort} -t {$publicDir}");
+        $this->startHttp($host, $httpPort, $publicDir);
     }
 
-    // =========================================================================
-    // Strategy 1 — pcntl_fork (Unix/Linux/macOS)
-    // =========================================================================
+    // ── Strategy 1 — pcntl_fork (Unix/Linux/macOS) ───────────────────────────
 
     /**
      * Forks the current process and runs the WebSocket server in the child.
      *
-     * The child process inherits all loaded classes and autoloader state,
-     * loads the route file so WebSocket routes are registered, then starts
-     * the server event loop. The parent returns immediately so the HTTP
-     * server can be started in the foreground.
-     *
-     * @param string $host   Host to bind the WebSocket server to.
-     * @param int    $wsPort Port to listen on.
+     * @param string $host
+     * @param int    $wsPort
      *
      * @return void
      */
@@ -188,26 +294,20 @@ class ServeCommand extends Command
         $pid         = pcntl_fork();
 
         if ($pid === -1) {
-            // Fork failed — fall back to proc_open.
             $this->spawnWebSocket($host, $wsPort);
             return;
         }
 
         if ($pid === 0) {
-            // ── Child process ─────────────────────────────────────────────────
-            // Detach from the parent's terminal session so the child is not
-            // killed when the parent receives Ctrl+C.
             if (function_exists('posix_setsid')) {
                 posix_setsid();
             }
 
-            // Load routes so Router::websocket() registrations are available.
             $routesFile = $projectRoot . '/routes/web.php';
             if (file_exists($routesFile)) {
                 require_once $routesFile;
             }
 
-            // Boot and start the WebSocket server — this call never returns.
             $server = new WebSocketServer($host, $wsPort);
 
             foreach (Router::getWebSocketRoutes() as $path => $handlerClass) {
@@ -218,9 +318,6 @@ class ServeCommand extends Command
             exit(0);
         }
 
-        // ── Parent process ────────────────────────────────────────────────────
-        // Register a shutdown handler so the child is cleaned up when the
-        // parent exits (e.g. Ctrl+C on the HTTP server).
         register_shutdown_function(static function () use ($pid): void {
             if (function_exists('posix_kill')) {
                 posix_kill($pid, SIGTERM);
@@ -228,24 +325,13 @@ class ServeCommand extends Command
         });
     }
 
-    // =========================================================================
-    // Strategy 2 — proc_open (cross-platform fallback)
-    // =========================================================================
+    // ── Strategy 2 — proc_open (cross-platform fallback) ─────────────────────
 
     /**
-     * Spawns the WebSocket server as a separate OS process using proc_open().
+     * Spawns the WebSocket server as a separate OS process.
      *
-     * Generates a self-contained inline PHP script as a string and passes it
-     * directly to the PHP binary via -r — no files are written to disk.
-     *
-     * The inline script:
-     *   1. Loads the Composer autoloader.
-     *   2. Loads the .env file via EnvLoader.
-     *   3. Registers WebSocket routes from routes/web.php.
-     *   4. Starts the WebSocketServer event loop.
-     *
-     * @param string $host   Host to bind the WebSocket server to.
-     * @param int    $wsPort Port to listen on.
+     * @param string $host
+     * @param int    $wsPort
      *
      * @return void
      */
@@ -254,7 +340,6 @@ class ServeCommand extends Command
         $projectRoot = addslashes(dirname(__DIR__, 3));
         $phpBinary   = PHP_BINARY;
 
-        // Inline bootstrap — passed to PHP via -r, zero disk writes.
         $inline = <<<PHP
 require_once '{$projectRoot}/vendor/autoload.php';
 try { (new Slenix\\Core\\EnvLoader)->load('{$projectRoot}/.env'); } catch (\\Throwable \$e) {}
@@ -267,20 +352,16 @@ foreach (Slenix\\Http\\Routing\\Router::getWebSocketRoutes() as \$path => \$cls)
 \$server->start();
 PHP;
 
-        // Escape for safe shell embedding.
-        $escaped = escapeshellarg($inline);
-
+        $escaped     = escapeshellarg($inline);
         $descriptors = [
-            0 => ['pipe', 'r'],  // stdin
-            1 => ['file', '/dev/null', 'a'],  // stdout — discarded
-            2 => ['file', '/dev/null', 'a'],  // stderr — discarded
+            0 => ['pipe', 'r'],
+            1 => ['file', '/dev/null', 'a'],
+            2 => ['file', '/dev/null', 'a'],
         ];
 
-        // proc_open keeps the process alive independently of this parent.
         $process = proc_open("{$phpBinary} -r {$escaped}", $descriptors, $pipes);
 
         if (is_resource($process)) {
-            // Detach immediately — we do not wait for the child.
             proc_close($process);
         }
     }

@@ -67,14 +67,14 @@ return [
     |
     */
     'db_connect' => [
-        'drive'     => env('DB_CONNECTION', 'mysql'),
-        'hostname'  => env('DB_HOST', '127.0.0.1'),
+        'driver'    => env('DB_CONNECTION', 'sqlite'),
+        'host'      => env('DB_HOST', '127.0.0.1'),
         'port'      => env('DB_PORT', 3306),
-        'dbname'    => env('DB_DATABASE', ''),
+        'database'  => env('DB_DATABASE', 'database/database.sqlite'),
         'username'  => env('DB_USERNAME', ''),
         'password'  => env('DB_PASSWORD', ''),
-        'charset'   => env('DB_CHARSET',    'utf8mb4'),
-        'collation' => env('DB_COLLATION',  'utf8mb4_unicode_ci'),
+        'charset'   => env('DB_CHARSET', 'utf8mb4'),
+        'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
     ],
 
     /*

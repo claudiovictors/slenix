@@ -2,18 +2,20 @@
 
 /*
 |--------------------------------------------------------------------------
-| RedirectResponse Class — Slenix Framework
+| RedirectResponse Class
 |--------------------------------------------------------------------------
 |
-| Handles HTTP redirection responses fluently. Provides methods to redirect
-| to URLs, named routes, or the previous page — while carrying flash
-| messages, validation errors, and old form input.
+| Fluent HTTP redirect builder. Attach flash messages, validation errors,
+| and old form input before the redirect fires.
 |
 | Usage:
 |   redirect('/home');
 |   redirect()->back();
 |   redirect()->route('dashboard');
-|   redirect('/login')->with('error', 'Sessão expirada')->withInput();
+|   redirect()->back()->with('status', 'Profile updated!');
+|   redirect()->back()->withErrors(['email' => 'Invalid email.']);
+|   redirect()->back()->withInput();
+|   redirect('/login')->with('error', 'Session expired.');
 |
 */
 
@@ -29,8 +31,11 @@ class RedirectResponse
     /** @var int HTTP status code for this redirect. */
     private int $status;
 
-    /** @var array<string, mixed> Flash data to commit before redirecting. */
+    /** @var array<string, mixed> Flash data queued for commit before redirect. */
     private array $flashData = [];
+
+    /** @var array<string, mixed>|null Old input to flash (null = not set). */
+    private ?array $oldInput = null;
 
     /**
      * @param int $status HTTP redirect status code (default: 302).
@@ -47,7 +52,10 @@ class RedirectResponse
     /**
      * Redirect to a specific URL.
      *
-     * Strips control characters to prevent header injection attacks.
+     * Commits all queued flash data to the session, forces a session write,
+     * then sends the Location header and exits.
+     *
+     * Control characters are stripped to prevent header injection.
      *
      * @param  string $url Absolute or relative URL.
      * @return never
@@ -55,17 +63,27 @@ class RedirectResponse
     public function to(string $url): never
     {
         $this->commitFlash();
+
+        // Force PHP to write the session to disk before the process exits.
+        // Without this, session data written after the last automatic write
+        // can be lost when exit is called immediately after header().
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
         $url = str_replace(["\r", "\n", "\0"], '', $url);
         header("Location: {$url}", true, $this->status);
         exit;
     }
 
     /**
-     * Redirect back to the previous page (HTTP_REFERER).
+     * Redirect back to the previous page using the HTTP Referer header.
      *
-     * Falls back to $fallback if the referer header is missing.
+     * Must be called LAST in the chain — fires the redirect immediately.
+     * Attach flash data before calling back():
+     *   redirect()->withFlash('error', 'msg')->back();
      *
-     * @param  string $fallback URL to use when referer is unavailable (default: '/').
+     * @param  string $fallback URL to use when Referer is unavailable (default: '/').
      * @return never
      */
     public function back(string $fallback = '/'): never
@@ -76,7 +94,7 @@ class RedirectResponse
     /**
      * Redirect to a named route.
      *
-     * Falls back to '/' if the route cannot be resolved.
+     * Falls back to '/' when the route name cannot be resolved.
      *
      * @param  string               $name   Route name.
      * @param  array<string, mixed> $params Route parameters.
@@ -88,7 +106,7 @@ class RedirectResponse
     }
 
     /**
-     * Redirect with a permanent status code (301).
+     * Redirect with a permanent (301) status code.
      *
      * @param  string $url Target URL.
      * @return never
@@ -106,6 +124,8 @@ class RedirectResponse
     /**
      * Attach a single flash value to the redirect.
      *
+     * The value will be available via Session::getFlash($key) on the next request.
+     *
      * @param  string $key
      * @param  mixed  $value
      * @return static
@@ -119,7 +139,7 @@ class RedirectResponse
     /**
      * Attach multiple flash values at once.
      *
-     * @param  array<string, mixed> $data
+     * @param  array<string, mixed> $data Key → value pairs to flash.
      * @return static
      */
     public function withMany(array $data): static
@@ -131,9 +151,25 @@ class RedirectResponse
     }
 
     /**
-     * Attach validation errors to the session under a named bag.
+     * Attach a typed flash message (success, error, warning, info).
      *
-     * Errors are stored as '_errors' and consumed by the errors() helper.
+     * Stored under the key '_flash_{type}' and read by FlashMessage::get().
+     *
+     * @param  string $type    One of: success, error, warning, info.
+     * @param  string $message Message text.
+     * @return static
+     */
+    public function withFlash(string $type, string $message): static
+    {
+        $this->flashData['_flash_' . $type] = $message;
+        return $this;
+    }
+
+    /**
+     * Attach validation errors to be read by the errors() helper.
+     *
+     * Errors are stored under '_errors' as a named bag so multiple validators
+     * can coexist without overwriting each other.
      *
      * @param  array<string, string|string[]> $errors Field → message(s) map.
      * @param  string                         $bag    Error bag name (default: 'default').
@@ -150,33 +186,17 @@ class RedirectResponse
     /**
      * Flash the current form input for repopulation via old().
      *
-     * Sensitive fields (password, password_confirmation, _token) are
-     * automatically stripped before flashing.
+     * Sensitive fields (password, password_confirmation, _csrf_token) are
+     * stripped automatically. Stored under '_old_input' as a single array.
      *
-     * @param  array<string, mixed>|null $input Custom input array (default: $_POST).
+     * @param  array<string, mixed>|null $input Custom input (defaults to $_POST).
      * @return static
      */
     public function withInput(?array $input = null): static
     {
-        $input ??= $_POST;
-        unset($input['password'], $input['password_confirmation'], $input['_token']);
-        $this->flashData['_old_input'] = $input;
-        return $this;
-    }
-
-    /**
-     * Attach a typed flash message (success, error, warning, info).
-     *
-     * Shorthand for ->with('_flash_success', 'message'), compatible with
-     * the FlashMessage class and flash() helper.
-     *
-     * @param  string $type    One of: success, error, warning, info.
-     * @param  string $message Message text.
-     * @return static
-     */
-    public function withFlash(string $type, string $message): static
-    {
-        $this->flashData['_flash_' . $type] = $message;
+        $input = $input ?? $_POST;
+        unset($input['password'], $input['password_confirmation'], $input['_csrf_token']);
+        $this->oldInput = $input;
         return $this;
     }
 
@@ -185,7 +205,9 @@ class RedirectResponse
     // -------------------------------------------------------------------------
 
     /**
-     * Commits all pending flash data to the session before the redirect fires.
+     * Write all queued flash data and old input to the session.
+     *
+     * Called internally by to() before session_write_close().
      *
      * @return void
      */
@@ -193,6 +215,10 @@ class RedirectResponse
     {
         foreach ($this->flashData as $key => $value) {
             Session::flash($key, $value);
+        }
+
+        if ($this->oldInput !== null) {
+            Session::flashInput($this->oldInput);
         }
     }
 }

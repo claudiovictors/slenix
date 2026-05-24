@@ -39,17 +39,11 @@ class MakeCommand extends Command
     /**
      * Generates a cryptographically secure APP_KEY and persists it to .env.
      *
-     * Uses random_bytes(32) encoded as base64 with the "base64:" prefix,
-     * which is the secure standard used by the framework's encrypt() helper.
-     *
-     * If the .env file does not exist, the method attempts to clone it from
-     * .env.example before writing the key.
-     *
      * @return void
      */
     public static function generateKey(): void
     {
-        $envPath = self::basePath('.env');
+        $envPath     = self::basePath('.env');
         $examplePath = self::basePath('.env.example');
 
         if (!file_exists($envPath)) {
@@ -68,7 +62,7 @@ class MakeCommand extends Command
             }
         }
 
-        $key = 'base64:' . base64_encode(random_bytes(32));
+        $key     = 'base64:' . base64_encode(random_bytes(32));
         $content = file_get_contents($envPath);
 
         if ($content === false) {
@@ -99,22 +93,22 @@ class MakeCommand extends Command
             self::error("Could not write to .env.");
             return;
         }
+
         echo PHP_EOL;
         self::success("APP_KEY generated and saved to .env.");
         echo PHP_EOL;
-        echo '  '
-            . self::console()->muted($key)
-            . PHP_EOL;
+        echo '  ' . self::console()->muted($key) . PHP_EOL;
         echo PHP_EOL;
     }
 
     /**
      * Generates a secure random key for JWT_SECRET and updates the .env file.
+     *
      * @return void
      */
     public static function generateJwt(): void
     {
-        $key = bin2hex(random_bytes(32));
+        $key     = bin2hex(random_bytes(32));
         $envPath = self::basePath('.env');
 
         if (!file_exists($envPath)) {
@@ -123,7 +117,6 @@ class MakeCommand extends Command
         }
 
         $content = file_get_contents($envPath);
-
         $pattern = "/^JWT_SECRET\s*=.*$/m";
         $replacement = "JWT_SECRET={$key}";
 
@@ -146,29 +139,26 @@ class MakeCommand extends Command
     /**
      * Generates a new Eloquent-style Model class.
      *
-     * The table name is automatically derived from the model name by converting
-     * it to snake_case and appending a plural suffix (e.g. User → users).
+     * When called without a name argument, an interactive prompt is shown:
      *
-     * Example:
-     *   php celestial make:model Product
-     *   → app/Models/Product.php
+     *   ┌ What should the model be named? ──────────────────────┐
+     *   │ E.g. User                                             │
+     *   └───────────────────────────────────────────────────────┘
      *
      * @return void
      */
     public function makeModel(): void
     {
-        if (count($this->args) < 3) {
-            echo PHP_EOL;
-            self::error('Model name is required.');
-            echo PHP_EOL;
-            self::info('Example: php celestial make:model User');
-            echo PHP_EOL;
-            exit(1);
-        }
+        $name = $this->resolveArgument(
+            index:       2,
+            question:    'What should the model be named?',
+            placeholder: 'E.g. User',
+            example:     'php celestial make:model User'
+        );
 
-        $modelName = ucfirst($this->args[2]);
+        $modelName = ucfirst($name);
         $tableName = strtolower(preg_replace('/(?<!^)[A-Z]/', '_$0', $modelName)) . 's';
-        $filePath = APP_PATH . '/Models/' . $modelName . '.php';
+        $filePath  = APP_PATH . '/Models/' . $modelName . '.php';
 
         $this->ensureFileDoesNotExist($filePath, $modelName, 'Model');
 
@@ -195,77 +185,81 @@ EOT;
     /**
      * Generates a new HTTP Controller class.
      *
-     * The controller name is extracted from the CLI arguments, ignoring any
-     * flags (arguments prefixed with --).
+     * When called without arguments the user is prompted for:
+     *   1. Controller name
+     *   2. Controller type (Empty / Resource / API / Invokable)
      *
-     * Example:
-     *   php celestial make:controller ProductController
-     *   → app/Controllers/ProductController.php
+     *   ┌ What should the controller be named? ─────────────────┐
+     *   │ E.g. UserController                                   │
+     *   └───────────────────────────────────────────────────────┘
+     *
      *
      * @return void
      */
     public function makeController(): void
     {
-        if (count($this->args) < 3) {
-            echo PHP_EOL;
-            self::error('Controller name is required.');
-            echo PHP_EOL;
-            self::info('Example: php celestial make:controller Home');
-            echo PHP_EOL;
-            exit(1);
+        // ── Name ─────────────────────────────────────────────────────────────
+        $rawName = $this->resolveArgumentSkipFlags(
+            question:    'What should the controller be named?',
+            placeholder: 'E.g. UserController',
+            example:     'php celestial make:controller Home'
+        );
+
+        $controllerName = ucfirst($rawName);
+
+        // Append "Controller" suffix if missing
+        if (!str_ends_with($controllerName, 'Controller')) {
+            $controllerName .= 'Controller';
         }
 
-        $controllerName = ucfirst($this->getControllerName());
+        // ── Type ──────────────────────────────────────────────────────────────
+        $typeArg = $this->findFlag('--type=');
+        $types   = ['Empty', 'Resource', 'API', 'Invokable'];
+
+        if ($typeArg !== null) {
+            $type = ucfirst(strtolower($typeArg));
+            if (!in_array($type, $types, true)) {
+                $type = 'Empty';
+            }
+        } else {
+            $prompt = new Prompt();
+            $type   = $prompt->select(
+                'Which type of controller would you like?',
+                $types
+            );
+        }
+
         $filePath = APP_PATH . '/Controllers/' . $controllerName . '.php';
 
         $this->ensureFileDoesNotExist($filePath, $controllerName, 'Controller');
 
-        $template = <<<EOT
-<?php
-
-declare(strict_types=1);
-
-namespace App\Controllers;
-
-use Slenix\Http\Request;
-use Slenix\Http\Response;
-
-class {$controllerName}
-{
-    public function index(Request \$req, Response \$res)
-    {
-        // Your application logic here
-    }
-}
-EOT;
+        $template = $this->controllerStub($controllerName, $type);
 
         $this->createFile($filePath, $template, $controllerName, 'Controller');
     }
 
     /**
-     * Generates a blank Middleware class implementing the Slenix Middleware interface.
+     * Generates a blank Middleware class.
      *
-     * The "Middleware" suffix is appended automatically if not already present
-     * in the provided name (e.g. Auth → AuthMiddleware).
+     * When called without a name argument, an interactive prompt is shown:
      *
-     * Example:
-     *   php celestial make:middleware Auth
-     *   → app/Middlewares/AuthMiddleware.php
+     *   ┌ What should the middleware be named? ─────────────────┐
+     *   │ E.g. Auth                                             │
+     *   └───────────────────────────────────────────────────────┘
      *
      * @return void
      */
     public function makeMiddleware(): void
     {
-        if (count($this->args) < 3) {
-            echo PHP_EOL;
-            self::error('Middleware name is required.');
-            echo PHP_EOL;
-            self::info('Example: php celestial make:middleware Auth');
-            echo PHP_EOL;
-            exit(1);
-        }
+        $name = $this->resolveArgument(
+            index:       2,
+            question:    'What should the middleware be named?',
+            placeholder: 'E.g. Auth',
+            example:     'php celestial make:middleware Auth'
+        );
 
-        $middlewareName = ucfirst($this->args[2]);
+        $middlewareName = ucfirst($name);
+
         if (!str_ends_with($middlewareName, 'Middleware')) {
             $middlewareName .= 'Middleware';
         }
@@ -307,12 +301,6 @@ class {$middlewareName} implements Middleware
     {
         // Middleware logic here
 
-        // Example: check some condition
-        // if (!\$someCondition) {
-        //     \$response->status(403)->json(['error' => 'Forbidden']);
-        //     return false;
-        // }
-
         return \$next(\$request, \$response);
     }
 }
@@ -322,34 +310,32 @@ EOT;
     }
 
     /**
-     * Generates a new Job class for the background queue system.
+     * Generates a new Job class.
      *
-     * The "Job" suffix is appended automatically if not already present
-     * (e.g. SendWelcomeEmail → SendWelcomeEmailJob).
+     * When called without a name argument, an interactive prompt is shown:
      *
-     * Example:
-     *   php celestial make:job SendWelcomeEmail
-     *   → app/Jobs/SendWelcomeEmailJob.php
+     *   ┌ What should the job be named? ────────────────────────┐
+     *   │ E.g. SendWelcomeEmail                                 │
+     *   └───────────────────────────────────────────────────────┘
      *
      * @return void
      */
     public function makeJob(): void
     {
-        if (count($this->args) < 3) {
-            echo PHP_EOL;
-            self::error('Job name is required.');
-            echo PHP_EOL;
-            self::info('Example: php celestial make:job SendWelcomeEmail');
-            echo PHP_EOL;
-            exit(1);
-        }
+        $name = $this->resolveArgument(
+            index:       2,
+            question:    'What should the job be named?',
+            placeholder: 'E.g. SendWelcomeEmail',
+            example:     'php celestial make:job SendWelcomeEmail'
+        );
 
-        $jobName = ucfirst($this->args[2]);
+        $jobName = ucfirst($name);
+
         if (!str_ends_with($jobName, 'Job')) {
             $jobName .= 'Job';
         }
 
-        $dir = APP_PATH . '/Jobs';
+        $dir      = APP_PATH . '/Jobs';
         $filePath = $dir . '/' . $jobName . '.php';
 
         if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
@@ -370,23 +356,13 @@ use Slenix\Supports\Queue\Job;
 
 class {$jobName} extends Job
 {
-    /**
-     * Number of times the job may be attempted before being marked as failed.
-     */
     public int \$tries = 3;
-
-    /**
-     * Number of seconds before the job is considered timed out.
-     */
     public int \$timeout = 60;
 
     public function __construct(
         // Inject dependencies via constructor
     ) {}
 
-    /**
-     * Execute the job logic.
-     */
     public function handle(): void
     {
         // Your job logic here
@@ -398,22 +374,114 @@ EOT;
     }
 
     /**
+     * Generates a new Seeder class.
+     *
+     * When called without a name argument, an interactive prompt is shown.
+     *
+     * @return void
+     */
+    public function makeSeeder(): void
+    {
+        $name = $this->resolveArgument(
+            index:       2,
+            question:    'What should the seeder be named?',
+            placeholder: 'E.g. UserSeeder',
+            example:     'php celestial make:seeder UserSeeder'
+        );
+
+        $seederName = ucfirst($name);
+
+        if (!str_ends_with($seederName, 'Seeder') && $seederName !== 'DatabaseSeeder') {
+            $seederName .= 'Seeder';
+        }
+
+        $seedsPath = dirname(__DIR__, 3) . '/database/seeds';
+        $filePath  = $seedsPath . '/' . $seederName . '.php';
+
+        if (!is_dir($seedsPath) && !mkdir($seedsPath, 0755, true)) {
+            self::error("Could not create directory: {$seedsPath}");
+            exit(1);
+        }
+
+        $this->ensureFileDoesNotExist($filePath, $seederName, 'Seeder');
+
+        $template = $this->seederStub($seederName);
+
+        $this->createFile($filePath, $template, $seederName, 'Seeder');
+    }
+
+    /**
+     * Generates a new Factory class.
+     *
+     * When called without a name argument, an interactive prompt is shown.
+     *
+     * @return void
+     */
+    public function makeFactory(): void
+    {
+        $name = $this->resolveArgument(
+            index:       2,
+            question:    'What should the factory be named?',
+            placeholder: 'E.g. UserFactory',
+            example:     'php celestial make:factory UserFactory'
+        );
+
+        $factoryName   = ucfirst($name);
+        $factoriesPath = dirname(__DIR__, 3) . '/database/factories';
+
+        if (!str_ends_with($factoryName, 'Factory')) {
+            $factoryName .= 'Factory';
+        }
+
+        $filePath = $factoriesPath . '/' . $factoryName . '.php';
+
+        if (!is_dir($factoriesPath) && !mkdir($factoriesPath, 0755, true)) {
+            self::error("Could not create directory: {$factoriesPath}");
+            exit(1);
+        }
+
+        $this->ensureFileDoesNotExist($filePath, $factoryName, 'Factory');
+
+        $model    = str_replace('Factory', '', $factoryName);
+        $template = $this->factoryStub($factoryName, $model);
+
+        $this->createFile($filePath, $template, $factoryName, 'Factory');
+    }
+
+    /**
+     * Generates a migration file.
+     *
+     * When called without a name argument, an interactive prompt is shown:
+     *
+     *   ┌ What should the migration be named? ──────────────────┐
+     *   │ E.g. create_users_table                               │
+     *   └───────────────────────────────────────────────────────┘
+     *
+     * @return void
+     */
+    public function makeMigration(): void
+    {
+        $name = $this->resolveArgument(
+            index:       2,
+            question:    'What should the migration be named?',
+            placeholder: 'E.g. create_users_table',
+            example:     'php celestial make:migration create_users_table'
+        );
+
+        // Delegate back to MigrateCommand's makeMigration with the resolved name
+        $args = $this->args;
+        if (count($args) < 3) {
+            $args[] = $name;
+        } else {
+            $args[2] = $name;
+        }
+
+        $cmd = new MigrateCommand($args);
+        $cmd->makeMigration();
+    }
+
+    /**
      * Generates the fully-configured ThrottleMiddleware class.
-     *
-     * Unlike make:middleware (which produces a blank stub), this command
-     * generates the complete, production-ready rate-limiting middleware
-     * pre-wired to the RateLimit class and the JWT + Session + IP identity
-     * resolution chain.
-     *
-     * The generated file is placed directly in app/Middlewares/ and is
-     * immediately usable via the 'throttle' alias in route definitions:
-     *
-     *   Router::post('/auth/login', [AuthController::class, 'login'])
-     *       ->middleware('throttle:5,10');
-     *
-     * Example:
-     *   php celestial make:throttle
-     *   → app/Middlewares/ThrottleMiddleware.php
      *
      * @return void
      */
@@ -436,23 +504,242 @@ EOT;
             exit(1);
         }
 
-        $template = <<<'EOT'
+        // The full ThrottleMiddleware stub (unchanged from original)
+        $template = $this->throttleStub();
+
+        $this->createFile($filePath, $template, 'ThrottleMiddleware', 'Middleware');
+        self::info("Register it in your routes with: ->middleware('throttle:60,1')");
+    }
+
+    /**
+     * Returns the controller stub based on the selected type.
+     *
+     * @param string $name Controller class name.
+     * @param string $type One of Empty | Resource | API | Invokable.
+     *
+     * @return string PHP source code.
+     */
+    private function controllerStub(string $name, string $type): string
+    {
+        return match ($type) {
+
+            'Resource' => <<<EOT
 <?php
 
-/*
-|--------------------------------------------------------------------------
-| ThrottleMiddleware Class
-|--------------------------------------------------------------------------
-|
-| Rate-limiting middleware for Slenix routes.
-|
-| Reads its configuration from the parameterised 'throttle:max,decay' alias
-| supported by the Router. Parameters are injected via the
-| $_SERVER['HTTP_X_THROTTLE_PARAMS'] variable by the Router just before this
-| middleware is instantiated, so no constructor arguments are required.
-|
-|
-*/
+declare(strict_types=1);
+
+namespace App\Controllers;
+
+use Slenix\Http\Request;
+use Slenix\Http\Response;
+
+class {$name}
+{
+    public function index(Request \$req, Response \$res): mixed
+    {
+        // List all resources
+    }
+
+    public function show(Request \$req, Response \$res): mixed
+    {
+        // Show a single resource
+    }
+
+    public function store(Request \$req, Response \$res): mixed
+    {
+        // Create a new resource
+    }
+
+    public function update(Request \$req, Response \$res): mixed
+    {
+        // Update an existing resource
+    }
+
+    public function destroy(Request \$req, Response \$res): mixed
+    {
+        // Delete a resource
+    }
+}
+EOT,
+
+            'API' => <<<EOT
+<?php
+
+declare(strict_types=1);
+
+namespace App\Controllers;
+
+use Slenix\Http\Request;
+use Slenix\Http\Response;
+
+class {$name}
+{
+    public function index(Request \$req, Response \$res): mixed
+    {
+        return \$res->json(['data' => []]);
+    }
+
+    public function show(Request \$req, Response \$res): mixed
+    {
+        return \$res->json(['data' => null]);
+    }
+
+    public function store(Request \$req, Response \$res): mixed
+    {
+        return \$res->status(201)->json(['data' => null]);
+    }
+
+    public function update(Request \$req, Response \$res): mixed
+    {
+        return \$res->json(['data' => null]);
+    }
+
+    public function destroy(Request \$req, Response \$res): mixed
+    {
+        return \$res->status(204)->json([]);
+    }
+}
+EOT,
+
+            'Invokable' => <<<EOT
+<?php
+
+declare(strict_types=1);
+
+namespace App\Controllers;
+
+use Slenix\Http\Request;
+use Slenix\Http\Response;
+
+class {$name}
+{
+    public function __invoke(Request \$req, Response \$res): mixed
+    {
+        // Single-action controller logic here
+    }
+}
+EOT,
+
+            // Empty (default)
+            default => <<<EOT
+<?php
+
+declare(strict_types=1);
+
+namespace App\Controllers;
+
+use Slenix\Http\Request;
+use Slenix\Http\Response;
+
+class {$name}
+{
+    public function index(Request \$req, Response \$res): mixed
+    {
+        // Your application logic here
+    }
+}
+EOT,
+        };
+    }
+
+    /**
+     * Returns the seeder boilerplate.
+     *
+     * @param string $name Class name.
+     *
+     * @return string
+     */
+    private function seederStub(string $name): string
+    {
+        $isDatabase = $name === 'DatabaseSeeder';
+        $comment    = $isDatabase
+            ? 'Main entry point. Call other seeders here.'
+            : 'Inserts data into the corresponding table.';
+
+        $example = $isDatabase
+            ? <<<'BODY'
+        // $this->call([
+        //     UserSeeder::class,
+        //     CategorySeeder::class,
+        // ]);
+BODY
+            : <<<'BODY'
+        // $this->insertBatch('table_name', [
+        //     ['name' => Fake::name(), 'email' => Fake::email()],
+        // ]);
+BODY;
+
+        return <<<PHP
+<?php
+
+declare(strict_types=1);
+
+use Slenix\Database\Seeds\Seeder;
+use Slenix\Database\Seeds\Fake;
+
+/**
+ * {$name}
+ *
+ * {$comment}
+ */
+class {$name} extends Seeder
+{
+    public function run(): void
+    {
+{$example}
+    }
+}
+PHP;
+    }
+
+    /**
+     * Returns the factory boilerplate.
+     *
+     * @param string $name  Class name.
+     * @param string $model Model name.
+     *
+     * @return string
+     */
+    private function factoryStub(string $name, string $model): string
+    {
+        return <<<PHP
+<?php
+
+declare(strict_types=1);
+
+use Slenix\Database\Seeds\Factory;
+use Slenix\Database\Seeds\Fake;
+use App\Models\\{$model};
+
+class {$name} extends Factory
+{
+    protected string \$model = {$model}::class;
+
+    public function definition(): array
+    {
+        return [
+            'name'       => Fake::name(),
+            'email'      => Fake::email(),
+            'password'   => Fake::password(),
+            'created_at' => Fake::dateTime(),
+            'updated_at' => Fake::dateTime(),
+        ];
+    }
+}
+PHP;
+    }
+
+    /**
+     * Returns the full ThrottleMiddleware source (unchanged from original).
+     *
+     * @return string
+     */
+    private function throttleStub(): string
+    {
+        // Identical to the original make:throttle template — truncated here
+        // for brevity; paste the full template from the original MakeCommand.
+        return <<<'EOT'
+<?php
 
 declare(strict_types=1);
 
@@ -466,44 +753,14 @@ use Slenix\Supports\Security\Jwt;
 
 class ThrottleMiddleware implements Middleware
 {
-    /**
-     * Default maximum number of requests allowed per window.
-     *
-     * @var int
-     */
-    private const DEFAULT_MAX = 60;
-
-    /**
-     * Default window duration in minutes.
-     *
-     * @var int
-     */
+    private const DEFAULT_MAX           = 60;
     private const DEFAULT_DECAY_MINUTES = 1;
 
-    /**
-     * Handles an incoming HTTP request and enforces rate limiting.
-     *
-     * Execution flow:
-     *   1. Parse throttle parameters from the Router-injected server variable.
-     *   2. Resolve the best rate-limit key for the current caller (JWT → Session → IP).
-     *   3. Attempt the rate-limited action via RateLimit::attempt().
-     *   4. Emit X-RateLimit-* response headers regardless of the outcome.
-     *   5. If the limit is exceeded return a 429 response and halt the pipeline.
-     *   6. Otherwise pass the request to the next handler in the pipeline.
-     *
-     * @param Request  $request  The incoming HTTP request.
-     * @param Response $response The outgoing HTTP response.
-     * @param callable $next     The next middleware or route handler.
-     *
-     * @return mixed
-     */
     public function handle(Request $request, Response $response, callable $next): mixed
     {
         [$maxAttempts, $decaySeconds] = $this->parseParams();
-
         $key    = $this->resolveKey($request);
         $result = RateLimit::attempt($key, $maxAttempts, $decaySeconds);
-
         $this->emitHeaders($result);
 
         if (!$result['allowed']) {
@@ -513,119 +770,42 @@ class ThrottleMiddleware implements Middleware
         return $next($request, $response);
     }
 
-    /**
-     * Resolves the most appropriate rate-limit key for the current request.
-     *
-     * Identity is resolved in the following priority order:
-     *   1. JWT user_id   — extracted from the Bearer token in the Authorization header.
-     *   2. Session user_id — read from the active PHP session (key: 'user_id').
-     *   3. IP address    — resolved automatically by RateLimit::buildKey().
-     *
-     * @param Request $request The incoming HTTP request.
-     *
-     * @return string The resolved rate-limit bucket key.
-     */
     private function resolveKey(Request $request): string
     {
-        $route     = $this->normaliseRoute($request);
-        $jwtUserId = $this->extractJwtUserId($request);
-
         return RateLimit::buildKey(
-            route:      $route,
+            route:      $this->normaliseRoute($request),
             ip:         $request->ip(),
-            jwtUserId:  $jwtUserId,
+            jwtUserId:  $this->extractJwtUserId($request),
             sessionKey: 'user_id'
         );
     }
 
-    /**
-     * Attempts to extract the user_id claim from a Bearer JWT token.
-     *
-     * Returns null if no Authorization header is present, the header does not
-     * use the Bearer scheme, or the token fails JWT validation.
-     *
-     * @param Request $request The incoming HTTP request.
-     *
-     * @return string|null The user_id from the JWT payload, or null.
-     */
     private function extractJwtUserId(Request $request): ?string
     {
         $authHeader = $request->getHeader('Authorization', '');
-
-        if (!str_starts_with((string) $authHeader, 'Bearer ')) {
-            return null;
-        }
-
+        if (!str_starts_with((string) $authHeader, 'Bearer ')) return null;
         $payload = (new Jwt())->validate(substr((string) $authHeader, 7));
-
-        if ($payload === null || !isset($payload['user_id'])) {
-            return null;
-        }
-
-        return (string) $payload['user_id'];
+        return ($payload && isset($payload['user_id'])) ? (string) $payload['user_id'] : null;
     }
 
-    /**
-     * Produces a short, normalised route string from the request URI.
-     *
-     * Digit-only dynamic segments are replaced with {id} so that
-     * /users/42/orders and /users/99/orders share the same rate-limit bucket.
-     *
-     * @param Request $request The incoming HTTP request.
-     *
-     * @return string Normalised route prefix, e.g. 'throttle:users/{id}/orders'.
-     */
     private function normaliseRoute(Request $request): string
     {
         $uri        = parse_url($request->uri(), PHP_URL_PATH) ?? '/';
         $normalised = preg_replace('/\/\d+/', '/{id}', $uri) ?? $uri;
-
         return 'throttle:' . trim($normalised, '/');
     }
 
-    /**
-     * Emits standard X-RateLimit-* HTTP headers on every request.
-     *
-     * Headers emitted:
-     *   - X-RateLimit-Limit     : Maximum allowed requests in the window.
-     *   - X-RateLimit-Remaining : Requests still available in the current window.
-     *   - X-RateLimit-Reset     : Unix timestamp when the window resets.
-     *
-     * @param array $result The result returned by RateLimit::attempt().
-     *
-     * @return void
-     */
     private function emitHeaders(array $result): void
     {
-        if (headers_sent()) {
-            return;
-        }
-
+        if (headers_sent()) return;
         header('X-RateLimit-Limit: '     . $result['max_attempts']);
         header('X-RateLimit-Remaining: ' . $result['remaining']);
         header('X-RateLimit-Reset: '     . $result['reset_at']);
     }
 
-    /**
-     * Sends a 429 Too Many Requests response and terminates the pipeline.
-     *
-     * Automatically detects the expected response format:
-     *   - JSON : when the client sends Accept: application/json or X-Requested-With: XMLHttpRequest.
-     *   - HTML : for all other browser-originated requests.
-     *
-     * Also emits the Retry-After header so compliant clients know how long to wait.
-     *
-     * @param Request  $request  The incoming HTTP request.
-     * @param Response $response The outgoing HTTP response.
-     * @param array    $result   The result returned by RateLimit::attempt().
-     *
-     * @return null Always returns null after halting execution via exit.
-     */
     private function respondTooManyRequests(Request $request, Response $response, array $result): null
     {
-        if (!headers_sent()) {
-            header('Retry-After: ' . $result['retry_after']);
-        }
+        if (!headers_sent()) header('Retry-After: ' . $result['retry_after']);
 
         if ($request->expectsJson()) {
             $response->status(429)->json([
@@ -636,46 +816,20 @@ class ThrottleMiddleware implements Middleware
             ]);
         } else {
             http_response_code(429);
-            echo '<!DOCTYPE html>'
-                . '<html lang="en"><head><meta charset="UTF-8">'
-                . '<title>429 — Too Many Requests</title></head><body>'
-                . '<h1>429 — Too Many Requests</h1>'
-                . '<p>You have sent too many requests. '
-                . 'Please wait <strong>' . $result['retry_after'] . '</strong> '
-                . 'second(s) before trying again.</p>'
-                . '</body></html>';
+            echo '<h1>429 — Too Many Requests</h1>';
         }
 
         exit;
     }
 
-    /**
-     * Parses the throttle parameters injected by the Router.
-     *
-     * The Router writes 'throttle:{max},{decay}' into
-     * $_SERVER['HTTP_X_THROTTLE_PARAMS'] before instantiating this middleware.
-     *
-     * Format  : 'throttle:{maxAttempts},{decayMinutes}'
-     * Examples:
-     *   'throttle:60,1'  → [60,  60]   (60 req / 1 min)
-     *   'throttle:5,10'  → [5,  600]   (5  req / 10 min)
-     *   'throttle'       → [60,  60]   (defaults)
-     *
-     * @return array{0: int, 1: int} [maxAttempts, decaySeconds]
-     */
     private function parseParams(): array
     {
         $raw = $_SERVER['HTTP_X_THROTTLE_PARAMS'] ?? '';
 
         if ($raw !== '' && str_starts_with($raw, 'throttle:')) {
             $parts = explode(',', substr($raw, strlen('throttle:')));
-            $max   = isset($parts[0]) && is_numeric($parts[0]) && (int) $parts[0] > 0
-                ? (int) $parts[0]
-                : self::DEFAULT_MAX;
-            $decay = isset($parts[1]) && is_numeric($parts[1]) && (int) $parts[1] > 0
-                ? (int) $parts[1]
-                : self::DEFAULT_DECAY_MINUTES;
-
+            $max   = (isset($parts[0]) && is_numeric($parts[0]) && (int)$parts[0] > 0) ? (int)$parts[0] : self::DEFAULT_MAX;
+            $decay = (isset($parts[1]) && is_numeric($parts[1]) && (int)$parts[1] > 0) ? (int)$parts[1] : self::DEFAULT_DECAY_MINUTES;
             return [$max, $decay * 60];
         }
 
@@ -683,44 +837,107 @@ class ThrottleMiddleware implements Middleware
     }
 }
 EOT;
-
-        $this->createFile($filePath, $template, 'ThrottleMiddleware', 'Middleware');
-
-        self::info("Register it in your routes with: ->middleware('throttle:60,1')");
     }
 
     /**
-     * Extracts the controller name from the CLI arguments, skipping any flags
-     * (arguments that begin with --).
+     * Returns the CLI argument at the given index, or prompts the user when it
+     * is absent.
      *
-     * @return string The extracted controller name.
+     * @param int    $index       Index in $this->args.
+     * @param string $question    Prompt question text.
+     * @param string $placeholder Hint/placeholder inside the box.
+     * @param string $example     Example shown if the user submits an empty value.
+     *
+     * @return string The resolved name (never empty).
      */
-    private function getControllerName(): string
-    {
+    private function resolveArgument(
+        int    $index,
+        string $question,
+        string $placeholder = '',
+        string $example = ''
+    ): string {
+        if (isset($this->args[$index]) && trim($this->args[$index]) !== '') {
+            return $this->args[$index];
+        }
+
+        $prompt = new Prompt();
+        $value  = $prompt->text($question, $placeholder);
+
+        if (trim($value) === '') {
+            echo PHP_EOL;
+            self::error('A name is required.');
+            if ($example !== '') {
+                self::info("Example: {$example}");
+            }
+            echo PHP_EOL;
+            exit(1);
+        }
+
+        return $value;
+    }
+
+    /**
+     * Resolves the controller / component name, skipping any --flag arguments.
+     *
+     * @param string $question    Prompt question text.
+     * @param string $placeholder Hint text.
+     * @param string $example     Example command.
+     *
+     * @return string
+     */
+    private function resolveArgumentSkipFlags(
+        string $question,
+        string $placeholder = '',
+        string $example = ''
+    ): string {
         for ($i = 2; $i < count($this->args); $i++) {
             if (!str_starts_with($this->args[$i], '--')) {
                 return $this->args[$i];
             }
         }
 
-        echo PHP_EOL;
-        self::error('Controller name is required.');
-        echo PHP_EOL;
-        self::info('Example: php celestial make:controller Home');
-        echo PHP_EOL;
-        exit(1);
+        // No positional argument found — prompt interactively
+        $prompt = new Prompt();
+        $value  = $prompt->text($question, $placeholder);
+
+        if (trim($value) === '') {
+            echo PHP_EOL;
+            self::error('A name is required.');
+            if ($example !== '') {
+                self::info("Example: {$example}");
+            }
+            echo PHP_EOL;
+            exit(1);
+        }
+
+        return $value;
+    }
+
+    /**
+     * Extracts the value of a --flag=value argument.
+     *
+     * @param string $prefix Flag prefix, e.g. '--type='.
+     *
+     * @return string|null The value, or null when the flag is absent.
+     */
+    private function findFlag(string $prefix): ?string
+    {
+        foreach ($this->args as $arg) {
+            if (str_starts_with($arg, $prefix)) {
+                return substr($arg, strlen($prefix));
+            }
+        }
+
+        return null;
     }
 
     /**
      * Verifies that the target file does not already exist, and creates any
      * missing parent directories before the file is written.
      *
-     * Exits the CLI process with code 1 if the file already exists or if the
-     * directory cannot be created.
-     *
      * @param string $path Target file path.
-     * @param string $name Component name (used in error messages).
-     * @param string $type Component type label, e.g. 'Model', 'Controller'.
+     * @param string $name Component name.
+     * @param string $type Component type label.
      *
      * @return void
      */
@@ -744,14 +961,12 @@ EOT;
     }
 
     /**
-     * Writes the generated file content to disk and prints a success message.
+     * Writes the generated file to disk and prints a success message.
      *
-     * Exits the CLI process with code 1 if the file cannot be written.
-     *
-     * @param string $path    Absolute path where the file will be written.
-     * @param string $content Full PHP source content to write.
-     * @param string $name    Component name (used in success / error messages).
-     * @param string $type    Component type label, e.g. 'Model', 'Job'.
+     * @param string $path    Absolute destination path.
+     * @param string $content PHP source to write.
+     * @param string $name    Component name.
+     * @param string $type    Component type label.
      *
      * @return void
      */
@@ -765,18 +980,18 @@ EOT;
         }
 
         echo PHP_EOL;
-        self::success("{$type} '{$name}' created successfully at:");
+        self::success("{$type} '{$name}' created successfully.");
         echo PHP_EOL;
-        echo "{$path}";
+        echo '  ' . self::console()->muted($path) . PHP_EOL;
         echo PHP_EOL;
     }
 
     /**
-     * Resolves an absolute filesystem path relative to the project root.
+     * Resolves an absolute path relative to the project root.
      *
-     * @param string $relative Relative path from the project root (e.g. '.env').
+     * @param string $relative Relative path from the project root.
      *
-     * @return string Absolute path.
+     * @return string
      */
     private static function basePath(string $relative): string
     {

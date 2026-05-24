@@ -8,15 +8,16 @@
   <title>Slenix - v{{ env('APP_VERSION') }}</title>
 
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=swap');
 
     :root {
-      --bg: #050505;
+      --bg: #030303;
       --accent: #FF2D20;
-      --glass: rgba(255, 255, 255, 0.03);
-      --border: rgba(255, 255, 255, 0.08);
-      --text-main: #e2e8f0;
-      --text-dim: #64748b;
+      --card-bg: #0a0a0a;
+      --border: #1a1a1a;
+      --border-focus: #333333;
+      --text-main: #f8fafc;
+      --text-dim: #475569;
     }
 
     * {
@@ -31,286 +32,313 @@
       color: var(--text-main);
       min-height: 100vh;
       display: flex;
+      flex-direction: column; /* Altera para alinhar o cabeçalho e o card verticalmente */
       align-items: center;
       justify-content: center;
-      overflow: hidden;
-      /* Importante para o bg 3D não criar scroll */
+      padding: 2rem 1rem;
       position: relative;
+      overflow-x: hidden;
     }
 
-    /* --- BACKGROUND VERSION 3D EFFECT --- */
-    .bg-version-3d {
-      position: fixed;
-      inset: 0;
-      left: -20%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: -2;
-      perspective: 1000px;
-      overflow: hidden;
-      pointer-events: none;
-    }
-
-    .version-text-3d {
-      font-family: 'JetBrains Mono', monospace;
-      font-weight: 800;
-      font-size: 20vw;
-      /* Se ainda não aparecer, tente 400px */
-      line-height: 1;
-      color: rgba(255, 45, 32, 0.03);
-      /* Cor sólida bem clarinha */
-      -webkit-text-stroke: 2px rgba(255, 45, 32, 0.15);
-      /* Contorno mais grosso */
-
-      /* Transformação fixa para teste inicial */
-      transform: rotateX(25deg) rotateY(-20deg);
-      opacity: 0.8;
-      white-space: nowrap;
-      user-select: none;
-    }
-
-    @keyframes float3D {
-
-      0%,
-      100% {
-        transform: rotateX(20deg) rotateY(-30deg) translateZ(-200px) translateY(0px);
-      }
-
-      50% {
-        transform: rotateX(25deg) rotateY(-25deg) translateZ(-150px) translateY(-30px);
-      }
-    }
-
-    /* Grid de fundo sutil (sobre o texto 3D) */
+    /* --- BACKGROUND GRID --- */
     .bg-grid {
       position: fixed;
       inset: 0;
-      background-image: radial-gradient(var(--border) 1px, transparent 1px);
+      background-image: 
+        linear-gradient(to right, rgba(255, 45, 32, 0.02) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 45, 32, 0.02) 1px, transparent 1px);
       background-size: 50px 50px;
-      mask-image: radial-gradient(circle at 50% 50%, black, transparent 90%);
+      mask-image: radial-gradient(circle at 50% 50%, black, transparent 80%);
       z-index: -1;
       pointer-events: none;
     }
 
-    /* --- CONTEÚDO PRINCIPAL (Sem alterações) --- */
-    .main-container {
-      width: 90%;
-      max-width: 1200px;
-      display: grid;
-      grid-template-columns: 1.2fr 0.8fr;
-      gap: 2rem;
-      position: relative;
-      z-index: 10;
-      /* Garante que fique acima do background */
+    /* --- GLOBAL TOP NAV (FORA DO CARD) --- */
+    .global-header {
+      position: fixed; /* Fixado no topo da página inteira */
+      top: 0;
+      left: 0;
+      width: 100%;
+      display: flex;
+      justify-content: flex-end; /* Empurra tudo para a direita */
+      padding: 1.5rem 2rem;
+      z-index: 100;
+      pointer-events: none; /* Garante que não quebre cliques na página */
     }
 
-    .hero-section {
-      padding: 2rem;
+    .top-nav-actions {
+      display: flex;
+      gap: 0.75rem;
+      pointer-events: auto; /* Reativa os cliques apenas nos botões */
     }
 
-    .badge {
-      display: inline-block;
-      padding: 4px 12px;
-      background: rgba(255, 45, 32, 0.1);
-      border: 1px solid var(--accent);
-      color: var(--accent);
+    .btn-nav {
       font-family: 'JetBrains Mono', monospace;
       font-size: 12px;
-      border-radius: 20px;
-      margin-bottom: 1.5rem;
-      text-transform: uppercase;
-      letter-spacing: 1px;
+      font-weight: 500;
+      text-decoration: none;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-nav.login {
+      color: var(--text-main);
+      background: transparent;
+      border: 1px solid transparent;
+    }
+
+    .btn-nav.login:hover {
+      border-color: var(--border);
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .btn-nav.register {
+      color: var(--bg);
+      background: var(--text-main);
+      border: 1px solid var(--text-main);
+    }
+
+    .btn-nav.register:hover {
+      opacity: 0.9;
+    }
+
+    /* --- THE MONSTER CARD (WIDTH LONGO) --- */
+    .terminal-login-wrapper {
+      width: 100%;
+      max-width: 900px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      z-index: 10;
+      margin-top: 2rem; /* Espaço para o header fixo no mobile se necessário */
+    }
+
+    /* Lado Esquerdo */
+    .auth-side {
+      padding: 3.5rem 3rem;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .brand-area {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 2rem;
+    }
+
+    .brand-logo {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      border: 1px solid var(--accent);
+      padding: 4px;
+    }
+
+    .brand-name {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      font-size: 1.25rem;
+      letter-spacing: -0.5px;
+    }
+
+    .version-tag {
+      font-size: 11px;
+      background: rgba(255, 45, 32, 0.1);
+      color: var(--accent);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 700;
     }
 
     h1 {
-      font-size: clamp(3rem, 8vw, 5.5rem);
-      font-weight: 800;
-      line-height: 0.9;
-      margin-bottom: 1.5rem;
-      letter-spacing: -3px;
-      color: #fff;
-    }
-
-    .description {
-      font-size: 1.1rem;
-      color: var(--text-dim);
-      max-width: 500px;
-      line-height: 1.6;
-      margin-bottom: 3rem;
-    }
-
-    .action-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 1rem;
-    }
-
-    .nav-card {
-      background: var(--glass);
-      border: 1px solid var(--border);
-      padding: 1.5rem;
-      border-radius: 12px;
-      text-decoration: none;
-      color: inherit;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .nav-card:hover {
-      border-color: var(--accent);
-      background: rgba(255, 45, 32, 0.03);
-      transform: translateY(-5px);
-      box-shadow: 0 10px 30px -10px rgba(255, 45, 32, 0.2);
-    }
-
-    .nav-card h3 {
-      font-size: 0.9rem;
-      color: var(--accent);
-      font-family: 'JetBrains Mono', monospace;
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.8px;
       margin-bottom: 0.5rem;
     }
 
-    .nav-card p {
+    .subtitle {
+      color: var(--text-dim);
+      font-size: 0.9rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+
+    .form-group label {
+      display: block;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+    }
+
+    .input-mock {
+      width: 100%;
+      background: #000;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      color: #fff;
+      outline: none;
+    }
+
+    .btn-action {
+      width: 100%;
+      background: var(--text-main);
+      color: var(--border);
+      border: 1px solid var(--border-focus);
+      border-radius: 6px;
+      padding: 0.85rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 1rem;
+      transition: all 0.2s ease;
+      text-align: center;
+      text-decoration: none;
+    }
+
+    .btn-action:hover {
+      border-color: var(--accent);
+      background: rgba(255, 45, 32, 0.02);
+    }
+
+    /* Lado Direito */
+    .resources-side {
+      background: #050505;
+      padding: 3.5rem 2.5rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 1.25rem;
+    }
+
+    .section-title {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+      letter-spacing: 1px;
+    }
+
+    .resource-link {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.5rem;
+      text-decoration: none;
+      color: inherit;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .resource-link:hover {
+      border-color: var(--border-focus);
+      background: #0e0e0e;
+    }
+
+    .resource-link h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 0.35rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .resource-link h3::before {
+      content: '->';
+      color: var(--accent);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .resource-link p {
       font-size: 0.85rem;
       color: var(--text-dim);
+      line-height: 1.4;
     }
 
-    .visual-stack {
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .core-sphere {
-      width: 280px;
-      height: 280px;
-      border: 1px solid rgba(255, 45, 32, 0.3);
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      position: relative;
-      background: radial-gradient(circle, rgba(255, 45, 32, 0.05) 0%, transparent 70%);
-      animation: pulse 4s infinite ease-in-out;
-    }
-
-    .core-sphere img {
-      width: 120px;
-      height: 120px;
-      filter: drop-shadow(0 0 15px rgba(255, 45, 32, 0.5));
-    }
-
-    .orbit {
-      position: absolute;
-      border: 1px solid var(--border);
-      border-radius: 50%;
-      animation: rotate .1s linear infinite;
-    }
-
-    .orbit-1 {
-      width: 400px;
-      height: 400px;
-    }
-
-    .orbit-2 {
-      width: 520px;
-      height: 520px;
-      border-style: dashed;
-      animation-duration: .2s;
-      animation-direction: reverse;
-    }
-
-    @keyframes rotate {
-      from {
-        transform: rotate(0deg);
+    /* --- RESPONSIVIDADE --- */
+    @media (max-width: 768px) {
+      .global-header {
+        position: absolute;
+        padding: 1rem;
       }
-
-      to {
-        transform: rotate(360deg);
-      }
-    }
-
-    @keyframes pulse {
-
-      0%,
-      100% {
-        transform: scale(1);
-        box-shadow: 0 0 40px rgba(255, 45, 32, 0.1);
-      }
-
-      50% {
-        transform: scale(1.05);
-        box-shadow: 0 0 80px rgba(255, 45, 32, 0.2);
-      }
-    }
-
-    @media (max-width: 968px) {
-      .main-container {
+      .terminal-login-wrapper {
         grid-template-columns: 1fr;
-        text-align: center;
-        margin-top: 2rem;
+        margin-top: 4rem; /* Evita que o card mobile cole nos botões do topo */
       }
-
-      .description {
-        margin-left: auto;
-        margin-right: auto;
+      .auth-side {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        padding: 2.5rem 1.5rem;
       }
-
-      .visual-stack {
-        display: none;
+      .resources-side {
+        padding: 2.5rem 1.5rem;
       }
-
-      .action-grid {
-        justify-content: center;
-      }
-
-      .version-text-3d {
-        font-size: 60vw;
-      }
-
-      /* Aumenta o bg no mobile */
     }
   </style>
 </head>
 
 <body>
 
-  <div class="bg-version-3d">
-    <div class="version-text-3d">v{{ env('APP_VERSION') ?: 'v2.6' }}</div>
-  </div>
-
   <div class="bg-grid"></div>
 
-  <main class="main-container">
+  <!-- Card Principal Isolado -->
+  <main class="terminal-login-wrapper">
 
-    <section class="hero-section">
-      <div class="badge">Slenix Framework</div>
-      <h1>Slenix.</h1>
-      <p class="description">
-        A minimalist PHP framework engineered for developers who demand peak performance and architectural clarity.
-      </p>
-
-      <div class="action-grid">
-        <a href="https://slenix.vercel.app/" target="_blank" class="nav-card">
-          <h3>// Documentation</h3>
-          <p>Learn how to build lightning-fast APIs and web applications.</p>
-        </a>
-
-        <a href="http://github.com/claudiovictors/slenix" target="_blank" class="nav-card">
-          <h3>// GitHub</h3>
-          <p>Explore the source code and contribute to the core project.</p>
-        </a>
+    <!-- Lado Esquerdo -->
+    <section class="auth-side">
+      <div class="brand-area">
+        <img class="brand-logo" src="/logo.svg" alt="Slenix" onerror="this.style.removeAttribute('border');">
+        <span class="brand-name">slenix_</span>
+        <span class="version-tag">v{{ env('APP_VERSION') ?: '2.6' }}</span>
       </div>
+
+      <h1>Welcome to Clarity.</h1>
+      <p class="subtitle">A minimalist PHP framework built for execution.</p>
+
+      <div class="form-group">
+        <label>Project Environment</label>
+        <input type="text" class="input-mock" value="production" readonly>
+      </div>
+
+      <div class="form-group">
+        <label>App Locale</label>
+        <input type="text" class="input-mock" value="environment" readonly>
+      </div>
+
+      <a href="/dashboard" class="btn-action">
+        Open Application Console
+      </a>
     </section>
 
-    <section class="visual-stack">
-      <div class="orbit orbit-1"></div>
-      <div class="orbit orbit-2"></div>
+    <!-- Lado Direito -->
+    <section class="resources-side">
+      <div class="section-title">// Core Resources</div>
 
-      <div class="core-sphere">
-        <img src="/logo.svg" alt="Slenix Logo">
-      </div>
+      <a href="https://slenix.vercel.app/" target="_blank" class="resource-link">
+        <h3>Documentation</h3>
+        <p>Master execution, custom routing, fast query builder architecture, and security layers.</p>
+      </a>
+
+      <a href="http://github.com/claudiovictors/slenix" target="_blank" class="resource-link">
+        <h3>GitHub Repository</h3>
+        <p>Contribute to core components, review upcoming releases, or report structural bugs.</p>
+      </a>
     </section>
 
   </main>

@@ -52,7 +52,7 @@ class Blueprint
      */
     protected array $foreignKeys = [];
 
-    /** @var string[] Drop clauses (DROP INDEX, DROP FOREIGN KEY, DROP PRIMARY KEY). */
+    /** @var array<int, array{type: string, name?: string}> Drop clauses (DROP INDEX, DROP FOREIGN KEY, DROP PRIMARY KEY). */
     protected array $dropClauses = [];
 
     /** @var string|null Name of the most recently defined column (modifier target). */
@@ -67,7 +67,7 @@ class Blueprint
      */
     public function __construct(string $table, ?Grammar $grammar = null)
     {
-        $this->table   = $table;
+        $this->table = $table;
         $this->grammar = $grammar;
     }
 
@@ -563,10 +563,10 @@ class Blueprint
     {
         if ($this->lastColumn && isset($this->columns[$this->lastColumn])) {
             $default = match (true) {
-                is_bool($value)  => $value ? '1' : '0',
-                is_null($value)  => 'NULL',
+                is_bool($value) => $value ? '1' : '0',
+                is_null($value) => 'NULL',
                 is_numeric($value) => (string) $value,
-                default          => "'{$value}'",
+                default => "'{$value}'",
             };
             $this->columns[$this->lastColumn] .= " DEFAULT {$default}";
         }
@@ -698,7 +698,7 @@ class Blueprint
         if ($columns === null) {
             $columns = [$this->lastColumn];
         }
-        $cols      = (array) $columns;
+        $cols = (array) $columns;
         $indexName = $name ?? $this->table . '_' . implode('_', $cols) . '_unique';
         $this->indexes[] = ['type' => 'unique', 'name' => $indexName, 'columns' => $cols];
         return $this;
@@ -713,7 +713,7 @@ class Blueprint
      */
     public function index(array|string $columns, ?string $name = null): static
     {
-        $cols      = (array) $columns;
+        $cols = (array) $columns;
         $indexName = $name ?? $this->table . '_' . implode('_', $cols) . '_index';
         $this->indexes[] = ['type' => 'index', 'name' => $indexName, 'columns' => $cols];
         return $this;
@@ -728,7 +728,7 @@ class Blueprint
      */
     public function fullText(array|string $columns, ?string $name = null): static
     {
-        $cols      = (array) $columns;
+        $cols = (array) $columns;
         $indexName = $name ?? $this->table . '_' . implode('_', $cols) . '_fulltext';
         $this->indexes[] = ['type' => 'fulltext', 'name' => $indexName, 'columns' => $cols];
         return $this;
@@ -810,11 +810,11 @@ class Blueprint
 
         $constraintName = "fk_{$this->table}_{$column}";
         $this->foreignKeys[$constraintName] = [
-            'column'     => $column,
+            'column' => $column,
             'references' => $referencedColumn,
-            'on'         => $referencedTable,
-            'onDelete'   => 'RESTRICT',
-            'onUpdate'   => 'RESTRICT',
+            'on' => $referencedTable,
+            'onDelete' => 'RESTRICT',
+            'onUpdate' => 'RESTRICT',
         ];
 
         return $this;
@@ -913,11 +913,11 @@ class Blueprint
     {
         $constraintName = "fk_{$this->table}_{$column}";
         $this->foreignKeys[$constraintName] = [
-            'column'     => $column,
+            'column' => $column,
             'references' => 'id',
-            'on'         => '',
-            'onDelete'   => 'RESTRICT',
-            'onUpdate'   => 'RESTRICT',
+            'on' => '',
+            'onDelete' => 'RESTRICT',
+            'onUpdate' => 'RESTRICT',
         ];
         $this->lastColumn = '__fk__' . $constraintName;
         return $this;
@@ -1012,7 +1012,7 @@ class Blueprint
     public function toCreateSql(): string
     {
         $grammar = $this->grammar();
-        $parts   = [];
+        $parts = [];
 
         foreach ($this->columns as $name => $definition) {
             // Skip internal prefixed keys
@@ -1020,9 +1020,9 @@ class Blueprint
                 continue;
             }
 
-            $translatedDef  = $grammar->translateColumnDefinition($name, (string) $definition);
-            $quotedName     = $grammar->quoteIdentifier($name);
-            $parts[]        = "    {$quotedName} {$translatedDef}";
+            $translatedDef = $grammar->translateColumnDefinition($name, (string) $definition);
+            $quotedName = $grammar->quoteIdentifier($name);
+            $parts[] = "    {$quotedName} {$translatedDef}";
         }
 
         // Indexes
@@ -1062,8 +1062,8 @@ class Blueprint
             $compiled = match ($drop['type']) {
                 'foreign' => $grammar->compileDropForeignKey($drop['name']),
                 'primary' => $grammar->compileDropPrimary($this->table),
-                'index'   => $grammar->compileDropIndex($drop['name'], $this->table),
-                default   => [],
+                'index' => $grammar->compileDropIndex($drop['name'], $this->table),
+                default => [],
             };
             foreach ($compiled as $clause) {
                 $clauses[] = $clause;
@@ -1074,18 +1074,18 @@ class Blueprint
         foreach ($this->columns as $name => $definition) {
             if (str_starts_with($name, '__drop__')) {
                 // DROP COLUMN
-                $col      = (string) $definition;
+                $col = (string) $definition;
                 $clauses[] = 'DROP COLUMN ' . $grammar->quoteIdentifier($col);
 
             } elseif (str_starts_with($name, '__rename__')) {
                 // RENAME COLUMN
-                $from     = substr($name, strlen('__rename__'));
-                $to       = (string) $definition;
+                $from = substr($name, strlen('__rename__'));
+                $to = (string) $definition;
                 $clauses[] = $grammar->compileRenameColumn($from, $to);
 
             } elseif (str_starts_with($name, '__modify__')) {
                 // MODIFY / ALTER COLUMN TYPE
-                $col      = substr($name, strlen('__modify__'));
+                $col = substr($name, strlen('__modify__'));
                 $compiled = $grammar->compileModifyColumn($col, (string) $definition);
                 if ($compiled !== '') {
                     // PgSQL may return multiple clauses joined by comma
@@ -1096,8 +1096,8 @@ class Blueprint
 
             } elseif (str_starts_with($name, '__change__')) {
                 // CHANGE COLUMN (rename + retype)
-                $from     = substr($name, strlen('__change__'));
-                $meta     = (array) $definition;
+                $from = substr($name, strlen('__change__'));
+                $meta = (array) $definition;
                 $compiled = $grammar->compileChangeColumn($from, $meta['to'], $meta['definition']);
                 if ($compiled !== '') {
                     $clauses[] = $compiled;
@@ -1106,8 +1106,8 @@ class Blueprint
             } else {
                 // ADD COLUMN
                 $translatedDef = $grammar->translateColumnDefinition($name, (string) $definition);
-                $quotedName    = $grammar->quoteIdentifier($name);
-                $clauses[]     = "ADD COLUMN {$quotedName} {$translatedDef}";
+                $quotedName = $grammar->quoteIdentifier($name);
+                $clauses[] = "ADD COLUMN {$quotedName} {$translatedDef}";
             }
         }
 
@@ -1150,21 +1150,21 @@ class Blueprint
         $cols = $grammar->quoteColumns($index['columns']);
 
         return match ($index['type']) {
-            'primary'  => 'PRIMARY KEY (' . $cols . ')',
+            'primary' => 'PRIMARY KEY (' . $cols . ')',
 
-            'unique'   => $grammar->isMySQL()
-                ? 'UNIQUE KEY ' . $grammar->quoteIdentifier($index['name']) . " ({$cols})"
-                : 'UNIQUE (' . $cols . ')',
+            'unique' => $grammar->isMySQL()
+            ? 'UNIQUE KEY ' . $grammar->quoteIdentifier($index['name']) . " ({$cols})"
+            : 'UNIQUE (' . $cols . ')',
 
-            'index'    => $grammar->isMySQL()
-                ? 'KEY ' . $grammar->quoteIdentifier($index['name']) . " ({$cols})"
-                : '',  // PgSQL/SQLite: CREATE INDEX statement (handled separately)
+            'index' => $grammar->isMySQL()
+            ? 'KEY ' . $grammar->quoteIdentifier($index['name']) . " ({$cols})"
+            : '',  // PgSQL/SQLite: CREATE INDEX statement (handled separately)
 
             'fulltext' => $grammar->isMySQL()
-                ? 'FULLTEXT KEY ' . $grammar->quoteIdentifier($index['name']) . " ({$cols})"
-                : '', // Not supported inline on other drivers
+            ? 'FULLTEXT KEY ' . $grammar->quoteIdentifier($index['name']) . " ({$cols})"
+            : '', // Not supported inline on other drivers
 
-            default    => '',
+            default => '',
         };
     }
 
@@ -1193,14 +1193,434 @@ class Blueprint
      */
     protected function compileForeignKeyConstraint(string $name, array $fk, Grammar $grammar): string
     {
-        $quotedName  = $grammar->quoteIdentifier($name);
-        $quotedCol   = $grammar->quoteIdentifier($fk['column']);
+        $quotedName = $grammar->quoteIdentifier($name);
+        $quotedCol = $grammar->quoteIdentifier($fk['column']);
         $quotedTable = $grammar->quoteTable($fk['on']);
-        $quotedRef   = $grammar->quoteIdentifier($fk['references']);
+        $quotedRef = $grammar->quoteIdentifier($fk['references']);
 
         return "CONSTRAINT {$quotedName} FOREIGN KEY ({$quotedCol})"
             . " REFERENCES {$quotedTable} ({$quotedRef})"
             . " ON DELETE {$fk['onDelete']} ON UPDATE {$fk['onUpdate']}";
+    }
+
+    /**
+     * Adds an unsigned TINYINT column (0–255).
+     *
+     * @param string $column Column name.
+     * @return static Fluent.
+     */
+    public function unsignedTinyInteger(string $column): static
+    {
+        return $this->tinyInteger($column, unsigned: true);
+    }
+
+    /**
+     * Adds an unsigned SMALLINT column (0–65 535).
+     *
+     * @param string $column Column name.
+     * @return static Fluent.
+     */
+    public function unsignedSmallInteger(string $column): static
+    {
+        return $this->smallInteger($column, unsigned: true);
+    }
+
+    /**
+     * Adds an unsigned INT column (0–4 294 967 295).
+     *
+     * @param string $column Column name.
+     * @return static Fluent.
+     */
+    public function unsignedInteger(string $column): static
+    {
+        return $this->integer($column, unsigned: true);
+    }
+
+    /**
+     * Adds an unsigned BIGINT column (0–18 446 744 073 709 551 615).
+     *
+     * @param string $column Column name.
+     * @return static Fluent.
+     */
+    public function unsignedBigInteger(string $column): static
+    {
+        return $this->bigInteger($column, unsigned: true);
+    }
+
+    /**
+     * Adds a MEDIUMINT column.
+     *
+     * @param string $column   Column name.
+     * @param bool   $unsigned Whether to mark the column as unsigned.
+     * @return static Fluent.
+     */
+    public function mediumInteger(string $column, bool $unsigned = false): static
+    {
+        $this->columns[$column] = 'MEDIUMINT' . ($unsigned ? ' UNSIGNED' : '') . ' NOT NULL';
+        $this->lastColumn = $column;
+        return $this;
+    }
+
+    /**
+     * Adds an unsigned MEDIUMINT column (0–16 777 215).
+     *
+     * @param string $column Column name.
+     * @return static Fluent.
+     */
+    public function unsignedMediumInteger(string $column): static
+    {
+        return $this->mediumInteger($column, unsigned: true);
+    }
+
+    // ── Auto-increment helpers ────────────────────────────────────────────
+
+    /**
+     * Adds a TINYINT UNSIGNED AUTO_INCREMENT PRIMARY KEY column.
+     * Useful for tiny lookup / enum tables (max 255 rows).
+     *
+     * @param string $column Column name (default 'id').
+     * @return static Fluent.
+     */
+    public function tinyIncrements(string $column = 'id'): static
+    {
+        $this->columns[$column] = 'TINYINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY';
+        $this->lastColumn = $column;
+        return $this;
+    }
+
+    /**
+     * Adds a SMALLINT UNSIGNED AUTO_INCREMENT PRIMARY KEY column.
+     *
+     * @param string $column Column name (default 'id').
+     * @return static Fluent.
+     */
+    public function smallIncrements(string $column = 'id'): static
+    {
+        $this->columns[$column] = 'SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY';
+        $this->lastColumn = $column;
+        return $this;
+    }
+
+    /**
+     * Adds a MEDIUMINT UNSIGNED AUTO_INCREMENT PRIMARY KEY column.
+     *
+     * @param string $column Column name (default 'id').
+     * @return static Fluent.
+     */
+    public function mediumIncrements(string $column = 'id'): static
+    {
+        $this->columns[$column] = 'MEDIUMINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY';
+        $this->lastColumn = $column;
+        return $this;
+    }
+
+    /**
+     * Adds an INT UNSIGNED AUTO_INCREMENT PRIMARY KEY column.
+     *
+     * @param string $column Column name (default 'id').
+     * @return static Fluent.
+     */
+    public function increments(string $column = 'id'): static
+    {
+        $this->columns[$column] = 'INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY';
+        $this->lastColumn = $column;
+        return $this;
+    }
+
+    /**
+     * Alias of id() — BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY.
+     *
+     * @param string $column Column name (default 'id').
+     * @return static Fluent.
+     */
+    public function bigIncrements(string $column = 'id'): static
+    {
+        return $this->id($column);
+    }
+
+    // ── UUID / ULID primary keys ──────────────────────────────────────────
+
+    /**
+     * Adds a UUID primary key column (VARCHAR 36, no AUTO_INCREMENT).
+     *
+     * Best combined with a model that auto-generates UUIDs before insert.
+     *
+     * @param string $column Column name (default 'id').
+     * @return static Fluent.
+     */
+    public function uuidMorphs(string $column = 'id'): static
+    {
+        $this->columns[$column] = 'VARCHAR(36) NOT NULL';
+        $this->indexes[] = ['type' => 'primary', 'columns' => [$column]];
+        $this->lastColumn = $column;
+        return $this;
+    }
+
+    /**
+     * Adds a ULID primary key column (VARCHAR 26).
+     *
+     * @param string $column Column name (default 'id').
+     * @return static Fluent.
+     */
+    public function ulid(string $column = 'id'): static
+    {
+        $this->columns[$column] = 'VARCHAR(26) NOT NULL';
+        $this->indexes[] = ['type' => 'primary', 'columns' => [$column]];
+        $this->lastColumn = $column;
+        return $this;
+    }
+
+    // ── Polymorphic helpers ───────────────────────────────────────────────
+
+    /**
+     * Adds `{name}_id` (BIGINT UNSIGNED) and `{name}_type` (VARCHAR 255)
+     * columns for a polymorphic relationship, plus a composite index.
+     *
+     * Example: $table->morphs('commentable')
+     *   → commentable_id   BIGINT UNSIGNED NOT NULL
+     *   → commentable_type VARCHAR(255) NOT NULL
+     *   → INDEX (commentable_type, commentable_id)
+     *
+     * @param string      $name  Base relation name.
+     * @param string|null $index Custom index name.
+     * @return static Fluent.
+     */
+    public function morphs(string $name, ?string $index = null): static
+    {
+        $idCol = "{$name}_id";
+        $typeCol = "{$name}_type";
+
+        $this->columns[$idCol] = 'BIGINT UNSIGNED NOT NULL';
+        $this->columns[$typeCol] = 'VARCHAR(255) NOT NULL';
+        $this->lastColumn = $typeCol;
+
+        $this->index([$typeCol, $idCol], $index ?? "{$this->table}_{$name}_morph_index");
+
+        return $this;
+    }
+
+    /**
+     * Adds nullable `{name}_id` and `{name}_type` columns for an optional
+     * polymorphic relationship.
+     *
+     * @param string      $name  Base relation name.
+     * @param string|null $index Custom index name.
+     * @return static Fluent.
+     */
+    public function nullableMorphs(string $name, ?string $index = null): static
+    {
+        $idCol = "{$name}_id";
+        $typeCol = "{$name}_type";
+
+        $this->columns[$idCol] = 'BIGINT UNSIGNED NULL DEFAULT NULL';
+        $this->columns[$typeCol] = 'VARCHAR(255) NULL DEFAULT NULL';
+        $this->lastColumn = $typeCol;
+
+        $this->index([$typeCol, $idCol], $index ?? "{$this->table}_{$name}_morph_index");
+
+        return $this;
+    }
+
+    /**
+     * Drops the `{name}_id` and `{name}_type` columns added by morphs().
+     *
+     * @param string $name Base relation name.
+     * @return static Fluent.
+     */
+    public function dropMorphs(string $name): static
+    {
+        return $this->dropColumn(["{$name}_id", "{$name}_type"]);
+    }
+
+    // ── Timestamp variants ────────────────────────────────────────────────
+
+    /**
+     * Adds nullable `created_at` and `updated_at` TIMESTAMP columns.
+     * Identical to timestamps() — explicit alias for clarity.
+     *
+     * @return static Fluent.
+     */
+    public function nullableTimestamps(): static
+    {
+        return $this->timestamps();
+    }
+
+    /**
+     * Adds `created_at`, `updated_at`, and `deleted_at` columns.
+     * Shortcut for timestamps() + softDeletes() in one call.
+     *
+     * @return static Fluent.
+     */
+    public function timestampsWithSoftDeletes(): static
+    {
+        return $this->timestamps()->softDeletes();
+    }
+
+    /**
+     * Adds a `remember_token` VARCHAR(100) nullable column.
+     * Used by session-based authentication to invalidate sessions.
+     *
+     * @return static Fluent.
+     */
+    public function rememberToken(): static
+    {
+        $this->columns['remember_token'] = 'VARCHAR(100) NULL DEFAULT NULL';
+        $this->lastColumn = 'remember_token';
+        return $this;
+    }
+
+    // ── Money / financial ─────────────────────────────────────────────────
+
+    /**
+     * Adds a DECIMAL(19, 4) column — the standard for storing money values.
+     *
+     * Supports amounts up to 999 999 999 999 999.9999 without floating-point
+     * rounding errors.
+     *
+     * @param string $column Column name (default 'amount').
+     * @return static Fluent.
+     */
+    public function money(string $column = 'amount'): static
+    {
+        $this->columns[$column] = 'DECIMAL(19, 4) NOT NULL';
+        $this->lastColumn = $column;
+        return $this;
+    }
+
+    // ── Network / address ─────────────────────────────────────────────────
+
+    /**
+     * Adds a TINYINT(1) column that defaults to 0, intended for boolean flags.
+     *
+     * Unlike boolean(), this sets DEFAULT 0 automatically so the column is
+     * immediately usable without an explicit ->default(false) call.
+     *
+     * @param string $column Column name.
+     * @return static Fluent.
+     */
+    public function flag(string $column): static
+    {
+        $this->columns[$column] = 'TINYINT(1) NOT NULL DEFAULT 0';
+        $this->lastColumn = $column;
+        return $this;
+    }
+
+    // ── Raw / escape hatch ────────────────────────────────────────────────
+
+    /**
+     * Adds a column using a fully raw SQL definition string.
+     *
+     * No translation is performed — the definition is passed to the driver
+     * exactly as written. Use this for driver-specific types not covered
+     * by the Blueprint API (e.g. GEOMETRY, JSONB, VECTOR, TSVECTOR).
+     *
+     * Example:
+     *   $table->rawColumn('search_vector', 'TSVECTOR');
+     *   $table->rawColumn('location', 'POINT NOT NULL');
+     *
+     * @param string $column     Column name.
+     * @param string $definition Raw SQL type + constraints.
+     * @return static Fluent.
+     */
+    public function rawColumn(string $column, string $definition): static
+    {
+        $this->columns[$column] = '__RAW__' . $definition;
+        $this->lastColumn = $column;
+        return $this;
+    }
+
+    // ── Composite / spatial indexes ───────────────────────────────────────
+
+    /**
+     * Adds a composite PRIMARY KEY across multiple columns.
+     * Useful for pivot / junction tables that have no surrogate id.
+     *
+     * Example:
+     *   $table->compositePrimary(['user_id', 'role_id']);
+     *
+     * @param string[] $columns Column names forming the composite key.
+     * @return static Fluent.
+     */
+    public function compositePrimary(array $columns): static
+    {
+        return $this->addPrimary($columns);
+    }
+
+    /**
+     * Adds a SPATIAL index (MySQL only; ignored on PgSQL / SQLite).
+     *
+     * @param string|string[] $columns Columns to index.
+     * @param string|null     $name    Custom index name.
+     * @return static Fluent.
+     */
+    public function spatialIndex(array|string $columns, ?string $name = null): static
+    {
+        $cols = (array) $columns;
+        $indexName = $name ?? $this->table . '_' . implode('_', $cols) . '_spatial';
+        $this->indexes[] = ['type' => 'spatial', 'name' => $indexName, 'columns' => $cols];
+        return $this;
+    }
+
+    // ── Charset / collation ───────────────────────────────────────────────
+
+    /**
+     * Appends a CHARACTER SET clause to the last column (MySQL only).
+     *
+     * @param string $charset E.g. 'utf8mb4', 'latin1'.
+     * @return static Fluent.
+     */
+    public function charset(string $charset): static
+    {
+        if ($this->lastColumn && isset($this->columns[$this->lastColumn])) {
+            $this->columns[$this->lastColumn] .= " CHARACTER SET {$charset}";
+        }
+        return $this;
+    }
+
+    /**
+     * Appends a COLLATE clause to the last column (MySQL only).
+     *
+     * @param string $collation E.g. 'utf8mb4_unicode_ci'.
+     * @return static Fluent.
+     */
+    public function collation(string $collation): static
+    {
+        if ($this->lastColumn && isset($this->lastColumn, $this->columns[$this->lastColumn])) {
+            $this->columns[$this->lastColumn] .= " COLLATE {$collation}";
+        }
+        return $this;
+    }
+
+    // ── Auto-current-timestamp ────────────────────────────────────────────
+
+    /**
+     * Adds a TIMESTAMP column that records the row creation time.
+     *
+     * Defaults to the current timestamp and is never updated automatically.
+     * Unlike created_at in timestamps(), this column is NOT NULL.
+     *
+     * @param string $column Column name (default 'created_at').
+     * @return static Fluent.
+     */
+    public function creationTimestamp(string $column = 'created_at'): static
+    {
+        $this->columns[$column] = 'TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP';
+        $this->lastColumn = $column;
+        return $this;
+    }
+
+    /**
+     * Adds a TIMESTAMP column that auto-updates on every row change.
+     *
+     * @param string $column Column name (default 'updated_at').
+     * @return static Fluent.
+     */
+    public function updateTimestamp(string $column = 'updated_at'): static
+    {
+        $this->columns[$column] =
+            'TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP';
+        $this->lastColumn = $column;
+        return $this;
     }
 
     /**

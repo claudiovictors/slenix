@@ -62,7 +62,7 @@ class Kernel
      */
     public function __construct(float $startTime)
     {
-        $this->startTime    = $startTime;
+        $this->startTime = $startTime;
         $this->errorHandler = new ErrorHandler();
     }
 
@@ -242,7 +242,7 @@ class Kernel
         // Force HTTPS redirect
         if (EnvLoader::get('FORCE_HTTPS', false) && !$this->isHttps()) {
             $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-            $uri  = $_SERVER['REQUEST_URI'] ?? '/';
+            $uri = $_SERVER['REQUEST_URI'] ?? '/';
             header("Location: https://{$host}{$uri}", true, 301);
             exit;
         }
@@ -253,10 +253,13 @@ class Kernel
     // -------------------------------------------------------------------------
 
     /**
-     * Starts the session and registers the Session class alias globally.
+     * Starts the session, ages flash data, and registers the Session alias.
      *
-     * Flash old input is stored after session start so form repopulation
-     * works across redirects (e.g. after validation failure).
+     *
+     * Old input is NOT flashed here anymore. It is the responsibility of
+     * RedirectResponse::withInput() to flash it explicitly before redirecting.
+     * This avoids the race condition where the Kernel flashes input on every
+     * POST request regardless of whether a redirect with ->withInput() follows.
      *
      * @return void
      */
@@ -265,10 +268,13 @@ class Kernel
         Session::start();
         Session::age();
 
-        // Store previous input for old() helper in views
-        Session::flashOldInput(request()->all());
+        $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+        if (in_array($method, ['POST', 'PUT', 'PATCH'], true)) {
+            $input = $_POST;
+            unset($input['password'], $input['password_confirmation'], $input['_csrf_token']);
+            Session::flashInput($input);
+        }
 
-        // Allow `Session::method()` without full namespace import
         if (!class_exists('Session', false)) {
             class_alias(Session::class, 'Session');
         }
@@ -329,7 +335,7 @@ class Kernel
 
         // Storage disks
         Storage::setDisk('public', $storagePath . '/app/public');
-        Storage::setDisk('local',  $storagePath . '/app/private');
+        Storage::setDisk('local', $storagePath . '/app/private');
         Storage::setDefaultDisk(EnvLoader::get('STORAGE_DISK', 'public'));
     }
 

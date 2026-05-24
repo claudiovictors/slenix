@@ -201,6 +201,120 @@ class QueryBuilder
     }
 
     /**
+     * Eagerly load the registered relationships across a list of models.
+     *
+     * Directs aggregate query indicators (__count__, __sum__, etc.) to the
+     * loadAggregateRelation pipeline and recursively processes nested dot-notation paths.
+     *
+     * @param array $models An array of loaded Model instances.
+     * @return void
+     */
+    protected function loadEagerRelations(array $models): void
+    {
+        if (empty($models)) {
+            return;
+        }
+
+        $topLevel = [];
+        $nested = [];
+
+        foreach ($this->eagerRelations as $relation => $columns) {
+            // Aggregate eager loads (withCount, withSum, etc.)
+            if (
+                str_starts_with($relation, '__count__')
+                || str_starts_with($relation, '__sum__')
+                || str_starts_with($relation, '__avg__')
+                || str_starts_with($relation, '__min__')
+                || str_starts_with($relation, '__max__')
+            ) {
+                $this->loadAggregateRelation($models, $relation, $columns);
+                continue;
+            }
+
+            // Normal / nested relations
+            if (!str_contains($relation, '.')) {
+                $topLevel[$relation] = $columns;
+            } else {
+                [$parent, $remainder] = explode('.', $relation, 2);
+                $nested[$parent][$remainder] = $columns;
+            }
+        }
+
+        // Load direct top-level relationships
+        foreach ($topLevel as $name => $columns) {
+            $this->loadSingleRelation($models, $name, $columns);
+        }
+
+        // Recursively load nested child relationships
+        foreach ($nested as $parent => $childRelations) {
+            $relatedModels = [];
+
+            foreach ($models as $model) {
+                $loaded = $model->getRelation($parent);
+
+                if ($loaded === null) {
+                    continue;
+                }
+
+                if ($loaded instanceof \Slenix\Database\Collection) {
+                    foreach ($loaded->all() as $relatedModel) {
+                        $relatedModels[] = $relatedModel;
+                    }
+                } elseif (is_object($loaded)) {
+                    $relatedModels[] = $loaded;
+                }
+            }
+
+            if (empty($relatedModels)) {
+                continue;
+            }
+
+            $relatedClass = get_class($relatedModels[0]);
+            $childInstance = new $relatedClass();
+            $childQB = new static($this->pdo, $childInstance->getTable(), $relatedClass);
+
+            foreach ($childRelations as $childName => $childColumns) {
+                $childQB->loadSingleRelation($relatedModels, $childName, $childColumns);
+            }
+        }
+    }
+
+    /**
+     * Add a raw WHERE clause constraint to the query execution state.
+     *
+     * Automatically intercepts and renames colliding parameter tokens to prevent
+     * cross-contamination with subquery bindings (e.g., from whereHas criteria).
+     *
+     * @param string $sql     The raw SQL query string snippet.
+     * @param array  $bindings The associative array of structural parameters.
+     * @param string $boolean  The logical connector type ('AND' | 'OR').
+     * @return static
+     */
+    public function whereRaw(string $sql, array $bindings = [], string $boolean = 'AND'): static
+    {
+        $safeBindings = [];
+        foreach ($bindings as $key => $value) {
+            if (array_key_exists($key, $this->bindings)) {
+                $newKey = $this->generateParamName();
+                $sql = str_replace(":{$key}", ":{$newKey}", $sql);
+                $safeBindings[$newKey] = $value;
+            } else {
+                $safeBindings[$key] = $value;
+            }
+        }
+
+        $this->wheres[] = [
+            'type' => 'raw',
+            'sql' => $sql,
+            'boolean' => $boolean,
+        ];
+
+        $this->bindings = array_merge($this->bindings, $safeBindings);
+
+        return $this;
+    }
+
+    /**
      * Adds an OR WHERE clause. Accepts a callback for grouped conditions.
      *
      * @example ->orWhere('role', 'admin')
@@ -348,22 +462,6 @@ class QueryBuilder
     public function whereNotLike(string $column, string $value, string $boolean = 'AND'): static
     {
         return $this->where($column, 'NOT LIKE', $value, $boolean);
-    }
-
-    /**
-     * WHERE RAW (com cuidado com SQL injection — use bindings)
-     *
-     * @example ->whereRaw('YEAR(created_at) = :year', ['year' => 2024])
-     */
-    public function whereRaw(string $sql, array $bindings = [], string $boolean = 'AND'): static
-    {
-        $this->wheres[] = [
-            'type' => 'raw',
-            'sql' => $sql,
-            'boolean' => $boolean,
-        ];
-        $this->bindings = array_merge($this->bindings, $bindings);
-        return $this;
     }
 
     // =========================================================
@@ -730,104 +828,6 @@ class QueryBuilder
         $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         return array_map(fn($row) => $this->modelClass::hydrate($row), $data);
-    }
-
-    /**
-     * Loads eager relations (including nested dot-notation relations) onto an array of models.
-     *
-     * Dot notation works by:
-     *   1. Grouping all relations by their first segment (e.g. 'user' from 'user.profile').
-     *   2. Loading the first-level relation as normal.
-     *   3. Collecting the loaded related models and recursively calling loadEagerRelations()
-     *      on them with the remaining nested segments.
-     *
-     * Example — Post::with(['user', 'user.profile']):
-     *   Pass 1: loads 'user' on each Post   → sets $post->relations['user'] = User instance
-     *   Pass 2: loads 'profile' on each User → sets $user->relations['profile'] = Profile instance
-     *   Result: $post->user->profile is fully populated with zero extra queries beyond the 3 total.
-     *
-     * @param array $models Hydrated model instances to decorate with relations.
-     * @return void
-     */
-    protected function loadEagerRelations(array $models): void
-    {
-        if (empty($models)) {
-            return;
-        }
-
-        // ── Parse relation tree ───────────────────────────────────────────────
-        // Separate top-level relations from nested (dot-notation) relations.
-        //
-        // Input eagerRelations:
-        //   ['user' => ['*'], 'user.profile' => ['avatar','bio'], 'comments' => ['*']]
-        //
-        // topLevel:
-        //   ['user' => ['*'], 'comments' => ['*']]
-        //
-        // nested (grouped by parent):
-        //   ['user' => ['profile' => ['avatar','bio']]]
-
-        $topLevel = [];
-        $nested = [];
-
-        foreach ($this->eagerRelations as $relation => $columns) {
-            if (!str_contains($relation, '.')) {
-                // Simple relation — load directly on $models
-                $topLevel[$relation] = $columns;
-            } else {
-                // Dot-notation — split into parent and remainder
-                [$parent, $remainder] = explode('.', $relation, 2);
-                $nested[$parent][$remainder] = $columns;
-            }
-        }
-
-        // ── Load top-level relations ──────────────────────────────────────────
-        foreach ($topLevel as $name => $columns) {
-            $this->loadSingleRelation($models, $name, $columns);
-        }
-
-        // ── Recursively load nested relations ─────────────────────────────────
-        // For each parent that has nested children, collect the loaded related
-        // models and delegate to a child QueryBuilder.
-        foreach ($nested as $parent => $childRelations) {
-            // Collect all related models that were loaded for this parent
-            $relatedModels = [];
-
-            foreach ($models as $model) {
-                $loaded = $model->getRelation($parent);
-
-                if ($loaded === null) {
-                    continue;
-                }
-
-                // HasMany returns a Collection; HasOne / BelongsTo returns a single model
-                if ($loaded instanceof \Slenix\Database\Collection) {
-                    foreach ($loaded->all() as $relatedModel) {
-                        $relatedModels[] = $relatedModel;
-                    }
-                } elseif (is_object($loaded)) {
-                    $relatedModels[] = $loaded;
-                }
-            }
-
-            if (empty($relatedModels)) {
-                continue;
-            }
-
-            // Build a minimal QueryBuilder for the related model class so we can
-            // reuse loadSingleRelation() with the correct $modelClass context.
-            $relatedClass = get_class($relatedModels[0]);
-            $childInstance = new $relatedClass();
-            $childQB = new static(
-                $this->pdo,
-                $childInstance->getTable(),
-                $relatedClass
-            );
-
-            foreach ($childRelations as $childName => $childColumns) {
-                $childQB->loadSingleRelation($relatedModels, $childName, $childColumns);
-            }
-        }
     }
 
     /**

@@ -28,10 +28,10 @@ use Slenix\Supports\Auth\AuthManager;
 use Slenix\Supports\Security\Session;
 use Slenix\Supports\Validation\Validator;
 use Slenix\Supports\Libraries\FlashMessage;
-use Slenix\Supports\Libraries\SessionManager;
 use Slenix\Supports\Auth\Guards\GuardInterface;
 use Slenix\Supports\Libraries\Collection;
 use Slenix\Supports\Libraries\RedirectResponse;
+use Slenix\Supports\Security\CSRF;
 use Slenix\Supports\Validation\ValidationException;
 
 // ============================================================================
@@ -39,14 +39,14 @@ use Slenix\Supports\Validation\ValidationException;
 // ============================================================================
 
 defined('SLENIX_START') or define('SLENIX_START', microtime(true));
-defined('ROOT_PATH')    or define('ROOT_PATH',    dirname(__DIR__, 3));
-defined('APP_PATH')     or define('APP_PATH',     ROOT_PATH . '/app');
-defined('PUBLIC_PATH')  or define('PUBLIC_PATH',  ROOT_PATH . '/public');
-defined('SRC_PATH')     or define('SRC_PATH',     ROOT_PATH . '/src');
-defined('ROUTES_PATH')  or define('ROUTES_PATH',  ROOT_PATH . '/routes');
-defined('VIEWS_PATH')   or define('VIEWS_PATH',   ROOT_PATH . '/views');
+defined('ROOT_PATH') or define('ROOT_PATH', dirname(__DIR__, 3));
+defined('APP_PATH') or define('APP_PATH', ROOT_PATH . '/app');
+defined('PUBLIC_PATH') or define('PUBLIC_PATH', ROOT_PATH . '/public');
+defined('SRC_PATH') or define('SRC_PATH', ROOT_PATH . '/src');
+defined('ROUTES_PATH') or define('ROUTES_PATH', ROOT_PATH . '/routes');
+defined('VIEWS_PATH') or define('VIEWS_PATH', ROOT_PATH . '/views');
 defined('STORAGE_PATH') or define('STORAGE_PATH', ROOT_PATH . '/storage');
-defined('CONFIG_PATH')  or define('CONFIG_PATH',  ROOT_PATH . '/src/Config');
+defined('CONFIG_PATH') or define('CONFIG_PATH', ROOT_PATH . '/src/Config');
 
 // ============================================================================
 // VIEWS
@@ -82,10 +82,9 @@ if (!function_exists('redirect')) {
      * redirect('/home');
      * redirect()->back();
      * redirect()->route('login');
-     * redirect('/home')->with('success', 'Saved!');
-     * redirect('/home')->withErrors(['email' => 'Invalid']);
-     * redirect('/home')->withInput();
-     * redirect('/home')->withFlash('success', 'Done!');
+     * redirect()->back()->with('status', 'Profile updated!');
+     * redirect()->back()->withFlash('error', 'Invalid credentials.');
+     * redirect()->back()->withErrors(['email' => 'Required.'])->withInput();
      * redirect('/old')->permanent('/new');
      * ```
      *
@@ -95,13 +94,16 @@ if (!function_exists('redirect')) {
      */
     function redirect(?string $url = null, int $status = 302): RedirectResponse
     {
-        $r = new RedirectResponse($status);
+        $instance = new RedirectResponse($status);
+
         if ($url !== null) {
-            $r->to($url);
+            $instance->to($url); // fires immediately, never returns
         }
-        return $r;
+
+        return $instance;
     }
 }
+
 
 // ============================================================================
 // FLASH
@@ -109,15 +111,19 @@ if (!function_exists('redirect')) {
 
 if (!function_exists('flash')) {
     /**
-     * Return a FlashMessage instance for typed notifications.
+     * Return a FlashMessage instance for typed one-request notifications.
+     *
+     * Writing  → stored in $_SESSION['_flash'] for the next request.
+     * Reading  → reads from $_SESSION['_flash_previous'] (current request).
      *
      * Examples:
      * ```php
      * flash()->success('Record saved.');
      * flash()->error('Something went wrong.');
-     * flash()->has('success');
-     * flash()->get('success');
-     * flash()->typed();   // ['success' => '...', 'error' => '...']
+     * flash()->has('error');           // bool
+     * flash()->get('error');           // string|null
+     * flash()->all();                  // ['success' => '...']
+     * flash()->typed();                // only success|error|warning|info
      * ```
      *
      * @return FlashMessage
@@ -128,114 +134,179 @@ if (!function_exists('flash')) {
     }
 }
 
+
 // ============================================================================
 // SESSION
 // ============================================================================
 
 if (!function_exists('session')) {
     /**
-     * Access or manipulate session data.
+     * Fluent session accessor.
      *
-     * Signatures:
-     * - session()                → SessionManager (fluent object)
-     * - session('key')           → Session::get('key')
-     * - session('key', 'value')  → Session::set('key', 'value')
-     * - session(['k' => 'v'])    → bulk set, returns SessionManager
+     * - session()            → fluent object (see methods below)
+     * - session('key')       → Session::get('key')
+     * - session('key', $val) → Session::set('key', $val), returns fluent object
+     * - session(['k' => $v]) → Session::set() for each pair, returns fluent object
      *
-     * Available methods on the returned SessionManager:
-     *   ->put(key, value)        set a value
-     *   ->get(key, default)      read a value
-     *   ->pull(key)              read and remove
-     *   ->push(key, value)       append to an array key
-     *   ->forget(key|array)      remove one or many keys
-     *   ->has(key)               check existence
-     *   ->missing(key)           check absence
-     *   ->increment(key, amount) increment a numeric value
-     *   ->decrement(key, amount) decrement a numeric value
-     *   ->flash(key, value)      store flash data
-     *   ->flashInput(array)      store old form input
-     *   ->flush()                clear all data (keeps session alive)
-     *   ->regenerate()           regenerate session ID
-     *   ->invalidate()           destroy session completely
-     *   ->id()                   return session ID
-     *   ->all()                  return all session data
+     * Fluent object methods:
+     *   ->get(key, default)   ->set(key, value)    ->has(key)
+     *   ->missing(key)        ->pull(key, default)  ->push(key, value)
+     *   ->forget(key|keys[])  ->put(key|array, val) ->increment(key, by)
+     *   ->decrement(key, by)  ->flash(key, value)   ->flashInput(data)
+     *   ->flush()             ->regenerate(delete)  ->invalidate()
+     *   ->id()                ->all()
      *
      * @param  string|array<string,mixed>|null $key
      * @param  mixed                           $value
-     * @return SessionManager|mixed
+     * @return mixed
      */
     function session(string|array|null $key = null, mixed $value = null): mixed
     {
-        $manager = new SessionManager();
-
         if ($key === null) {
-            return $manager;
+            return new class {
+                public function set(string $k, mixed $v): static
+                {
+                    Session::set($k, $v);
+                    return $this;
+                }
+                public function get(string $k, mixed $d = null): mixed
+                {
+                    return Session::get($k, $d);
+                }
+                public function has(string $k): bool
+                {
+                    return Session::has($k);
+                }
+                public function missing(string $k): bool
+                {
+                    return !Session::has($k);
+                }
+                public function pull(string $k, mixed $d = null): mixed
+                {
+                    return Session::pull($k, $d);
+                }
+                public function push(string $k, mixed $v): static
+                {
+                    Session::push($k, $v);
+                    return $this;
+                }
+                public function forget(string|array $keys): static
+                {
+                    foreach ((array) $keys as $k)
+                        Session::remove($k);
+                    return $this;
+                }
+                public function put(string|array $k, mixed $v = null): static
+                {
+                    if (is_array($k)) {
+                        foreach ($k as $key => $val)
+                            Session::set((string) $key, $val);
+                    } else {
+                        Session::set($k, $v);
+                    }
+                    return $this;
+                }
+                public function increment(string $k, int $by = 1): int
+                {
+                    return Session::increment($k, $by);
+                }
+                public function decrement(string $k, int $by = 1): int
+                {
+                    return Session::decrement($k, $by);
+                }
+                public function flash(string $k, mixed $v): static
+                {
+                    Session::flash($k, $v);
+                    return $this;
+                }
+                public function flashInput(array $d): static
+                {
+                    Session::flashInput($d);
+                    return $this;
+                }
+                public function flush(): static
+                {
+                    Session::flush();
+                    return $this;
+                }
+                public function regenerate(bool $del = true): static
+                {
+                    Session::regenerateId($del);
+                    return $this;
+                }
+                public function invalidate(): static
+                {
+                    Session::destroy();
+                    return $this;
+                }
+                public function id(): string
+                {
+                    return Session::id();
+                }
+                public function all(): array
+                {
+                    return Session::all();
+                }
+            };
         }
 
         if (is_array($key)) {
-            foreach ($key as $k => $v) {
+            foreach ($key as $k => $v)
                 Session::set((string) $k, $v);
-            }
-            return $manager;
+            return session();
         }
 
         if ($value !== null) {
             Session::set($key, $value);
-            return $manager;
+            return session();
         }
 
         return Session::get($key);
     }
 }
 
-// ============================================================================
-// OLD INPUT & ERRORS
-// ============================================================================
 
 if (!function_exists('old')) {
     /**
      * Retrieve a previous form field value after a failed validation redirect.
      *
-     * Reads from '_old_input' flash and re-flashes it so it stays available
-     * throughout the current template render.
+     * Reads from $_SESSION['_flash_previous']['_old_input'], which is populated
+     * by RedirectResponse::withInput() and aged by Session::age().
      *
      * @param  string $key     Form field name.
-     * @param  mixed  $default Default value when no old input exists.
+     * @param  mixed  $default Returned when no old input exists for the key.
      * @return mixed
      */
     function old(string $key, mixed $default = ''): mixed
     {
-        $oldInput = Session::getFlash('_old_input');
+        $input = $_SESSION['_flash_previous']['_old_input'] ?? null;
 
-        if (is_array($oldInput) && isset($oldInput[$key])) {
-            Session::flash('_old_input', $oldInput);
-            return $oldInput[$key];
+        if (is_array($input) && array_key_exists($key, $input)) {
+            return $input[$key];
         }
 
-        $individual = Session::getFlash('_old_input_' . $key);
-        return $individual ?? $default;
+        return $default;
     }
 }
 
 if (!function_exists('errors')) {
     /**
-     * Retrieve validation errors stored in the session.
+     * Retrieve validation errors stored in the session flash.
      *
-     * - errors()              → all errors from all bags as flat array
-     * - errors('email')       → first error message for field
-     * - errors('email', true) → all error messages for field as array
+     * Reads from $_SESSION['_flash_previous']['_errors'], which is populated
+     * by RedirectResponse::withErrors().
+     *
+     * - errors()               → all errors from all bags as a flat array
+     * - errors('email')        → first error message for that field, or null
+     * - errors('email', true)  → all error messages for that field as array
      *
      * @param  string|null $field Field name (null returns all errors).
-     * @param  bool        $all   Return all messages for the field.
-     * @return array|string|null
+     * @param  bool        $all   Return all messages instead of just the first.
+     * @return array<string,mixed>|string|null
      */
     function errors(?string $field = null, bool $all = false): array|string|null
     {
-        $bags = Session::getFlash('_errors') ?? [];
-
-        if (!empty($bags)) {
-            Session::flash('_errors', $bags);
-        }
+        $bags = $_SESSION['_flash_previous']['_errors'] ?? [];
 
         if ($field === null) {
             $result = [];
@@ -249,9 +320,8 @@ if (!function_exists('errors')) {
 
         foreach ($bags as $bag) {
             if (isset($bag[$field])) {
-                return $all
-                    ? (array) $bag[$field]
-                    : (is_array($bag[$field]) ? $bag[$field][0] : $bag[$field]);
+                $messages = (array) $bag[$field];
+                return $all ? $messages : $messages[0];
             }
         }
 
@@ -289,7 +359,7 @@ if (!function_exists('url')) {
     function url(string $path = '', array $query = []): string
     {
         $base = rtrim(env('APP_BASE_URL', ''), '/');
-        $url  = $base . '/' . ltrim($path, '/');
+        $url = $base . '/' . ltrim($path, '/');
 
         if (!empty($query)) {
             $url .= '?' . http_build_query($query);
@@ -308,7 +378,7 @@ if (!function_exists('asset')) {
      */
     function asset(string $path): string
     {
-        return rtrim(env('APP_PATH', ''), '/') . '/'. $path;
+        return rtrim(env('APP_PATH', ''), '/') . '/' . $path;
     }
 }
 
@@ -335,8 +405,8 @@ if (!function_exists('current_url')) {
     function current_url(): string
     {
         $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-        $host   = $_SERVER['HTTP_HOST']    ?? 'localhost';
-        $uri    = $_SERVER['REQUEST_URI']  ?? '/';
+        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $uri = $_SERVER['REQUEST_URI'] ?? '/';
         return "{$scheme}://{$host}{$uri}";
     }
 }
@@ -373,7 +443,7 @@ if (!function_exists('is_active')) {
      */
     function is_active(string $pattern, string $active = 'active', string $inactive = ''): string
     {
-        $path  = request_path();
+        $path = request_path();
         $match = str_ends_with($pattern, '*')
             ? str_starts_with($path, rtrim($pattern, '*'))
             : ($path === $pattern);
@@ -418,12 +488,18 @@ if (!function_exists('abort')) {
     function abort(int $code = 500, string $message = ''): never
     {
         $texts = [
-            400 => 'Bad Request',        401 => 'Unauthorized',
-            403 => 'Forbidden',          404 => 'Not Found',
-            405 => 'Method Not Allowed', 408 => 'Request Timeout',
-            409 => 'Conflict',           422 => 'Unprocessable Entity',
-            429 => 'Too Many Requests',  500 => 'Internal Server Error',
-            502 => 'Bad Gateway',        503 => 'Service Unavailable',
+            400 => 'Bad Request',
+            401 => 'Unauthorized',
+            403 => 'Forbidden',
+            404 => 'Not Found',
+            405 => 'Method Not Allowed',
+            408 => 'Request Timeout',
+            409 => 'Conflict',
+            422 => 'Unprocessable Entity',
+            429 => 'Too Many Requests',
+            500 => 'Internal Server Error',
+            502 => 'Bad Gateway',
+            503 => 'Service Unavailable',
         ];
 
         $msg = $message ?: ($texts[$code] ?? 'Error');
@@ -461,7 +537,8 @@ if (!function_exists('abort_if')) {
      */
     function abort_if(bool $condition, int $code = 500, string $message = ''): void
     {
-        if ($condition) abort($code, $message);
+        if ($condition)
+            abort($code, $message);
     }
 }
 
@@ -476,7 +553,8 @@ if (!function_exists('abort_unless')) {
      */
     function abort_unless(bool $condition, int $code = 500, string $message = ''): void
     {
-        if (!$condition) abort($code, $message);
+        if (!$condition)
+            abort($code, $message);
     }
 }
 
@@ -515,11 +593,11 @@ if (!function_exists('request')) {
      * @return Request
      */
     function request(
-        array $params  = [],
-        array $server  = [],
-        array $query   = [],
+        array $params = [],
+        array $server = [],
+        array $query = [],
         array $cookies = [],
-        array $files   = []
+        array $files = []
     ): Request {
         return new Request($params, $server, $query, $cookies, $files);
     }
@@ -540,7 +618,8 @@ if (!function_exists('to_json')) {
     function to_json(mixed $data, bool $pretty = false): string
     {
         $flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
-        if ($pretty) $flags |= JSON_PRETTY_PRINT;
+        if ($pretty)
+            $flags |= JSON_PRETTY_PRINT;
         return json_encode($data, $flags);
     }
 }
@@ -591,11 +670,11 @@ if (!function_exists('currency')) {
      * @return string
      */
     function currency(
-        float  $value,
-        string $symbol    = '$',
-        int    $decimals  = 2,
+        float $value,
+        string $symbol = '$',
+        int $decimals = 2,
         string $thousands = '.',
-        string $decimal   = ','
+        string $decimal = ','
     ): string {
         return $symbol . ' ' . number_format($value, $decimals, $decimal, $thousands);
     }
@@ -630,7 +709,8 @@ if (!function_exists('percentage_of')) {
      */
     function percentage_of(float|int $value, float|int $total, int $decimals = 2): float
     {
-        if ($total == 0) return 0.0;
+        if ($total == 0)
+            return 0.0;
         return round(($value / $total) * 100, $decimals);
     }
 }
@@ -661,16 +741,17 @@ if (!function_exists('ordinal')) {
      */
     function ordinal(int $number): string
     {
-        $abs    = abs($number);
+        $abs = abs($number);
         $mod100 = $abs % 100;
-        $mod10  = $abs % 10;
+        $mod10 = $abs % 10;
 
-        if ($mod100 >= 11 && $mod100 <= 13) return $number . 'th';
+        if ($mod100 >= 11 && $mod100 <= 13)
+            return $number . 'th';
 
         return match ($mod10) {
-            1       => $number . 'st',
-            2       => $number . 'nd',
-            3       => $number . 'rd',
+            1 => $number . 'st',
+            2 => $number . 'nd',
+            3 => $number . 'rd',
             default => $number . 'th',
         };
     }
@@ -687,11 +768,27 @@ if (!function_exists('roman')) {
      */
     function roman(int $number): string
     {
-        $map    = [1000=>'M',900=>'CM',500=>'D',400=>'CD',100=>'C',90=>'XC',
-                   50=>'L',40=>'XL',10=>'X',9=>'IX',5=>'V',4=>'IV',1=>'I'];
+        $map = [
+            1000 => 'M',
+            900 => 'CM',
+            500 => 'D',
+            400 => 'CD',
+            100 => 'C',
+            90 => 'XC',
+            50 => 'L',
+            40 => 'XL',
+            10 => 'X',
+            9 => 'IX',
+            5 => 'V',
+            4 => 'IV',
+            1 => 'I'
+        ];
         $result = '';
         foreach ($map as $value => $numeral) {
-            while ($number >= $value) { $result .= $numeral; $number -= $value; }
+            while ($number >= $value) {
+                $result .= $numeral;
+                $number -= $value;
+            }
         }
         return $result;
     }
@@ -711,8 +808,8 @@ if (!function_exists('format_bytes')) {
     {
         $units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
         $bytes = max(0, $bytes);
-        $pow   = $bytes > 0 ? (int) floor(log($bytes) / log(1024)) : 0;
-        $pow   = min($pow, count($units) - 1);
+        $pow = $bytes > 0 ? (int) floor(log($bytes) / log(1024)) : 0;
+        $pow = min($pow, count($units) - 1);
         return round($bytes / (1024 ** $pow), $precision) . ' ' . $units[$pow];
     }
 }
@@ -737,9 +834,9 @@ if (!function_exists('number_short')) {
 
         return match (true) {
             $abs >= 1_000_000_000 => $sign . round($abs / 1_000_000_000, $precision) . 'B',
-            $abs >= 1_000_000     => $sign . round($abs / 1_000_000, $precision) . 'M',
-            $abs >= 1_000         => $sign . round($abs / 1_000, $precision) . 'K',
-            default               => (string) $number,
+            $abs >= 1_000_000 => $sign . round($abs / 1_000_000, $precision) . 'M',
+            $abs >= 1_000 => $sign . round($abs / 1_000, $precision) . 'K',
+            default => (string) $number,
         };
     }
 }
@@ -861,7 +958,8 @@ if (!function_exists('when')) {
      */
     function when(bool $condition, callable $callback, ?callable $default = null): mixed
     {
-        if ($condition) return $callback();
+        if ($condition)
+            return $callback();
         return $default ? $default() : null;
     }
 }
@@ -876,8 +974,14 @@ if (!function_exists('optional')) {
     function optional(mixed $value): mixed
     {
         return $value ?? new class {
-            public function __get(string $name): null  { return null; }
-            public function __call(string $n, array $a): null { return null; }
+            public function __get(string $name): null
+            {
+                return null;
+            }
+            public function __call(string $n, array $a): null
+            {
+                return null;
+            }
         };
     }
 }
@@ -899,8 +1003,10 @@ if (!function_exists('retry')) {
             try {
                 return $callback($attempt);
             } catch (\Throwable $e) {
-                if (++$attempt >= $times) throw $e;
-                if ($sleepMs > 0) usleep($sleepMs * 1000);
+                if (++$attempt >= $times)
+                    throw $e;
+                if ($sleepMs > 0)
+                    usleep($sleepMs * 1000);
             }
         }
     }
@@ -975,13 +1081,15 @@ if (!function_exists('data_get')) {
      */
     function data_get(mixed $target, string|int|null $key, mixed $default = null): mixed
     {
-        if ($key === null) return $target;
+        if ($key === null)
+            return $target;
 
         $keys = is_string($key) ? explode('.', $key) : [$key];
 
         foreach ($keys as $segment) {
             if ($segment === '*') {
-                if (!is_array($target)) return $default;
+                if (!is_array($target))
+                    return $default;
                 $result = [];
                 foreach ($target as $item) {
                     $result[] = is_array($item)
@@ -1066,11 +1174,11 @@ if (!function_exists('avatar')) {
      */
     function avatar(
         string $name,
-        int    $size  = 40,
-        string $bg    = '#0f0f0f',
+        int $size = 40,
+        string $bg = '#0f0f0f',
         string $color = '#ffffff'
     ): string {
-        $words    = preg_split('/\s+/', trim($name));
+        $words = preg_split('/\s+/', trim($name));
         $initials = strtoupper(substr($words[0], 0, 1));
         if (count($words) > 1) {
             $initials .= strtoupper(substr(end($words), 0, 1));
@@ -1130,7 +1238,7 @@ if (!function_exists('csrf_meta')) {
      */
     function csrf_meta(): string
     {
-        return '<meta name="csrf-token" content="' . csrf_token() . '"/>';
+        return CSRF::meta();
     }
 }
 
@@ -1147,7 +1255,8 @@ if (!function_exists('csrf_verify')) {
     function csrf_verify(?string $token = null): bool
     {
         $token ??= $_POST['_csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? null;
-        if (!$token) return false;
+        if (!$token)
+            return false;
         Session::start();
         return hash_equals($_SESSION['_csrf_token'] ?? '', $token);
     }
@@ -1187,8 +1296,8 @@ if (!function_exists('encrypt')) {
             throw new \RuntimeException('APP_KEY is invalid or too short for encryption.');
         }
 
-        $iv         = random_bytes(12);
-        $tag        = '';
+        $iv = random_bytes(12);
+        $tag = '';
         $ciphertext = openssl_encrypt($value, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag);
 
         return base64_encode($iv . '::' . $tag . '::' . $ciphertext);
@@ -1209,11 +1318,13 @@ if (!function_exists('decrypt')) {
         $key = (string) env('APP_KEY', '');
         $key = base64_decode(str_replace('base64:', '', $key)) ?: $key;
 
-        $data  = base64_decode($encrypted);
-        if (!$data) return false;
+        $data = base64_decode($encrypted);
+        if (!$data)
+            return false;
 
         $parts = explode('::', $data, 3);
-        if (count($parts) !== 3) return false;
+        if (count($parts) !== 3)
+            return false;
 
         [$iv, $tag, $ciphertext] = $parts;
 
@@ -1261,7 +1372,7 @@ if (!function_exists('mask_email')) {
     {
         [$local, $domain] = explode('@', $email, 2);
         $visible = max(2, (int) floor(strlen($local) / 3));
-        $masked  = substr($local, 0, $visible) . str_repeat('*', strlen($local) - $visible);
+        $masked = substr($local, 0, $visible) . str_repeat('*', strlen($local) - $visible);
         return "{$masked}@{$domain}";
     }
 }
@@ -1277,10 +1388,10 @@ if (!function_exists('mask_phone')) {
      */
     function mask_phone(string $phone): string
     {
-        $clean  = preg_replace('/\D/', '', $phone);
-        $len    = strlen($clean);
-        $start  = max(3, (int) floor($len / 4));
-        $end    = 4;
+        $clean = preg_replace('/\D/', '', $phone);
+        $len = strlen($clean);
+        $start = max(3, (int) floor($len / 4));
+        $end = 4;
         return substr($clean, 0, $start)
             . str_repeat('*', $len - $start - $end)
             . substr($clean, -$end);
@@ -1301,7 +1412,8 @@ if (!function_exists('is_safe_url')) {
     function is_safe_url(string $url, ?string $allowedHost = null): bool
     {
         $parsed = parse_url($url);
-        if (!isset($parsed['host'])) return true;
+        if (!isset($parsed['host']))
+            return true;
         $allowed = $allowedHost ?? ($_SERVER['HTTP_HOST'] ?? '');
         return $parsed['host'] === $allowed;
     }
@@ -1319,7 +1431,7 @@ if (!function_exists('purify_html')) {
      */
     function purify_html(
         string $html,
-        array  $allowedTags = ['p','b','i','u','strong','em','br','ul','ol','li','a']
+        array $allowedTags = ['p', 'b', 'i', 'u', 'strong', 'em', 'br', 'ul', 'ol', 'li', 'a']
     ): string {
         return strip_tags($html, $allowedTags);
     }
@@ -1343,14 +1455,15 @@ if (!function_exists('env')) {
     {
         $value = $_ENV[$key] ?? $_SERVER[$key] ?? getenv($key);
 
-        if ($value === false || $value === null) return $default;
+        if ($value === false || $value === null)
+            return $default;
 
         return match (strtolower((string) $value)) {
-            'true',  '(true)'  => true,
+            'true', '(true)' => true,
             'false', '(false)' => false,
-            'null',  '(null)'  => null,
+            'null', '(null)' => null,
             'empty', '(empty)' => '',
-            default            => $value,
+            default => $value,
         };
     }
 }
@@ -1511,19 +1624,21 @@ if (!function_exists('_slenix_dump_render')) {
     /** @internal */
     function _slenix_dump_render(mixed $var, int $index, int $total): string
     {
-        $type      = gettype($var);
-        $isLast    = $index === $total - 1;
+        $type = gettype($var);
+        $isLast = $index === $total - 1;
         $typeColor = match ($type) {
-            'string'           => '#a78bfa',
-            'integer','double' => '#34d399',
-            'boolean'          => '#fbbf24',
-            'NULL'             => '#6b7280',
-            'array'            => '#38bdf8',
-            'object'           => '#f472b6',
-            default            => '#cdd6f4',
+            'string' => '#a78bfa',
+            'integer', 'double' => '#34d399',
+            'boolean' => '#fbbf24',
+            'NULL' => '#6b7280',
+            'array' => '#38bdf8',
+            'object' => '#f472b6',
+            default => '#cdd6f4',
         };
 
-        ob_start(); var_export($var); $raw = ob_get_clean();
+        ob_start();
+        var_export($var);
+        $raw = ob_get_clean();
 
         $raw = preg_replace("/\b(true|false|null|NULL)\b/", '§BOOL§$1§/BOOL§', $raw);
         $raw = preg_replace("/'((?:[^'\\\\]|\\\\.)*)'/", "§STR§'$1'§/STR§", $raw);
@@ -1531,11 +1646,11 @@ if (!function_exists('_slenix_dump_render')) {
         $raw = preg_replace('/\b(array)\s*\(/i', '§ARR§array§/ARR§(', $raw);
         $raw = htmlspecialchars($raw, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $raw = preg_replace('/§BOOL§(.*?)§\/BOOL§/', '<span style="color:#fbbf24;font-weight:600">$1</span>', $raw);
-        $raw = preg_replace('/§STR§(.*?)§\/STR§/',   '<span style="color:#a78bfa">$1</span>', $raw);
-        $raw = preg_replace('/§NUM§(.*?)§\/NUM§/',   '<span style="color:#34d399">$1</span>', $raw);
-        $raw = preg_replace('/§ARR§(.*?)§\/ARR§/',   '<span style="color:#38bdf8;font-weight:600">$1</span>', $raw);
+        $raw = preg_replace('/§STR§(.*?)§\/STR§/', '<span style="color:#a78bfa">$1</span>', $raw);
+        $raw = preg_replace('/§NUM§(.*?)§\/NUM§/', '<span style="color:#34d399">$1</span>', $raw);
+        $raw = preg_replace('/§ARR§(.*?)§\/ARR§/', '<span style="color:#38bdf8;font-weight:600">$1</span>', $raw);
 
-        $mb     = $isLast ? '1rem' : '0.5rem';
+        $mb = $isLast ? '1rem' : '0.5rem';
         $border = '1px solid rgba(255,255,255,0.08)';
 
         return <<<HTML
@@ -1588,8 +1703,10 @@ if (!function_exists('memory_usage')) {
     function memory_usage(bool $peak = false): string
     {
         $bytes = $peak ? memory_get_peak_usage(true) : memory_get_usage(true);
-        if ($bytes < 1024)    return $bytes . ' B';
-        if ($bytes < 1048576) return round($bytes / 1024, 2) . ' KB';
+        if ($bytes < 1024)
+            return $bytes . ' B';
+        if ($bytes < 1048576)
+            return round($bytes / 1024, 2) . ' KB';
         return round($bytes / 1048576, 2) . ' MB';
     }
 }
@@ -1606,12 +1723,14 @@ if (!function_exists('log_debug')) {
      */
     function log_debug(mixed $message, string $channel = 'debug'): void
     {
-        if (!defined('STORAGE_PATH')) return;
+        if (!defined('STORAGE_PATH'))
+            return;
 
-        $dir  = STORAGE_PATH . '/logs';
+        $dir = STORAGE_PATH . '/logs';
         $file = "{$dir}/{$channel}.log";
 
-        if (!is_dir($dir)) mkdir($dir, 0755, true);
+        if (!is_dir($dir))
+            mkdir($dir, 0755, true);
 
         $content = is_string($message) ? $message : json_encode($message, JSON_UNESCAPED_UNICODE);
         file_put_contents($file, '[' . date('Y-m-d H:i:s') . '] ' . $content . PHP_EOL, FILE_APPEND | LOCK_EX);
@@ -1743,20 +1862,21 @@ if (!function_exists('human_date')) {
      */
     function human_date(string|\DateTimeInterface $date): string
     {
-        $dt   = is_string($date) ? new \DateTimeImmutable($date) : $date;
+        $dt = is_string($date) ? new \DateTimeImmutable($date) : $date;
         $diff = (new \DateTimeImmutable())->diff($dt);
         $past = $diff->invert === 1;
 
         $str = match (true) {
-            $diff->y > 0 => "{$diff->y} " . ($diff->y === 1 ? 'ano'    : 'anos'),
-            $diff->m > 0 => "{$diff->m} " . ($diff->m === 1 ? 'mês'    : 'meses'),
-            $diff->d > 0 => "{$diff->d} " . ($diff->d === 1 ? 'dia'    : 'dias'),
-            $diff->h > 0 => "{$diff->h} " . ($diff->h === 1 ? 'hora'   : 'horas'),
+            $diff->y > 0 => "{$diff->y} " . ($diff->y === 1 ? 'ano' : 'anos'),
+            $diff->m > 0 => "{$diff->m} " . ($diff->m === 1 ? 'mês' : 'meses'),
+            $diff->d > 0 => "{$diff->d} " . ($diff->d === 1 ? 'dia' : 'dias'),
+            $diff->h > 0 => "{$diff->h} " . ($diff->h === 1 ? 'hora' : 'horas'),
             $diff->i > 0 => "{$diff->i} " . ($diff->i === 1 ? 'minuto' : 'minutos'),
-            default      => null,
+            default => null,
         };
 
-        if ($str === null) return 'agora mesmo';
+        if ($str === null)
+            return 'agora mesmo';
         return $past ? "há {$str}" : "em {$str}";
     }
 }
@@ -1772,7 +1892,7 @@ if (!function_exists('diff_in_days')) {
     function diff_in_days(string|\DateTimeInterface $from, string|\DateTimeInterface $to): int
     {
         $from = is_string($from) ? new \DateTimeImmutable($from) : $from;
-        $to   = is_string($to)   ? new \DateTimeImmutable($to)   : $to;
+        $to = is_string($to) ? new \DateTimeImmutable($to) : $to;
         return (int) $from->diff($to)->days;
     }
 }
@@ -1788,7 +1908,7 @@ if (!function_exists('diff_in_hours')) {
     function diff_in_hours(string|\DateTimeInterface $from, string|\DateTimeInterface $to): int
     {
         $from = is_string($from) ? new \DateTimeImmutable($from) : $from;
-        $to   = is_string($to)   ? new \DateTimeImmutable($to)   : $to;
+        $to = is_string($to) ? new \DateTimeImmutable($to) : $to;
         return (int) abs(($to->getTimestamp() - $from->getTimestamp()) / 3600);
     }
 }
@@ -1804,7 +1924,7 @@ if (!function_exists('diff_in_minutes')) {
     function diff_in_minutes(string|\DateTimeInterface $from, string|\DateTimeInterface $to): int
     {
         $from = is_string($from) ? new \DateTimeImmutable($from) : $from;
-        $to   = is_string($to)   ? new \DateTimeImmutable($to)   : $to;
+        $to = is_string($to) ? new \DateTimeImmutable($to) : $to;
         return (int) abs(($to->getTimestamp() - $from->getTimestamp()) / 60);
     }
 }
@@ -2002,17 +2122,17 @@ if (!function_exists('date_range')) {
     function date_range(
         string|\DateTimeInterface $start,
         string|\DateTimeInterface $end,
-        string $step   = '+1 day',
+        string $step = '+1 day',
         string $format = 'Y-m-d'
     ): array {
-        $start   = is_string($start) ? new \DateTimeImmutable($start) : \DateTimeImmutable::createFromInterface($start);
-        $end     = is_string($end)   ? new \DateTimeImmutable($end)   : \DateTimeImmutable::createFromInterface($end);
+        $start = is_string($start) ? new \DateTimeImmutable($start) : \DateTimeImmutable::createFromInterface($start);
+        $end = is_string($end) ? new \DateTimeImmutable($end) : \DateTimeImmutable::createFromInterface($end);
         $current = $start;
-        $dates   = [];
+        $dates = [];
 
         while ($current <= $end) {
-            $dates[]  = $current->format($format);
-            $current  = $current->modify($step);
+            $dates[] = $current->format($format);
+            $current = $current->modify($step);
         }
 
         return $dates;
@@ -2031,13 +2151,14 @@ if (!function_exists('business_days')) {
      */
     function business_days(string|\DateTimeInterface $from, string|\DateTimeInterface $to): int
     {
-        $from    = is_string($from) ? new \DateTimeImmutable($from) : \DateTimeImmutable::createFromInterface($from);
-        $to      = is_string($to)   ? new \DateTimeImmutable($to)   : \DateTimeImmutable::createFromInterface($to);
-        $days    = 0;
+        $from = is_string($from) ? new \DateTimeImmutable($from) : \DateTimeImmutable::createFromInterface($from);
+        $to = is_string($to) ? new \DateTimeImmutable($to) : \DateTimeImmutable::createFromInterface($to);
+        $days = 0;
         $current = $from;
 
         while ($current <= $to) {
-            if ((int) $current->format('N') < 6) $days++;
+            if ((int) $current->format('N') < 6)
+                $days++;
             $current = $current->modify('+1 day');
         }
 
@@ -2056,7 +2177,7 @@ if (!function_exists('age')) {
     function age(string|\DateTimeInterface $birthDate, ?\DateTimeInterface $referenceDate = null): int
     {
         $birth = is_string($birthDate) ? new \DateTimeImmutable($birthDate) : $birthDate;
-        $ref   = $referenceDate ?? new \DateTimeImmutable();
+        $ref = $referenceDate ?? new \DateTimeImmutable();
         return (int) $birth->diff($ref)->y;
     }
 }
@@ -2072,7 +2193,7 @@ if (!function_exists('days_in_month')) {
     function days_in_month(int $month = 0, int $year = 0): int
     {
         $month = $month ?: (int) date('n');
-        $year  = $year  ?: (int) date('Y');
+        $year = $year ?: (int) date('Y');
         return (int) (new \DateTimeImmutable("{$year}-{$month}-01"))->format('t');
     }
 }
@@ -2107,12 +2228,14 @@ if (!function_exists('array_get')) {
      */
     function array_get(array $array, string|int $key, mixed $default = null): mixed
     {
-        if (isset($array[$key])) return $array[$key];
+        if (isset($array[$key]))
+            return $array[$key];
 
         if (is_string($key) && str_contains($key, '.')) {
             $current = $array;
             foreach (explode('.', $key) as $k) {
-                if (!is_array($current) || !array_key_exists($k, $current)) return $default;
+                if (!is_array($current) || !array_key_exists($k, $current))
+                    return $default;
                 $current = $current[$k];
             }
             return $current;
@@ -2133,10 +2256,11 @@ if (!function_exists('array_set')) {
      */
     function array_set(array &$array, string $key, mixed $value): void
     {
-        $keys    = explode('.', $key);
+        $keys = explode('.', $key);
         $current = &$array;
         foreach ($keys as $k) {
-            if (!isset($current[$k]) || !is_array($current[$k])) $current[$k] = [];
+            if (!isset($current[$k]) || !is_array($current[$k]))
+                $current[$k] = [];
             $current = &$current[$k];
         }
         $current = $value;
@@ -2153,11 +2277,12 @@ if (!function_exists('array_forget')) {
      */
     function array_forget(array &$array, string $key): void
     {
-        $keys    = explode('.', $key);
+        $keys = explode('.', $key);
         $current = &$array;
         while (count($keys) > 1) {
             $k = array_shift($keys);
-            if (!isset($current[$k]) || !is_array($current[$k])) return;
+            if (!isset($current[$k]) || !is_array($current[$k]))
+                return;
             $current = &$current[$k];
         }
         unset($current[array_shift($keys)]);
@@ -2202,7 +2327,9 @@ if (!function_exists('array_flatten')) {
     function array_flatten(array $array): array
     {
         $result = [];
-        array_walk_recursive($array, function ($v) use (&$result) { $result[] = $v; });
+        array_walk_recursive($array, function ($v) use (&$result) {
+            $result[] = $v;
+        });
         return $result;
     }
 }
@@ -2216,7 +2343,8 @@ if (!function_exists('array_wrap')) {
      */
     function array_wrap(mixed $value): array
     {
-        if (is_null($value)) return [];
+        if (is_null($value))
+            return [];
         return is_array($value) ? $value : [$value];
     }
 }
@@ -2236,7 +2364,7 @@ if (!function_exists('array_pluck')) {
         foreach ($array as $item) {
             $value = is_array($item) ? ($item[$key] ?? null) : ($item->$key ?? null);
             if ($indexBy !== null) {
-                $index          = is_array($item) ? ($item[$indexBy] ?? null) : ($item->$indexBy ?? null);
+                $index = is_array($item) ? ($item[$indexBy] ?? null) : ($item->$indexBy ?? null);
                 $result[$index] = $value;
             } else {
                 $result[] = $value;
@@ -2258,7 +2386,7 @@ if (!function_exists('array_group_by')) {
     {
         $result = [];
         foreach ($array as $item) {
-            $group            = is_array($item) ? ($item[$key] ?? null) : ($item->$key ?? null);
+            $group = is_array($item) ? ($item[$key] ?? null) : ($item->$key ?? null);
             $result[$group][] = $item;
         }
         return $result;
@@ -2303,10 +2431,14 @@ if (!function_exists('array_unique_by')) {
      */
     function array_unique_by(array $array, string $key): array
     {
-        $seen = []; $result = [];
+        $seen = [];
+        $result = [];
         foreach ($array as $item) {
             $v = is_array($item) ? ($item[$key] ?? null) : ($item->$key ?? null);
-            if (!in_array($v, $seen, true)) { $seen[] = $v; $result[] = $item; }
+            if (!in_array($v, $seen, true)) {
+                $seen[] = $v;
+                $result[] = $item;
+            }
         }
         return $result;
     }
@@ -2326,14 +2458,14 @@ if (!function_exists('array_paginate')) {
         $total = count($array);
         $items = array_slice($array, ($page - 1) * $perPage, $perPage);
         return [
-            'data'         => $items,
-            'total'        => $total,
-            'per_page'     => $perPage,
+            'data' => $items,
+            'total' => $total,
+            'per_page' => $perPage,
             'current_page' => $page,
-            'last_page'    => (int) ceil($total / $perPage),
-            'from'         => (($page - 1) * $perPage) + 1,
-            'to'           => min($page * $perPage, $total),
-            'has_more'     => $page < (int) ceil($total / $perPage),
+            'last_page' => (int) ceil($total / $perPage),
+            'from' => (($page - 1) * $perPage) + 1,
+            'to' => min($page * $perPage, $total),
+            'has_more' => $page < (int) ceil($total / $perPage),
         ];
     }
 }
@@ -2349,7 +2481,9 @@ if (!function_exists('array_map_keys')) {
     function array_map_keys(array $array, callable $callback): array
     {
         $result = [];
-        foreach ($array as $key => $value) { $result[$callback($key)] = $value; }
+        foreach ($array as $key => $value) {
+            $result[$callback($key)] = $value;
+        }
         return $result;
     }
 }
@@ -2384,21 +2518,31 @@ if (!function_exists('validate')) {
      * @return array           Validated data on success.
      * @throws ValidationException For JSON requests on validation failure.
      */
-    function validate(array $data, array $rules, array $messages = []): array
-    {
-        try {
-            return Validator::make($data, $rules, $messages)->validate();
-        } catch (ValidationException $e) {
-            if (isset($_SERVER['HTTP_ACCEPT']) && str_contains($_SERVER['HTTP_ACCEPT'], 'application/json')) {
-                throw $e;
+    if (!function_exists('validate')) {
+        function validate(array $data, array $rules, array $messages = []): array
+        {
+            try {
+                return Validator::make($data, $rules, $messages)->validate();
+            } catch (ValidationException $e) {
+                if (isset($_SERVER['HTTP_ACCEPT']) && str_contains($_SERVER['HTTP_ACCEPT'], 'application/json')) {
+                    throw $e;
+                }
+
+                $input = $data;
+                unset($input['password'], $input['password_confirmation'], $input['_csrf_token']);
+
+                Session::start();
+
+                Session::flash('_errors', ['default' => $e->errors()]);
+                Session::flashInput($input);
+
+                if (session_status() === PHP_SESSION_ACTIVE) {
+                    session_write_close();
+                }
+
+                header('Location: ' . ($_SERVER['HTTP_REFERER'] ?? '/'), true, 302);
+                exit;
             }
-
-            Session::start();
-            Session::flash('_errors',    ['default' => $e->errors()]);
-            Session::flash('_old_input', $data);
-
-            header('Location: ' . ($_SERVER['HTTP_REFERER'] ?? '/'), true, 302);
-            exit;
         }
     }
 }
@@ -2423,10 +2567,12 @@ if (!function_exists('cache')) {
      */
     function cache(string|array|null $key = null, mixed $default = null, int $ttl = 3600): mixed
     {
-        if ($key === null) return Cache::class;
+        if ($key === null)
+            return Cache::class;
 
         if (is_array($key)) {
-            foreach ($key as $k => $v) Cache::put((string) $k, $v, $ttl);
+            foreach ($key as $k => $v)
+                Cache::put((string) $k, $v, $ttl);
             return null;
         }
 
@@ -2454,11 +2600,11 @@ if (!function_exists('logger')) {
     function logger(string $message, array $context = [], string $level = 'debug'): void
     {
         match ($level) {
-            'info'     => Log::info($message, $context),
-            'warning'  => Log::warning($message, $context),
-            'error'    => Log::error($message, $context),
+            'info' => Log::info($message, $context),
+            'warning' => Log::warning($message, $context),
+            'error' => Log::error($message, $context),
             'critical' => Log::critical($message, $context),
-            default    => Log::debug($message, $context),
+            default => Log::debug($message, $context),
         };
     }
 }
@@ -2554,54 +2700,54 @@ if (!function_exists('auth')) {
 if (class_exists(Luna::class)) {
 
     // Routing
-    Luna::share('route',        fn(string $name, array $params = []): ?string => Router::route($name, $params));
+    Luna::share('route', fn(string $name, array $params = []): ?string => Router::route($name, $params));
 
     // CSRF
-    Luna::share('csrf_token',   fn(): string => csrf_token());
-    Luna::share('csrf_field',   fn(): string => csrf_field());
+    Luna::share('csrf_token', fn(): string => csrf_token());
+    Luna::share('csrf_field', fn(): string => csrf_field());
 
     // Forms
-    Luna::share('old',          fn(string $key, mixed $default = ''): mixed => old($key, $default));
-    Luna::share('errors',       fn(?string $field = null): mixed => errors($field));
-    Luna::share('has_error',    fn(string $field): bool => has_error($field));
+    Luna::share('old', fn(string $key, mixed $default = ''): mixed => old($key, $default));
+    Luna::share('errors', fn(?string $field = null): mixed => errors($field));
+    Luna::share('has_error', fn(string $field): bool => has_error($field));
 
     // Flash
-    Luna::share('flash',        fn(): FlashMessage => flash());
+    Luna::share('flash', fn(): FlashMessage => flash());
 
     // URL / navigation
-    Luna::share('is_active',    fn(string $p, string $a = 'active', string $i = ''): string => is_active($p, $a, $i));
-    Luna::share('asset',        fn(string $path): string => asset($path));
-    Luna::share('url',          fn(string $path = '', array $q = []): string => url($path, $q));
-    Luna::share('current_url',  fn(): string => current_url());
+    Luna::share('is_active', fn(string $p, string $a = 'active', string $i = ''): string => is_active($p, $a, $i));
+    Luna::share('asset', fn(string $path): string => asset($path));
+    Luna::share('url', fn(string $path = '', array $q = []): string => url($path, $q));
+    Luna::share('current_url', fn(): string => current_url());
     Luna::share('request_path', fn(): string => request_path());
 
     // Dates
-    Luna::share('now',          fn(): \DateTimeImmutable => now());
-    Luna::share('format_date',  fn(string $d, string $f = 'd/m/Y H:i:s'): ?string => format_date($d, $f));
-    Luna::share('human_date',   fn(string|\DateTimeInterface $d): string => human_date($d));
+    Luna::share('now', fn(): \DateTimeImmutable => now());
+    Luna::share('format_date', fn(string $d, string $f = 'd/m/Y H:i:s'): ?string => format_date($d, $f));
+    Luna::share('human_date', fn(string|\DateTimeInterface $d): string => human_date($d));
 
     // Numbers / formatting
-    Luna::share('currency',     fn(float $v, string $s = '$'): string => currency($v, $s));
+    Luna::share('currency', fn(float $v, string $s = '$'): string => currency($v, $s));
     Luna::share('format_bytes', fn(int $b, int $p = 2): string => format_bytes($b, $p));
     Luna::share('number_short', fn(float|int $n, int $p = 1): string => number_short($n, $p));
 
     // Session (array shorthand for templates)
     Luna::share('Session', [
-        'has'      => fn(string $key): bool   => Session::has($key),
-        'get'      => fn(string $key, mixed $d = null) => Session::get($key, $d),
-        'set'      => fn(string $key, mixed $v) => Session::set($key, $v),
-        'flash'    => fn(string $key, mixed $v) => Session::flash($key, $v),
+        'has' => fn(string $key): bool => Session::has($key),
+        'get' => fn(string $key, mixed $d = null) => Session::get($key, $d),
+        'set' => fn(string $key, mixed $v) => Session::set($key, $v),
+        'flash' => fn(string $key, mixed $v) => Session::flash($key, $v),
         'getFlash' => fn(string $key, mixed $d = null) => Session::getFlash($key, $d),
-        'hasFlash' => fn(string $key): bool    => Session::hasFlash($key),
-        'remove'   => fn(string $key) => Session::remove($key),
-        'all'      => fn(): array => Session::all(),
-        'destroy'  => fn() => Session::destroy(),
-        'id'       => fn(): string => session_id(),
+        'hasFlash' => fn(string $key): bool => Session::hasFlash($key),
+        'remove' => fn(string $key) => Session::remove($key),
+        'all' => fn(): array => Session::all(),
+        'destroy' => fn() => Session::destroy(),
+        'id' => fn(): string => session_id(),
     ]);
 
     // Debug (local only)
     if (function_exists('is_local') && is_local()) {
-        Luna::share('benchmark',    fn(): float => benchmark());
+        Luna::share('benchmark', fn(): float => benchmark());
         Luna::share('memory_usage', fn(): string => memory_usage());
     }
 }

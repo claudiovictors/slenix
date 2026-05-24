@@ -5,9 +5,10 @@
 | HttpClient Class
 |--------------------------------------------------------------------------
 |
-| Provides a fluent and robust interface for making HTTP requests,
-| with support for HTTP methods, authentication, custom headers, request
-| body, retries, timeouts, and integration with the Slenix framework.
+| Fluent HTTP client with Http::to(url)->method() syntax.
+| Supports: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS,
+| authentication, retries, timeouts, events, body types,
+| and static shortcuts — all in a clean, readable interface.
 |
 */
 
@@ -18,53 +19,88 @@ namespace Slenix\Supports\Http;
 use Exception;
 use RuntimeException;
 use InvalidArgumentException;
+use BadMethodCallException;
 use Slenix\Http\Response;
 
 class HttpClient
 {
     /**
-     * @var array Default request options
+     * Configuration options for the HTTP request.
+     *
+     * @var array
      */
     protected array $options = [
-        'timeout'          => 30,
-        'connect_timeout'  => 5,
-        'verify'           => true,
-        'http_errors'      => true,
-        'retries'          => 0,
-        'retry_delay'      => 1000,
+        'timeout' => 30,
+        'connect_timeout' => 5,
+        'verify' => true,
+        'http_errors' => true,
+        'retries' => 0,
+        'retry_delay' => 1000,
         'follow_redirects' => true,
-        'max_redirects'    => 5,
-        'user_agent'       => 'Slenix-HttpClient/1.0',
+        'max_redirects' => 5,
+        'user_agent' => 'Slenix-HttpClient/1.0',
     ];
 
-    /** @var array Request headers */
+    /**
+     * Custom HTTP headers for the request.
+     *
+     * @var array
+     */
     protected array $headers = [];
 
-    /** @var mixed Request body data */
+    /**
+     * The payload or payload raw content to be sent.
+     *
+     * @var mixed
+     */
     protected mixed $body = null;
 
-    /** @var string|null Base URL for requests */
+    /**
+     * Pre-configured target domain/base URL path.
+     *
+     * @var string|null
+     */
     protected ?string $baseUrl = null;
 
-    /** @var string|null HTTP method */
+    /**
+     * Current explicit uppercase HTTP Verb.
+     *
+     * @var string|null
+     */
     protected ?string $method = null;
 
-    /** @var string|null Request URL */
+    /**
+     * Computed full target endpoint path.
+     *
+     * @var string|null
+     */
     protected ?string $url = null;
 
-    /** @var array|null Authentication data */
+    /**
+     * Authentication array structure details ['type' => ..., 'credentials' => ...].
+     *
+     * @var array|null
+     */
     protected ?array $auth = null;
 
-    /** @var array Event callbacks (before, after, error) */
+    /**
+     * Internal array containing events callbacks loops.
+     *
+     * @var array
+     */
     protected array $events = [];
 
-    /** @var array Status codes that should be treated as errors */
+    /**
+     * Matching HTTP response integer codes treated as a failing connection.
+     *
+     * @var array
+     */
     protected array $errorStatusCodes = [400, 401, 403, 404, 500, 502, 503];
 
     /**
-     * Creates a new HttpClient instance.
+     * Initialize the client instance with dynamic settings overrides.
      *
-     * @param array $options Initial options
+     * @param array $options
      */
     public function __construct(array $options = [])
     {
@@ -73,62 +109,67 @@ class HttpClient
     }
 
     /**
-     * Validates the provided options.
+     * Entry point — sets the target URL and returns a configured instance.
      *
-     * @throws InvalidArgumentException
+     * @param string $url
+     * @param array $options
+     * @return static
      */
-    protected function validateOptions(): void
+    public static function to(string $url, array $options = []): static
     {
-        if ($this->options['timeout'] <= 0) {
-            throw new InvalidArgumentException('Timeout must be greater than 0');
-        }
-
-        if ($this->options['connect_timeout'] <= 0) {
-            throw new InvalidArgumentException('Connect timeout must be greater than 0');
-        }
-
-        if ($this->options['retries'] < 0) {
-            throw new InvalidArgumentException('Retries cannot be negative');
-        }
+        $instance = new static($options);
+        $instance->baseUrl = rtrim($url, '/');
+        return $instance;
     }
 
     /**
-     * Sets the base URL for requests.
+     * Static factory when you need to configure before setting the URL.
      *
-     * @param  string $baseUrl
-     * @return self
+     * @param array $options
+     * @return static
+     */
+    public static function make(array $options = []): static
+    {
+        return new static($options);
+    }
+
+    /**
+     * Changes (or sets) the base URL after construction.
+     *
+     * @param string $url
+     * @return static
      * @throws InvalidArgumentException
      */
-    public function baseUrl(string $baseUrl): self
+    public function baseUrl(string $url): static
     {
-        if (!filter_var($baseUrl, FILTER_VALIDATE_URL)) {
-            throw new InvalidArgumentException('Invalid base URL');
+        if (!filter_var($url, FILTER_VALIDATE_URL)) {
+            throw new InvalidArgumentException("Invalid base URL: '{$url}'");
         }
 
-        $this->baseUrl = rtrim($baseUrl, '/');
+        $this->baseUrl = rtrim($url, '/');
         return $this;
     }
 
     /**
-     * Sets a single request header.
+     * Append or override a singular HTTP header.
      *
-     * @param  string $name
-     * @param  string $value
-     * @return self
+     * @param string $name
+     * @param string $value
+     * @return static
      */
-    public function withHeader(string $name, string $value): self
+    public function withHeader(string $name, string $value): static
     {
         $this->headers[trim($name)] = trim($value);
         return $this;
     }
 
     /**
-     * Sets multiple request headers at once.
+     * Key-value associative layout payload appending routine loop.
      *
-     * @param  array $headers
-     * @return self
+     * @param array $headers
+     * @return static
      */
-    public function withHeaders(array $headers): self
+    public function withHeaders(array $headers): static
     {
         foreach ($headers as $name => $value) {
             $this->withHeader((string) $name, (string) $value);
@@ -137,39 +178,49 @@ class HttpClient
     }
 
     /**
-     * Removes a request header.
+     * Remove explicit header constraint entry tracker reference.
      *
-     * @param  string $name
-     * @return self
+     * @param string $name
+     * @return static
      */
-    public function withoutHeader(string $name): self
+    public function withoutHeader(string $name): static
     {
         unset($this->headers[trim($name)]);
         return $this;
     }
 
     /**
-     * Sets authentication for the request (Basic Auth, Bearer Token, Digest).
+     * Shorthand: sets Accept: application/json.
      *
-     * @param  string       $type        Authentication type ('basic', 'bearer', 'digest')
-     * @param  string|array $credentials Credentials (username/password array or token string)
-     * @return self
+     * @return static
+     */
+    public function acceptJson(): static
+    {
+        return $this->withHeader('Accept', 'application/json');
+    }
+
+    /**
+     * Generic auth — supports 'basic', 'bearer', 'digest'.
+     *
+     * @param string $type
+     * @param string|array $credentials
+     * @return static
      * @throws InvalidArgumentException
      */
-    public function withAuth(string $type, string|array $credentials): self
+    public function withAuth(string $type, string|array $credentials): static
     {
         $type = strtolower($type);
 
         if (!in_array($type, ['basic', 'bearer', 'digest'], true)) {
-            throw new InvalidArgumentException("Unsupported authentication type: '{$type}'");
+            throw new InvalidArgumentException("Unsupported auth type: '{$type}'");
         }
 
         if ($type === 'basic' && (!is_array($credentials) || count($credentials) !== 2)) {
-            throw new InvalidArgumentException('Basic credentials must be an array [username, password]');
+            throw new InvalidArgumentException('Basic auth requires [username, password]');
         }
 
         if (in_array($type, ['bearer', 'digest']) && !is_string($credentials)) {
-            throw new InvalidArgumentException("'{$type}' credentials must be a string token");
+            throw new InvalidArgumentException("'{$type}' auth requires a string token");
         }
 
         $this->auth = ['type' => $type, 'credentials' => $credentials];
@@ -177,138 +228,187 @@ class HttpClient
     }
 
     /**
-     * Sets the request body as JSON.
+     * Shorthand for Bearer token auth header structure setup.
      *
-     * @param  array|object $data
-     * @return self
+     * @param string $token
+     * @return static
      */
-    public function asJson(array|object $data): self
+    public function withToken(string $token): static
     {
-        $this->body = $data;
-        $this->withHeader('Content-Type', 'application/json');
-        return $this;
+        return $this->withAuth('bearer', $token);
     }
 
     /**
-     * Sets the request body as multipart form data.
+     * Shorthand routing setup parsing basic layout constraints.
      *
-     * @param  array $data
-     * @return self
+     * @param string $username
+     * @param string $password
+     * @return static
      */
-    public function asForm(array $data): self
+    public function withBasicAuth(string $username, string $password): static
     {
-        $this->body = $data;
-        $this->withHeader('Content-Type', 'multipart/form-data');
-        return $this;
+        return $this->withAuth('basic', [$username, $password]);
     }
 
     /**
-     * Sets the request body as URL-encoded form data.
+     * Sends body payload format parsed explicit as application/json pattern.
      *
-     * @param  array $data
-     * @return self
+     * @param array|object $data
+     * @return static
      */
-    public function asFormUrlEncoded(array $data): self
+    public function asJson(array|object $data): static
     {
         $this->body = $data;
-        $this->withHeader('Content-Type', 'application/x-www-form-urlencoded');
-        return $this;
+        return $this->withHeader('Content-Type', 'application/json');
     }
 
     /**
-     * Sets the request body as XML.
+     * Set explicit request layout form behavior to multipart/form-data rules.
      *
-     * @param  string $xml
-     * @return self
+     * @param array $data
+     * @return static
      */
-    public function asXml(string $xml): self
+    public function asForm(array $data): static
+    {
+        $this->body = $data;
+        return $this->withHeader('Content-Type', 'multipart/form-data');
+    }
+
+    /**
+     * Payload content standard to application/x-www-form-urlencoded matching.
+     *
+     * @param array $data
+     * @return static
+     */
+    public function asFormUrlEncoded(array $data): static
+    {
+        $this->body = $data;
+        return $this->withHeader('Content-Type', 'application/x-www-form-urlencoded');
+    }
+
+    /**
+     * Force text layout target interpretation output data type as XML structure.
+     *
+     * @param string $xml
+     * @return static
+     */
+    public function asXml(string $xml): static
     {
         $this->body = $xml;
-        $this->withHeader('Content-Type', 'application/xml');
-        return $this;
+        return $this->withHeader('Content-Type', 'application/xml');
     }
 
     /**
-     * Sets the request body as plain text.
+     * Simple raw textual format body injection.
      *
-     * @param  string $text
-     * @return self
+     * @param string $text
+     * @return static
      */
-    public function asText(string $text): self
+    public function asText(string $text): static
     {
         $this->body = $text;
-        $this->withHeader('Content-Type', 'text/plain');
+        return $this->withHeader('Content-Type', 'text/plain');
+    }
+
+    /**
+     * Sets retry loops rules constraint properties metrics.
+     *
+     * @param int $retries
+     * @param int $delayMs
+     * @return static
+     * @throws InvalidArgumentException
+     */
+    public function retry(int $retries, int $delayMs = 1000): static
+    {
+        if ($retries < 0 || $delayMs < 0) {
+            throw new InvalidArgumentException('Retries and delays cannot be negative');
+        }
+
+        $this->options['retries'] = $retries;
+        $this->options['retry_delay'] = $delayMs;
         return $this;
     }
 
     /**
-     * Sets the number of retry attempts on failure.
+     * Request connection active max processing cycle limit time frame.
      *
-     * @param  int  $retries Number of retries
-     * @param  int  $delay   Delay between retries in milliseconds
-     * @return self
+     * @param int $seconds
+     * @return static
      * @throws InvalidArgumentException
      */
-    public function withRetries(int $retries, int $delay = 1000): self
+    public function timeout(int $seconds): static
     {
-        if ($retries < 0) {
-            throw new InvalidArgumentException('Number of retries cannot be negative');
-        }
-
-        if ($delay < 0) {
-            throw new InvalidArgumentException('Retry delay cannot be negative');
-        }
-
-        $this->options['retries']     = $retries;
-        $this->options['retry_delay'] = $delay;
-        return $this;
-    }
-
-    /**
-     * Sets the request timeout in seconds.
-     *
-     * @param  int  $timeout
-     * @return self
-     * @throws InvalidArgumentException
-     */
-    public function timeout(int $timeout): self
-    {
-        if ($timeout <= 0) {
+        if ($seconds <= 0) {
             throw new InvalidArgumentException('Timeout must be greater than 0');
         }
 
-        $this->options['timeout'] = $timeout;
+        $this->options['timeout'] = $seconds;
         return $this;
     }
 
     /**
-     * Sets the User-Agent header.
+     * Max processing connect layout wait timing threshold configuration rules.
      *
-     * @param  string $userAgent
-     * @return self
+     * @param int $seconds
+     * @return static
+     * @throws InvalidArgumentException
      */
-    public function withUserAgent(string $userAgent): self
+    public function connectTimeout(int $seconds): static
+    {
+        if ($seconds <= 0) {
+            throw new InvalidArgumentException('Connect timeout must be greater than 0');
+        }
+
+        $this->options['connect_timeout'] = $seconds;
+        return $this;
+    }
+
+    /**
+     * Toggle SSL local certificate verification logic matching constraints.
+     *
+     * @return static
+     */
+    public function withoutVerifying(): static
+    {
+        $this->options['verify'] = false;
+        return $this;
+    }
+
+    /**
+     * Prevent tracking loops to drop exceptions capturing standard 4xx or 5xx hooks.
+     *
+     * @return static
+     */
+    public function withoutHttpErrors(): static
+    {
+        $this->options['http_errors'] = false;
+        return $this;
+    }
+
+    /**
+     * Custom browser platform identity User-Agent representation context.
+     *
+     * @param string $userAgent
+     * @return static
+     */
+    public function withUserAgent(string $userAgent): static
     {
         $this->options['user_agent'] = $userAgent;
         return $this;
     }
 
     /**
-     * Registers a callback for a lifecycle event (before, after, error).
+     * Add event callback attachment listener tracking lifecycle states.
      *
-     * - 'before' receives: (string $method, string $url, mixed $body)
-     * - 'after'  receives: (Response $response)
-     * - 'error'  receives: (Exception $e)
-     *
-     * @param  string   $event    Event name: 'before', 'after', or 'error'
-     * @param  callable $callback
-     * @return self
+     * @param string $event
+     * @param callable $callback
+     * @return static
      * @throws InvalidArgumentException
      */
-    public function on(string $event, callable $callback): self
+    public function on(string $event, callable $callback): static
     {
         if (!in_array($event, ['before', 'after', 'error'], true)) {
-            throw new InvalidArgumentException("Unsupported event '{$event}'. Allowed: before, after, error");
+            throw new InvalidArgumentException("Unsupported event '{$event}'. Use: before, after, error");
         }
 
         $this->events[$event][] = $callback;
@@ -316,142 +416,153 @@ class HttpClient
     }
 
     /**
-     * Executes a GET request.
+     * Dispatch an implicit dynamic safe GET request call method routing.
      *
-     * @param  string $url
-     * @param  array  $query Query string parameters
+     * @param string $path
+     * @param array $query
      * @return Response
      */
-    public function get(string $url, array $query = []): Response
+    public function get(string $path = '', array $query = []): Response
     {
-        return $this->request('GET', $url, ['query' => $query]);
+        return $this->send('GET', $path, query: $query);
     }
 
     /**
-     * Executes a POST request.
+     * Dispatch an implicit dynamic safe POST request call method routing.
      *
-     * @param  string $url
-     * @param  mixed  $data
+     * @param string $path
+     * @param mixed $data
      * @return Response
      */
-    public function post(string $url, mixed $data = []): Response
+    public function post(string $path = '', mixed $data = null): Response
     {
-        return $this->request('POST', $url, ['body' => $data]);
+        return $this->send('POST', $path, body: $data);
     }
 
     /**
-     * Executes a PUT request.
+     * Dispatch an implicit dynamic safe PUT request call method routing.
      *
-     * @param  string $url
-     * @param  mixed  $data
+     * @param string $path
+     * @param mixed $data
      * @return Response
      */
-    public function put(string $url, mixed $data = []): Response
+    public function put(string $path = '', mixed $data = null): Response
     {
-        return $this->request('PUT', $url, ['body' => $data]);
+        return $this->send('PUT', $path, body: $data);
     }
 
     /**
-     * Executes a PATCH request.
+     * Dispatch an implicit dynamic safe PATCH request call method routing.
      *
-     * @param  string $url
-     * @param  mixed  $data
+     * @param string $path
+     * @param mixed $data
      * @return Response
      */
-    public function patch(string $url, mixed $data = []): Response
+    public function patch(string $path = '', mixed $data = null): Response
     {
-        return $this->request('PATCH', $url, ['body' => $data]);
+        return $this->send('PATCH', $path, body: $data);
     }
 
     /**
-     * Executes a DELETE request.
+     * Dispatch an implicit dynamic safe DELETE request call method routing.
      *
-     * @param  string $url
+     * @param string $path
+     * @param mixed $data
      * @return Response
      */
-    public function delete(string $url): Response
+    public function delete(string $path = '', mixed $data = null): Response
     {
-        return $this->request('DELETE', $url);
+        return $this->send('DELETE', $path, body: $data);
     }
 
     /**
-     * Executes a HEAD request.
+     * Dispatch an implicit dynamic safe HEAD request call method routing.
      *
-     * @param  string $url
+     * @param string $path
      * @return Response
      */
-    public function head(string $url): Response
+    public function head(string $path = ''): Response
     {
-        return $this->request('HEAD', $url);
+        return $this->send('HEAD', $path);
     }
 
     /**
-     * Executes an OPTIONS request.
+     * Dispatch an implicit dynamic safe OPTIONS request call method routing.
      *
-     * @param  string $url
+     * @param string $path
      * @return Response
      */
-    public function options(string $url): Response
+    public function options(string $path = ''): Response
     {
-        return $this->request('OPTIONS', $url);
+        return $this->send('OPTIONS', $path);
     }
 
     /**
-     * Generic method to execute any HTTP request.
+     * Prepares configuration parameters state contexts data, managing execution dispatch.
      *
-     * @param  string $method  HTTP method (GET, POST, PUT, etc.)
-     * @param  string $url
-     * @param  array  $options Additional options: 'query' and/or 'body'
+     * @param string $method
+     * @param string $path
+     * @param mixed $body
+     * @param array $query
      * @return Response
      */
-    public function request(string $method, string $url, array $options = []): Response
-    {
+    protected function send(
+        string $method,
+        string $path = '',
+        mixed $body = null,
+        array $query = []
+    ): Response {
         $this->method = strtoupper($method);
-        $this->url    = $this->buildUrl($url, $options['query'] ?? []);
+        $this->url = $this->buildUrl($path, $query);
 
-        if (isset($options['body'])) {
-            $this->body = $options['body'];
+        if ($body !== null) {
+            $this->body = $body;
         }
 
-        return $this->send();
+        return $this->executeWithRetries();
     }
 
     /**
-     * Builds the full URL by combining baseUrl, path, and query parameters.
+     * Processes relative vs complete absolute raw web path endpoint formatting string maps.
      *
-     * @param  string $url
-     * @param  array  $query
+     * @param string $path
+     * @param array $query
      * @return string
      */
-    protected function buildUrl(string $url, array $query = []): string
+    protected function buildUrl(string $path = '', array $query = []): string
     {
-        $base = $this->baseUrl ? rtrim($this->baseUrl, '/') . '/' : '';
-        $url  = $base . ltrim($url, '/');
+        if (filter_var($path, FILTER_VALIDATE_URL)) {
+            $url = $path;
+        } else {
+            $url = $this->baseUrl
+                ? rtrim($this->baseUrl, '/') . '/' . ltrim($path, '/')
+                : $path;
+        }
 
         if (!empty($query)) {
-            $separator = parse_url($url, PHP_URL_QUERY) ? '&' : '?';
-            $url      .= $separator . http_build_query($query);
+            $sep = parse_url($url, PHP_URL_QUERY) ? '&' : '?';
+            $url .= $sep . http_build_query($query);
         }
 
         return $url;
     }
 
     /**
-     * Sends the HTTP request with retry logic.
+     * Master loops runner wrapping tracking blocks over active attempt execution.
      *
      * @return Response
      * @throws Exception
+     * @throws RuntimeException
      */
-    protected function send(): Response
+    protected function executeWithRetries(): Response
     {
-        $attempts      = 0;
-        $maxAttempts   = $this->options['retries'] + 1;
+        $attempts = 0;
+        $maxAttempts = $this->options['retries'] + 1;
         $lastException = null;
 
         while ($attempts < $maxAttempts) {
             try {
                 $attempts++;
-
                 $this->dispatchEvent('before', [$this->method, $this->url, $this->body]);
 
                 $response = $this->executeCurlRequest();
@@ -464,7 +575,6 @@ class HttpClient
                 }
 
                 $this->dispatchEvent('after', [$response]);
-
                 return $response;
 
             } catch (Exception $e) {
@@ -475,16 +585,15 @@ class HttpClient
                     throw $e;
                 }
 
-                // Wait before the next attempt
                 usleep($this->options['retry_delay'] * 1000);
             }
         }
 
-        throw $lastException ?? new RuntimeException('Failed to execute request after all retry attempts.');
+        throw $lastException ?? new RuntimeException('Request failed after all retry attempts.');
     }
 
     /**
-     * Performs the actual cURL request.
+     * Direct execution bridge connecting PHP environment extension cURL resources hooks.
      *
      * @return Response
      * @throws RuntimeException
@@ -494,78 +603,67 @@ class HttpClient
         $ch = curl_init();
         curl_setopt_array($ch, $this->buildCurlOptions());
 
-        $responseContent = curl_exec($ch);
-        $httpCode        = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $contentType     = curl_getinfo($ch, CURLINFO_CONTENT_TYPE) ?? '';
-        $error           = curl_error($ch);
-        $errno           = curl_errno($ch);
+        $rawResponse = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE) ?? '';
+        $error = curl_error($ch);
+        $errno = curl_errno($ch);
 
         curl_close($ch);
 
-        if ($responseContent === false) {
+        if ($rawResponse === false) {
             throw new RuntimeException("cURL error ({$errno}): {$error}");
         }
 
         $response = new Response();
         $response->status($httpCode);
 
-        // Auto-decode JSON responses
         if (stripos($contentType, 'application/json') !== false) {
-            $decoded = json_decode((string) $responseContent, true);
-            $response->setContent(json_last_error() === JSON_ERROR_NONE ? $decoded : $responseContent);
+            $decoded = json_decode((string) $rawResponse, true);
+            $response->setContent(json_last_error() === JSON_ERROR_NONE ? $decoded : $rawResponse);
         } else {
-            $response->setContent($responseContent);
+            $response->setContent($rawResponse);
         }
 
         return $response;
     }
 
     /**
-     * Builds the cURL options array for the current request.
+     * Map structured options dictionary into regular continuous native curl array maps flags.
      *
      * @return array
      */
     protected function buildCurlOptions(): array
     {
         $options = [
-            CURLOPT_URL            => $this->url,
+            CURLOPT_URL => $this->url,
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HEADER         => false,
-            CURLOPT_TIMEOUT        => $this->options['timeout'],
+            CURLOPT_HEADER => false,
+            CURLOPT_TIMEOUT => $this->options['timeout'],
             CURLOPT_CONNECTTIMEOUT => $this->options['connect_timeout'],
             CURLOPT_SSL_VERIFYPEER => $this->options['verify'],
             CURLOPT_FOLLOWLOCATION => $this->options['follow_redirects'],
-            CURLOPT_MAXREDIRS      => $this->options['max_redirects'],
-            CURLOPT_USERAGENT      => $this->options['user_agent'],
-            CURLOPT_ENCODING       => '', // Accept all supported encodings
+            CURLOPT_MAXREDIRS => $this->options['max_redirects'],
+            CURLOPT_USERAGENT => $this->options['user_agent'],
+            CURLOPT_ENCODING => '',
         ];
 
-        // Set HTTP method
-        switch ($this->method) {
-            case 'POST':
-                $options[CURLOPT_POST] = true;
-                break;
-            case 'GET':
-            case 'HEAD':
-                // No special cURL option needed
-                break;
-            default:
-                $options[CURLOPT_CUSTOMREQUEST] = $this->method;
-                break;
-        }
+        match ($this->method) {
+            'POST' => $options[CURLOPT_POST] = true,
+            'GET',
+            'HEAD' => null,
+            default => $options[CURLOPT_CUSTOMREQUEST] = $this->method,
+        };
 
-        // Attach the request body for non-GET/HEAD methods
         if ($this->body !== null && !in_array($this->method, ['GET', 'HEAD'], true)) {
-            $options[CURLOPT_POSTFIELDS] = $this->prepareRequestBody();
+            $options[CURLOPT_POSTFIELDS] = $this->prepareBody();
         }
 
-        // Apply authentication settings
         $this->applyCurlAuth($options);
 
-        // Attach request headers
         if (!empty($this->headers)) {
             $options[CURLOPT_HTTPHEADER] = array_map(
-                fn($name, $value) => "{$name}: {$value}",
+                fn($k, $v) => "{$k}: {$v}",
                 array_keys($this->headers),
                 array_values($this->headers)
             );
@@ -575,11 +673,11 @@ class HttpClient
     }
 
     /**
-     * Prepares the request body based on the Content-Type header.
+     * Serialize payload format elements according to requested Content-Type contexts.
      *
-     * @return mixed String for most types, raw array for multipart/form-data (handled by cURL)
+     * @return mixed
      */
-    protected function prepareRequestBody(): mixed
+    protected function prepareBody(): mixed
     {
         $contentType = $this->headers['Content-Type'] ?? '';
 
@@ -592,7 +690,6 @@ class HttpClient
         }
 
         if (stripos($contentType, 'multipart/form-data') !== false) {
-            // Pass the raw array and let cURL handle multipart encoding
             return $this->body;
         }
 
@@ -604,9 +701,10 @@ class HttpClient
     }
 
     /**
-     * Applies authentication settings to the cURL options array.
+     * Append requested authorization structures parameters tags inside curl options rules maps.
      *
-     * @param array &$options cURL options passed by reference
+     * @param array $options
+     * @return void
      */
     protected function applyCurlAuth(array &$options): void
     {
@@ -616,8 +714,8 @@ class HttpClient
 
         switch ($this->auth['type']) {
             case 'basic':
-                [$username, $password]     = $this->auth['credentials'];
-                $options[CURLOPT_USERPWD] = "{$username}:{$password}";
+                [$user, $pass] = $this->auth['credentials'];
+                $options[CURLOPT_USERPWD] = "{$user}:{$pass}";
                 break;
 
             case 'bearer':
@@ -625,21 +723,19 @@ class HttpClient
                 break;
 
             case 'digest':
-                [$username, $password]     = $this->auth['credentials'];
-                $options[CURLOPT_USERPWD]  = "{$username}:{$password}";
+                [$user, $pass] = $this->auth['credentials'];
+                $options[CURLOPT_USERPWD] = "{$user}:{$pass}";
                 $options[CURLOPT_HTTPAUTH] = CURLAUTH_DIGEST;
                 break;
         }
     }
 
     /**
-     * Dispatches all callbacks registered for the given event.
-     *
-     * Exceptions thrown inside callbacks are caught and logged so they
-     * do not interrupt the main request flow.
+     * Safe runner loop triggering attached listener callbacks scopes monitoring state errors.
      *
      * @param string $event
-     * @param array  $params Parameters forwarded to each callback
+     * @param array $params
+     * @return void
      */
     protected function dispatchEvent(string $event, array $params): void
     {
@@ -647,61 +743,64 @@ class HttpClient
             try {
                 call_user_func_array($callback, $params);
             } catch (Exception $e) {
-                // Log the error without interrupting execution
                 error_log("Error in '{$event}' event callback: " . $e->getMessage());
             }
         }
     }
 
     /**
-     * Resets the client state for a new request, keeping base options intact.
+     * Validate active internal parameters fields boundary validation constraints mapping rules.
      *
-     * @return self
+     * @return void
+     * @throws InvalidArgumentException
      */
-    public function reset(): self
+    protected function validateOptions(): void
     {
-        $this->method  = null;
-        $this->url     = null;
-        $this->body    = null;
-        $this->headers = [];
-        $this->auth    = null;
+        if ($this->options['timeout'] <= 0 || $this->options['connect_timeout'] <= 0) {
+            throw new InvalidArgumentException('Timeouts must be greater than 0');
+        }
 
+        if ($this->options['retries'] < 0) {
+            throw new InvalidArgumentException('Retries cannot be negative');
+        }
+    }
+
+    /**
+     * Resets mutable state parameters configuration maps fields context.
+     *
+     * @return static
+     */
+    public function reset(): static
+    {
+        $this->method = null;
+        $this->url = null;
+        $this->body = null;
+        $this->headers = [];
+        $this->auth = null;
         return $this;
     }
 
     /**
-     * Creates a new HttpClient instance (static factory).
+     * Handles dynamic static magic method redirections proxy workflow routing rules.
      *
-     * @param  array $options
-     * @return self
+     * @param string $method
+     * @param array $arguments
+     * @return mixed
+     * @throws BadMethodCallException
      */
-    public static function make(array $options = []): self
+    public static function __callStatic(string $method, array $arguments)
     {
-        return new self($options);
-    }
+        $instance = new static();
 
-    /**
-     * Static shortcut for a quick GET request.
-     *
-     * @param  string $url
-     * @param  array  $options Client options
-     * @return Response
-     */
-    public static function quickGet(string $url, array $options = []): Response
-    {
-        return self::make($options)->get($url);
-    }
+        if (method_exists($instance, $method)) {
+            return call_user_func_array([$instance, $method], $arguments);
+        }
 
-    /**
-     * Static shortcut for a quick POST request.
-     *
-     * @param  string $url
-     * @param  mixed  $data
-     * @param  array  $options Client options
-     * @return Response
-     */
-    public static function quickPost(string $url, mixed $data = [], array $options = []): Response
-    {
-        return self::make($options)->post($url, $data);
+        if (in_array(strtoupper($method), ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'], true)) {
+            $url = array_shift($arguments) ?? '';
+            return $instance->send($method, $url, ...$arguments);
+        }
+
+        throw new BadMethodCallException("Static method {$method} does not exist on HttpClient.");
     }
 }

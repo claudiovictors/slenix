@@ -98,6 +98,12 @@ abstract class Model implements \JsonSerializable
     /** @var array<string, array<string, callable>> */
     protected static array $globalScopes = [];
 
+    /** @var array The original attribute values before the last persistence operation */
+    protected array $original = [];
+
+    /** @var array The attributes that were modified during the last save() operation */
+    protected array $changes = [];
+
     public function __construct(array $attributes = [])
     {
         if (empty($this->table)) {
@@ -253,7 +259,17 @@ abstract class Model implements \JsonSerializable
             ->whereNotNull($instance->deletedAt);
     }
 
-    protected function setAttribute(string $key, $value): void
+    /**
+     * Set a given attribute on the model.
+     *
+     * Handles custom mutators, attribute casting, and state tracking
+     * for original, dirty, and changed attributes.
+     *
+     * @param string $key   The name of the attribute.
+     * @param mixed  $value The value to assign.
+     * @return void
+     */
+    protected function setAttribute(string $key, mixed $value): void
     {
         // Mutator: setXxxAttribute
         $mutator = 'set' . str_replace(' ', '', ucwords(str_replace('_', ' ', $key))) . 'Attribute';
@@ -263,15 +279,23 @@ abstract class Model implements \JsonSerializable
         }
 
         $castValue = $this->castAttribute($key, $value);
+
+        // Store the original value before any modifications (first time only)
+        if (array_key_exists($key, $this->attributes) && !array_key_exists($key, $this->original)) {
+            $this->original[$key] = $this->attributes[$key];
+        }
+
         $hasChanged = !array_key_exists($key, $this->attributes)
             || $this->attributes[$key] !== $castValue;
 
         $this->attributes[$key] = $castValue;
 
         if ($key !== $this->primaryKey && $hasChanged) {
-            $this->dirty[$key] = $castValue instanceof DateTime
+            $serialized = $castValue instanceof \DateTime
                 ? $castValue->format('Y-m-d H:i:s')
                 : (is_array($castValue) ? json_encode($castValue) : $castValue);
+
+            $this->dirty[$key] = $serialized;
         }
     }
 
@@ -363,15 +387,53 @@ abstract class Model implements \JsonSerializable
         return $decoded;
     }
 
-    private function castToDateTime($value): DateTime
+    /**
+     * Casts the given value to a DateTime instance.
+     *
+     * Supports DateTime/DateTimeImmutable instances, Unix timestamps (int/string),
+     * and recognized date/datetime string formats.
+     *
+     * @param mixed $value The value to be cast.
+     * @return \DateTime
+     * 
+     * @throws \InvalidArgumentException If the value cannot be parsed or is empty/null.
+     */
+    private function castToDateTime(mixed $value): DateTime
     {
-        if ($value instanceof DateTime)
+        if ($value instanceof DateTime) {
             return $value;
-        if (is_string($value) && $value !== '')
-            return new DateTime($value);
-        if (is_int($value))
-            return new DateTime('@' . $value);
-        throw new \InvalidArgumentException("Value cannot be cast to DateTime");
+        }
+
+        if ($value instanceof \DateTimeImmutable) {
+            return DateTime::createFromImmutable($value);
+        }
+
+        // Unix Timestamp (integer or numeric string)
+        if (is_int($value) || (is_string($value) && ctype_digit(ltrim($value, '-')))) {
+            $dt = new DateTime();
+            $dt->setTimestamp((int) $value);
+            return $dt;
+        }
+
+        if (is_string($value) && $value !== '') {
+            $dt = DateTime::createFromFormat('Y-m-d H:i:s', $value)
+                ?: DateTime::createFromFormat('Y-m-d', $value)
+                ?: DateTime::createFromFormat('d/m/Y H:i:s', $value)
+                ?: DateTime::createFromFormat('d/m/Y', $value)
+                ?: (false !== strtotime($value) ? new DateTime($value) : false);
+
+            if ($dt instanceof DateTime) {
+                return $dt;
+            }
+
+            throw new \InvalidArgumentException(
+                "Cannot parse '{$value}' as a valid date/datetime string."
+            );
+        }
+
+        throw new \InvalidArgumentException(
+            'Value cannot be cast to DateTime. Received type: ' . gettype($value)
+        );
     }
 
     /**
@@ -665,48 +727,75 @@ abstract class Model implements \JsonSerializable
         return $result;
     }
 
+    /**
+     * Perform a model update operation in the database.
+     *
+     * Syncs the dirty changes to the changes array and resets tracking states
+     * upon a successful update operation.
+     *
+     * @return bool True if the update succeeded or if no changes were required.
+     * 
+     * @throws \RuntimeException If the model is missing its primary key value.
+     */
     protected function performUpdate(): bool
     {
-        if (empty($this->dirty))
+        if (empty($this->dirty)) {
             return true;
-        if (empty($this->attributes[$this->primaryKey])) {
-            throw new \RuntimeException("Cannot update a model without a primary key.");
         }
 
-        $data = $this->serializeForDb($this->dirty);
-        $updates = implode(', ', array_map(fn($key) => "`{$key}` = :{$key}", array_keys($data)));
-        $sql = "UPDATE `{$this->table}` SET {$updates} WHERE `{$this->primaryKey}` = :__pk__";
+        if (empty($this->attributes[$this->primaryKey])) {
+            throw new \RuntimeException('Cannot update a model instance without a primary key value.');
+        }
 
-        $stmt = $this->pdo->prepare($sql);
+        $data    = $this->serializeForDb($this->dirty);
+        $updates = implode(', ', array_map(fn($k) => "`{$k}` = :{$k}", array_keys($data)));
+        $sql     = "UPDATE `{$this->table}` SET {$updates} WHERE `{$this->primaryKey}` = :__pk__";
+
+        $stmt   = $this->pdo->prepare($sql);
         $params = array_merge($data, ['__pk__' => $this->attributes[$this->primaryKey]]);
         $result = $stmt->execute($params);
 
-        if ($result)
-            $this->dirty = [];
+        if ($result) {
+            $this->changes  = $this->dirty;
+            $this->dirty    = [];
+            $this->original = [];
+        }
 
         return $result;
     }
 
     /**
-     * Serializes attributes for the database (DateTime → string, array → JSON, etc.)
+     * Serialize the given attributes into database-compatible scalar formats.
+     *
+     * Ensures proper formatting for DateTime fields based on their casting context
+     * and structures complex arrays into JSON text.
+     *
+     * @param array $data The key-value pairs to serialize.
+     * @return array The serialized database payload.
+     * 
+     * @throws \JsonException If an array structure fails to encode into JSON.
      */
     protected function serializeForDb(array $data): array
     {
         $result = [];
+
         foreach ($data as $key => $value) {
-            if ($value instanceof DateTime) {
-                $castType = strtolower($this->casts[$key] ?? '');
+            if ($value instanceof \DateTime || $value instanceof \DateTimeImmutable) {
+                $castType    = strtolower($this->casts[$key] ?? '');
                 $result[$key] = $castType === 'date'
                     ? $value->format('Y-m-d')
                     : $value->format('Y-m-d H:i:s');
             } elseif (is_array($value)) {
-                $result[$key] = json_encode($value, JSON_UNESCAPED_UNICODE);
+                $result[$key] = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
             } elseif (is_bool($value)) {
                 $result[$key] = $value ? 1 : 0;
+            } elseif ($value instanceof \Stringable) {
+                $result[$key] = (string) $value;
             } else {
                 $result[$key] = $value;
             }
         }
+
         return $result;
     }
 
@@ -1983,11 +2072,10 @@ abstract class Model implements \JsonSerializable
     }
 
     /**
-     * Checks whether a specific attribute was changed between the last
-     * save() and the current state.
+     * Determine if the given attribute was modified during the last save operation.
      *
-     * @param string $key Attribute name.
-     * @return bool True when the attribute value differs from its saved state.
+     * @param string $key The attribute name.
+     * @return bool
      */
     public function wasChanged(string $key): bool
     {
@@ -1995,11 +2083,10 @@ abstract class Model implements \JsonSerializable
     }
 
     /**
-     * Returns the value an attribute had before it was last changed.
-     * Returns null when the attribute was not changed.
+     * Get the original attribute value before the last save persistence.
      *
-     * @param string $key Attribute name.
-     * @return mixed Original value, or null.
+     * @param string $key The attribute name.
+     * @return mixed The original value, or null if it was not tracked or modified.
      */
     public function original(string $key): mixed
     {

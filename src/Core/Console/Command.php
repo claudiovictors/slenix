@@ -20,7 +20,7 @@ abstract class Command
     /**
      * @var string The current version of the CLI tool.
      */
-    protected static string $version = '2.8';
+    protected static string $version = '3.0';
 
     /**
      * Get an instance of the Console helper.

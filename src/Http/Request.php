@@ -16,6 +16,7 @@ declare(strict_types=1);
 namespace Slenix\Http;
 
 use InvalidArgumentException;
+use Slenix\Supports\Libraries\Collection;
 use Slenix\Supports\Security\CSRF;
 use Slenix\Supports\Security\RateLimit;
 use Slenix\Supports\Uploads\Upload;
@@ -89,6 +90,29 @@ class Request
         $this->queryParams = $query ?: ($_GET ?? []);
 
         $this->parseHeaders();
+        $this->validateRequest();
+    }
+
+    /**
+     * Magic getter to access input fields as properties.
+     *
+     * @param string $key
+     * @return mixed
+     */
+    public function __get(string $key): mixed
+    {
+        return $this->input($key);
+    }
+
+    /**
+     * Magic isset to check input fields as properties.
+     *
+     * @param string $key
+     * @return bool
+     */
+    public function __isset(string $key): bool
+    {
+        return $this->has($key);
     }
 
     /**
@@ -267,6 +291,160 @@ class Request
         }
 
         return $default;
+    }
+
+    // -------------------------------------------------------------------------
+    // Stage — Input Manipulation
+    // -------------------------------------------------------------------------
+
+    /**
+     * Merge data into the current input.
+     *
+     * @param array $data
+     * @return self
+     */
+    public function merge(array $data): self
+    {
+        $this->parsedBody = array_merge($this->getParsedBody(), $data);
+        $_POST = array_merge($_POST, $data);
+        return $this;
+    }
+
+    /**
+     * Replace all input data.
+     *
+     * @param array $data
+     * @return self
+     */
+    public function replace(array $data): self
+    {
+        $this->parsedBody = $data;
+        $_POST = $data;
+        return $this;
+    }
+
+    // -------------------------------------------------------------------------
+    // Stage — Content Type Helpers
+    // -------------------------------------------------------------------------
+
+    /**
+     * Get the request Content-Type header.
+     *
+     * @return string|null
+     */
+    public function getContentType(): ?string
+    {
+        return $this->getHeader('Content-Type') ?? null;
+    }
+
+    /**
+     * Check if the request is a form submission.
+     *
+     * @return bool
+     */
+    public function isFormRequest(): bool
+    {
+        $contentType = strtolower($this->getContentType() ?? '');
+        return str_contains($contentType, 'application/x-www-form-urlencoded')
+            || str_contains($contentType, 'multipart/form-data');
+    }
+
+    /**
+     * Check if the request accepts a given MIME type.
+     *
+     * @param string $mime
+     * @return bool
+     */
+    public function acceptsMimeType(string $mime): bool
+    {
+        $accept = strtolower($this->getHeader('Accept', ''));
+        return str_contains($accept, strtolower($mime)) || str_contains($accept, '*/*');
+    }
+
+    // -------------------------------------------------------------------------
+    // Stage — File Helpers
+    // -------------------------------------------------------------------------
+
+    /**
+     * Check if all given file keys are present.
+     *
+     * @param array $keys
+     * @return bool
+     */
+    public function hasAllFiles(array $keys): bool
+    {
+        foreach ($keys as $key) {
+            if (!$this->hasFile($key)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // -------------------------------------------------------------------------
+    // Stage — URI Segments
+    // -------------------------------------------------------------------------
+
+    /**
+     * Return all URI segments.
+     *
+     * Example: /users/5/edit → ['users', '5', 'edit']
+     *
+     * @return array<int, string>
+     */
+    public function segments(): array
+    {
+        return array_values(array_filter(
+            explode('/', $this->uri()),
+            fn($s) => $s !== ''
+        ));
+    }
+
+    /**
+     * Return a specific URI segment (1-indexed).
+     *
+     * Example: /users/5/edit → segment(2) = '5'
+     *
+     * @param int $index 1-based index
+     * @param mixed $default
+     * @return mixed
+     */
+    public function segment(int $index, mixed $default = null): mixed
+    {
+        return $this->segments()[$index - 1] ?? $default;
+    }
+
+    // -------------------------------------------------------------------------
+    // Stage — Additional Input Checks
+    // -------------------------------------------------------------------------
+
+    /**
+     * Check if all given fields are present and filled.
+     *
+     * @param array $keys
+     * @return bool
+     */
+    public function hasAll(array $keys): bool
+    {
+        foreach ($keys as $key) {
+            if (!$this->has($key)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Return selected fields as a Collection.
+     *
+     * @param array|string $keys Pass empty array to collect all input.
+     * @return Collection
+     */
+    public function collect(array|string $keys = []): Collection
+    {
+        $keys = is_string($keys) ? func_get_args() : $keys;
+        $data = empty($keys) ? $this->all() : $this->only($keys);
+        return new Collection($data);
     }
 
     /**

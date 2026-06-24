@@ -121,17 +121,17 @@ class Luna
     public static function configure(
         string $viewsDir = '',
         string $cacheDir = '',
-        string $logsDir  = '',
-        bool   $cache    = false,
-        bool   $logging  = false,
-        int    $cacheTtl = 0
+        string $logsDir = '',
+        bool $cache = false,
+        bool $logging = false,
+        int $cacheTtl = 0
     ): void {
-        self::$viewsDir  = $viewsDir ?: dirname(__DIR__, 3) . '/views';
-        self::$cacheDir  = $cacheDir ?: dirname(__DIR__, 3) . '/storage/views';
-        self::$logsDir   = $logsDir  ?: dirname(__DIR__, 3) . '/storage/logs';
+        self::$viewsDir = $viewsDir ?: dirname(__DIR__, 3) . '/views';
+        self::$cacheDir = $cacheDir ?: dirname(__DIR__, 3) . '/storage/views';
+        self::$logsDir = $logsDir ?: dirname(__DIR__, 3) . '/storage/logs';
         self::$diskCache = $cache;
-        self::$logging   = $logging;
-        self::$cacheTtl  = $cacheTtl;
+        self::$logging = $logging;
+        self::$cacheTtl = $cacheTtl;
     }
 
     /**
@@ -210,7 +210,7 @@ class Luna
     public static function setTranslations(array $translations, string $locale = 'en'): void
     {
         self::$translations = $translations;
-        self::$locale       = $locale;
+        self::$locale = $locale;
     }
 
     /**
@@ -242,7 +242,7 @@ class Luna
      */
     public static function clearCache(): int
     {
-        self::$memCache     = [];
+        self::$memCache = [];
         self::$onceSections = [];
 
         if (!is_dir(self::$cacheDir)) {
@@ -295,17 +295,17 @@ class Luna
     public static function cacheStats(): array
     {
         $files = glob(self::$cacheDir . DIRECTORY_SEPARATOR . '*.php') ?: [];
-        $size  = 0;
+        $size = 0;
 
         foreach ($files as $file) {
             $size += (int) filesize($file);
         }
 
         return [
-            'files'      => count($files),
+            'files' => count($files),
             'size_bytes' => $size,
             'size_human' => self::formatBytes($size),
-            'directory'  => self::$cacheDir,
+            'directory' => self::$cacheDir,
         ];
     }
 
@@ -328,9 +328,9 @@ class Luna
         // Resolve alias
         $template = self::$aliases[$template] ?? $template;
 
-        $relativePath   = str_replace('.', DIRECTORY_SEPARATOR, $template) . '.luna.php';
+        $relativePath = str_replace('.', DIRECTORY_SEPARATOR, $template) . '.luna.php';
         $this->viewPath = self::$viewsDir . DIRECTORY_SEPARATOR . $relativePath;
-        $this->data     = array_merge(self::$globalData, $data);
+        $this->data = array_merge(self::$globalData, $data);
     }
 
     /**
@@ -397,16 +397,16 @@ class Luna
 
         try {
             $compiled = $this->getCompiled($this->viewPath);
-            $output   = $this->evaluate($compiled, $this->data);
+            $output = $this->evaluate($compiled, $this->data);
         } finally {
             array_pop(self::$renderStack);
         }
 
         // If the template declared @extends, render the layout now
         if ($this->layout !== '') {
-            $layoutEngine           = new self($this->layout, $this->data);
+            $layoutEngine = new self($this->layout, $this->data);
             $layoutEngine->sections = $this->sections;
-            $layoutEngine->stacks   = $this->stacks;
+            $layoutEngine->stacks = $this->stacks;
             return $layoutEngine->render();
         }
 
@@ -525,7 +525,7 @@ class Luna
 
         // 3) Compile from source
         self::log('DEBUG', "Compiling template: {$viewPath}");
-        $source   = (string) file_get_contents($viewPath);
+        $source = (string) file_get_contents($viewPath);
         $compiled = $this->compile($source);
 
         if (!$isDebug && self::$diskCache) {
@@ -547,7 +547,7 @@ class Luna
     private function isCacheValid(string $cachePath, string $viewPath): bool
     {
         $cacheMtime = (int) filemtime($cachePath);
-        $viewMtime  = (int) filemtime($viewPath);
+        $viewMtime = (int) filemtime($viewPath);
 
         if ($cacheMtime < $viewMtime) {
             return false;
@@ -611,13 +611,13 @@ class Luna
         ob_start();
         try {
             // phpcs:ignore Squiz.PHP.Eval.Discouraged
-            eval('?>' . $compiled);
+            eval ('?>' . $compiled);
         } catch (\Throwable $e) {
             ob_end_clean();
 
             $hint = '';
             if (isset($_ENV['APP_DEBUG']) && $_ENV['APP_DEBUG'] === 'true') {
-                $lines    = explode("\n", $compiled);
+                $lines = explode("\n", $compiled);
                 $numbered = array_map(
                     fn($l, $i) => sprintf('%4d | %s', $i + 1, $l),
                     $lines,
@@ -672,7 +672,7 @@ class Luna
     private function extractVerbatim(string $source): array
     {
         $placeholders = [];
-        $index        = 0;
+        $index = 0;
 
         $source = preg_replace_callback(
             '/@verbatim([\s\S]*?)@endverbatim/s',
@@ -680,7 +680,7 @@ class Luna
              * @param array<int, string> $m
              */
             function (array $m) use (&$placeholders, &$index): string {
-                $key                = '__VERBATIM_' . $index++ . '__';
+                $key = '__VERBATIM_' . $index++ . '__';
                 $placeholders[$key] = $m[1];
                 return $key;
             },
@@ -760,7 +760,7 @@ class Luna
         $len = strlen($trimmed);
         if ($len >= 2) {
             if (
-                ($trimmed[0] === '"'  && $trimmed[$len - 1] === '"') ||
+                ($trimmed[0] === '"' && $trimmed[$len - 1] === '"') ||
                 ($trimmed[0] === "'" && $trimmed[$len - 1] === "'")
             ) {
                 return true;
@@ -806,6 +806,7 @@ class Luna
         $source = $this->compileSections($source);
         $source = $this->compileConditionals($source);
         $source = $this->compileLoops($source);
+        $source = $this->compileErrors($source);
         $source = $this->compileIncludes($source);
         $source = $this->compileStacks($source);
         $source = $this->compileComponents($source);
@@ -838,7 +839,7 @@ class Luna
         $source = preg_replace_callback(
             '/@section\s*\(\s*[\'"]([^\'"]+)[\'"]\s*,\s*[\'"]([^\'"]*)[\'"]\s*\)/',
             function (array $m): string {
-                $name    = addslashes($m[1]);
+                $name = addslashes($m[1]);
                 $content = addslashes($m[2]);
                 return "<?php \$__engine->startSection('{$name}'); echo '{$content}'; \$__engine->endSection(); ?>";
             },
@@ -859,7 +860,7 @@ class Luna
         $source = preg_replace_callback(
             '/@yield\s*\(\s*[\'"]([^\'"]+)[\'"]\s*(?:,\s*[\'"]([^\'"]*)[\'"]\s*)?\)/',
             function (array $m): string {
-                $name    = addslashes($m[1]);
+                $name = addslashes($m[1]);
                 $default = addslashes($m[2] ?? '');
                 return "<?php echo \$__engine->yieldSection('{$name}', '{$default}'); ?>";
             },
@@ -898,7 +899,7 @@ class Luna
             $source
         ) ?? $source;
 
-        $source = preg_replace('/@else\b/',  '<?php else: ?>',  $source) ?? $source;
+        $source = preg_replace('/@else\b/', '<?php else: ?>', $source) ?? $source;
         $source = preg_replace('/@endif\b/', '<?php endif; ?>', $source) ?? $source;
 
         // @isset / @endisset
@@ -936,15 +937,15 @@ class Luna
             fn(array $m): string => '<?php case ' . trim($m[1]) . ': ?>',
             $source
         ) ?? $source;
-        $source = preg_replace('/@default\b/',   '<?php default: ?>',   $source) ?? $source;
+        $source = preg_replace('/@default\b/', '<?php default: ?>', $source) ?? $source;
         $source = preg_replace('/@endswitch\b/', '<?php endswitch; ?>', $source) ?? $source;
-        $source = preg_replace('/@break\b/',     '<?php break; ?>',     $source) ?? $source;
+        $source = preg_replace('/@break\b/', '<?php break; ?>', $source) ?? $source;
 
         // @auth / @guest
-        $source = preg_replace('/@auth\b/',     "<?php if(!empty(auth()->check())): ?>", $source) ?? $source;
-        $source = preg_replace('/@endauth\b/',  '<?php endif; ?>',                             $source) ?? $source;
-        $source = preg_replace('/@guest\b/',    "<?php if(empty(auth()->check())): ?>",  $source) ?? $source;
-        $source = preg_replace('/@endguest\b/', '<?php endif; ?>',                             $source) ?? $source;
+        $source = preg_replace('/@auth\b/', "<?php if(!empty(auth()->check())): ?>", $source) ?? $source;
+        $source = preg_replace('/@endauth\b/', '<?php endif; ?>', $source) ?? $source;
+        $source = preg_replace('/@guest\b/', "<?php if(empty(auth()->check())): ?>", $source) ?? $source;
+        $source = preg_replace('/@endguest\b/', '<?php endif; ?>', $source) ?? $source;
 
         // @role('admin') — checks $_SESSION['auth_role']
         $source = preg_replace_callback(
@@ -1068,8 +1069,8 @@ class Luna
             fn(array $m): string => '<?php $__items=' . trim($m[1]) . '; if(!empty($__items)): foreach($__items as ' . trim($m[2]) . '): ?>',
             $source
         ) ?? $source;
-        $source = preg_replace('/@empty\s*$/m',   '<?php endforeach; else: ?>', $source) ?? $source;
-        $source = preg_replace('/@endforelse\b/', '<?php endif; ?>',            $source) ?? $source;
+        $source = preg_replace('/@empty\s*$/m', '<?php endforeach; else: ?>', $source) ?? $source;
+        $source = preg_replace('/@endforelse\b/', '<?php endif; ?>', $source) ?? $source;
 
         // @repeat(N) / @endrepeat
         $source = preg_replace_callback(
@@ -1217,7 +1218,7 @@ class Luna
         return preg_replace_callback(
             '/@(?:translate|lang|t)\s*\(\s*[\'"]([^\'"]+)[\'"]\s*(?:,\s*(\[[\s\S]*?\]))?\s*\)/',
             function (array $m): string {
-                $key  = addslashes($m[1]);
+                $key = addslashes($m[1]);
                 $args = $m[2] ?? '[]';
                 return "<?php echo \$__engine->translate('{$key}', {$args}); ?>";
             },
@@ -1247,14 +1248,14 @@ class Luna
     private function compileAttributes(string $source): string
     {
         $attrs = [
-            'checked'  => 'checked',
+            'checked' => 'checked',
             'selected' => 'selected',
             'disabled' => 'disabled',
             'required' => 'required',
             'readonly' => 'readonly',
             'multiple' => 'multiple',
             'autofocus' => 'autofocus',
-            'open'     => 'open',
+            'open' => 'open',
         ];
 
         foreach ($attrs as $directive => $attrName) {
@@ -1275,8 +1276,8 @@ class Luna
         return preg_replace_callback(
             '/@props\s*\(\s*(\[[\s\S]*?\])\s*\)/',
             fn(array $m): string =>
-                "<?php foreach({$m[1]} as \$__propKey => \$__propDefault): " .
-                "if(!isset(\$\$__propKey)): \$\$__propKey = \$__propDefault; endif; endforeach; ?>",
+            "<?php foreach({$m[1]} as \$__propKey => \$__propDefault): " .
+            "if(!isset(\$\$__propKey)): \$\$__propKey = \$__propDefault; endif; endforeach; ?>",
             $source
         ) ?? $source;
     }
@@ -1288,7 +1289,7 @@ class Luna
         return preg_replace_callback(
             '/@inject\s*\(\s*[\'"]([^\'"]+)[\'"]\s*,\s*[\'"]([^\'"]+)[\'"]\s*\)/',
             function (array $m): string {
-                $var      = addslashes($m[1]);
+                $var = addslashes($m[1]);
                 $abstract = addslashes($m[2]);
                 return "<?php \${$var} = \$__engine->resolveInject('{$abstract}'); ?>";
             },
@@ -1304,8 +1305,8 @@ class Luna
         $source = preg_replace('/@php\b([\s\S]*?)@endphp\b/', '<?php $1 ?>', $source) ?? $source;
 
         // @csrf / @csrf_meta
-        $source = str_replace('@csrf',      '<?php echo csrf_field(); ?>', $source);
-        $source = str_replace('@csrf_meta', '<?php csrf_meta(); ?>',  $source);
+        $source = str_replace('@csrf', '<?php echo csrf_field(); ?>', $source);
+        $source = str_replace('@csrf_meta', '<?php csrf_meta(); ?>', $source);
 
         // @method('PUT')
         $source = preg_replace_callback(
@@ -1365,20 +1366,12 @@ class Luna
         $source = preg_replace_callback(
             '/@old\s*\(\s*[\'"]([^\'"]+)[\'"]\s*(?:,\s*[\'"]([^\'"]*)[\'"]\s*)?\)/',
             function (array $m): string {
-                $field   = addslashes($m[1]);
+                $field = addslashes($m[1]);
                 $default = addslashes($m[2] ?? '');
                 return "<?php echo htmlspecialchars((string)(old('{$field}', '{$default}') ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>";
             },
             $source
         ) ?? $source;
-
-        // @error('field') / @enderror
-        $source = preg_replace_callback(
-            '/@error\s*\(\s*[\'"]([^\'"]+)[\'"]\s*\)/',
-            fn(array $m): string => "<?php if(has_error('" . addslashes($m[1]) . "')): \$message = errors('" . addslashes($m[1]) . "'); ?>",
-            $source
-        ) ?? $source;
-        $source = preg_replace('/@enderror\b/', '<?php endif; ?>', $source) ?? $source;
 
         // @vite('resources/app.js')
         $source = preg_replace_callback(
@@ -1439,9 +1432,9 @@ class Luna
         $source = preg_replace_callback(
             '/@spaceless([\s\S]*?)@endspaceless/s',
             fn(array $m): string =>
-                '<?php ob_start(); ?>' .
-                $m[1] .
-                '<?php echo preg_replace(\'/>\s+</\', \'><\', ob_get_clean()); ?>',
+            '<?php ob_start(); ?>' .
+            $m[1] .
+            '<?php echo preg_replace(\'/>\s+</\', \'><\', ob_get_clean()); ?>',
             $source
         ) ?? $source;
 
@@ -1449,6 +1442,79 @@ class Luna
         $source = preg_replace_callback(
             '/@markdown\s*\(\s*(.+?)\s*\)/',
             fn(array $m): string => "<?php echo \$__engine->parseMarkdown({$m[1]}); ?>",
+            $source
+        ) ?? $source;
+
+        return $source;
+    }
+
+    private function compileErrors(string $source): string
+    {
+        // @error('field') … @enderror
+        $source = preg_replace_callback(
+            '/@error\s*\(\s*[\'"]([^\'"]+)[\'"]\s*\)/',
+            fn(array $m): string =>
+            "<?php if(isset(\$errors) && \$errors instanceof \\Slenix\\Supports\\Validation\\MessageBag"
+            . " ? \$errors->has('" . addslashes($m[1]) . "')"
+            . " : errors()->has('" . addslashes($m[1]) . "')): "
+            . "\$message = (isset(\$errors) && \$errors instanceof \\Slenix\\Supports\\Validation\\MessageBag)"
+            . " ? \$errors->first('" . addslashes($m[1]) . "')"
+            . " : errors()->first('" . addslashes($m[1]) . "'); ?>",
+            $source
+        ) ?? $source;
+
+        $source = preg_replace('/@enderror\b/', '<?php unset($message); endif; ?>', $source) ?? $source;
+
+        // @errors_any … @enderrors_any
+        $source = preg_replace(
+            '/@errors_any\b/',
+            "<?php if(isset(\$errors) && \$errors instanceof \\Slenix\\Supports\\Validation\\MessageBag"
+            . " ? \$errors->any() : errors()->any()): ?>",
+            $source
+        ) ?? $source;
+        $source = preg_replace('/@enderrors_any\b/', '<?php endif; ?>', $source) ?? $source;
+
+        // @has_error('field') … @endhas_error
+        $source = preg_replace_callback(
+            '/@has_error\s*\(\s*[\'"]([^\'"]+)[\'"]\s*\)/',
+            fn(array $m): string =>
+            "<?php if(isset(\$errors) && \$errors instanceof \\Slenix\\Supports\\Validation\\MessageBag"
+            . " ? \$errors->has('" . addslashes($m[1]) . "')"
+            . " : errors()->has('" . addslashes($m[1]) . "')): ?>",
+            $source
+        ) ?? $source;
+        $source = preg_replace('/@endhas_error\b/', '<?php endif; ?>', $source) ?? $source;
+
+        // @errors_list / @errors_list(['class' => '...'])
+        $source = preg_replace_callback(
+            '/@errors_list(?:\s*\(\s*(\[[\s\S]*?\])\s*\))?/',
+            function (array $m): string {
+                $attrsExpr = $m[1] ?? "['class' => 'error-list']";
+                return
+                    "<?php if(isset(\$errors) && \$errors instanceof \\Slenix\\Supports\\Validation\\MessageBag"
+                    . " ? \$errors->any() : errors()->any()): "
+                    . "\$__allErrors = isset(\$errors) && \$errors instanceof \\Slenix\\Supports\\Validation\\MessageBag"
+                    . " ? \$errors->all() : errors()->all();"
+                    . "\$__listAttrs = {$attrsExpr};"
+                    . "\$__attrStr = implode(' ', array_map(fn(\$k,\$v) => \$k.'=\"'.htmlspecialchars((string)\$v, ENT_QUOTES).'\"', array_keys(\$__listAttrs), \$__listAttrs));"
+                    . "echo '<ul ' . \$__attrStr . '>';"
+                    . "foreach(\$__allErrors as \$__err) echo '<li>' . htmlspecialchars((string)\$__err, ENT_QUOTES, 'UTF-8') . '</li>';"
+                    . "echo '</ul>'; endif; ?>";
+            },
+            $source
+        ) ?? $source;
+
+        // @error_class('field') / @error_class('field', 'custom-class')
+        $source = preg_replace_callback(
+            '/@error_class\s*\(\s*[\'"]([^\'"]+)[\'"]\s*(?:,\s*[\'"]([^\'"]+)[\'"]\s*)?\)/',
+            function (array $m): string {
+                $field = addslashes($m[1]);
+                $cls = addslashes($m[2] ?? 'is-invalid');
+                return
+                    "<?php echo (isset(\$errors) && \$errors instanceof \\Slenix\\Supports\\Validation\\MessageBag"
+                    . " ? \$errors->has('{$field}') : errors()->has('{$field}'))"
+                    . " ? '{$cls}' : ''; ?>";
+            },
             $source
         ) ?? $source;
 
@@ -1529,9 +1595,9 @@ class Luna
     public function endPush(): void
     {
         $content = ob_get_clean() ?: '';
-        $name    = substr($this->currentSection, 8);
+        $name = substr($this->currentSection, 8);
         $this->stacks[$name][] = $content;
-        $this->currentSection  = '';
+        $this->currentSection = '';
     }
 
     /** @internal */
@@ -1545,7 +1611,7 @@ class Luna
     public function endPrepend(): void
     {
         $content = ob_get_clean() ?: '';
-        $name    = substr($this->currentSection, 11);
+        $name = substr($this->currentSection, 11);
         array_unshift($this->stacks[$name], $content);
         $this->currentSection = '';
     }
@@ -1565,8 +1631,8 @@ class Luna
     public function startComponent(string $view, array $data = []): void
     {
         $this->componentStack[] = [
-            'view'  => $view,
-            'data'  => $data,
+            'view' => $view,
+            'data' => $data,
             'slots' => [],
         ];
         ob_start();
@@ -1575,20 +1641,20 @@ class Luna
     /** @internal */
     public function renderComponent(): string
     {
-        $content   = ob_get_clean() ?: '';
+        $content = ob_get_clean() ?: '';
         $component = array_pop($this->componentStack);
 
         if ($component === null) {
             return '';
         }
 
-        $data            = array_merge($this->data, $component['data']);
-        $data['slot']    = $content;
+        $data = array_merge($this->data, $component['data']);
+        $data['slot'] = $content;
         $data['__slots'] = $component['slots'];
 
-        $engine           = new self($component['view'], $data);
+        $engine = new self($component['view'], $data);
         $engine->sections = $this->sections;
-        $engine->stacks   = $this->stacks;
+        $engine->stacks = $this->stacks;
         return $engine->render();
     }
 
@@ -1679,9 +1745,9 @@ class Luna
      */
     public function renderInclude(string $template, array $data = []): string
     {
-        $engine           = new self($template, array_merge($this->data, $data));
+        $engine = new self($template, array_merge($this->data, $data));
         $engine->sections = $this->sections;
-        $engine->stacks   = $this->stacks;
+        $engine->stacks = $this->stacks;
         return $engine->render();
     }
 
@@ -1775,7 +1841,7 @@ class Luna
         $text = preg_replace_callback(
             '/```(\w*)\n?([\s\S]*?)```/s',
             fn($m) => '<pre><code' . ($m[1] ? ' class="language-' . htmlspecialchars($m[1]) . '"' : '') . '>'
-                . htmlspecialchars($m[2]) . '</code></pre>',
+            . htmlspecialchars($m[2]) . '</code></pre>',
             $text
         ) ?? $text;
 
@@ -1796,8 +1862,8 @@ class Luna
 
         // Bold + Italic
         $text = preg_replace('/\*\*\*(.+?)\*\*\*/', '<strong><em>$1</em></strong>', $text) ?? $text;
-        $text = preg_replace('/\*\*(.+?)\*\*/',     '<strong>$1</strong>',          $text) ?? $text;
-        $text = preg_replace('/\*(.+?)\*/',          '<em>$1</em>',                 $text) ?? $text;
+        $text = preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', $text) ?? $text;
+        $text = preg_replace('/\*(.+?)\*/', '<em>$1</em>', $text) ?? $text;
 
         // Images (before links)
         $text = preg_replace('/!\[([^\]]*)\]\(([^\)]+)\)/', '<img src="$2" alt="$1">', $text) ?? $text;
@@ -1848,9 +1914,9 @@ class Luna
         }
 
         $logFile = $dir . DIRECTORY_SEPARATOR . 'luna.log';
-        $date    = date('Y-m-d H:i:s');
-        $ctx     = empty($context) ? '' : ' ' . json_encode($context, JSON_UNESCAPED_UNICODE);
-        $line    = "[{$date}] LUNA.{$level}: {$message}{$ctx}" . PHP_EOL;
+        $date = date('Y-m-d H:i:s');
+        $ctx = empty($context) ? '' : ' ' . json_encode($context, JSON_UNESCAPED_UNICODE);
+        $line = "[{$date}] LUNA.{$level}: {$message}{$ctx}" . PHP_EOL;
 
         file_put_contents($logFile, $line, FILE_APPEND | LOCK_EX);
     }

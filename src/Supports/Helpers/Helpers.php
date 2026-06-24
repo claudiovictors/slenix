@@ -293,48 +293,41 @@ if (!function_exists('errors')) {
     /**
      * Retrieve validation errors stored in the session flash.
      *
-     * Reads from $_SESSION['_flash_previous']['_errors'], which is populated
-     * by RedirectResponse::withErrors().
-     *
-     * - errors()               → all errors from all bags as a flat array
+     * - errors()               → MessageBag of ALL errors across all bags
      * - errors('email')        → first error message for that field, or null
      * - errors('email', true)  → all error messages for that field as array
      *
-     * @param  string|null $field Field name (null returns all errors).
-     * @param  bool        $all   Return all messages instead of just the first.
-     * @return array<string,mixed>|string|null
+     * @param  string|null $field
+     * @param  bool        $all
+     * @return \Slenix\Supports\Validation\MessageBag|string|string[]|null
      */
-    function errors(?string $field = null, bool $all = false): array|string|null
+    function errors(?string $field = null, bool $all = false): mixed
     {
         $bags = $_SESSION['_flash_previous']['_errors'] ?? [];
 
+        // Merge all bags into one MessageBag
+        $bag = new \Slenix\Supports\Validation\MessageBag();
+        foreach ($bags as $bagData) {
+            $bag->merge((array) $bagData);
+        }
+
         if ($field === null) {
-            $result = [];
-            foreach ($bags as $bag) {
-                foreach ((array) $bag as $f => $msg) {
-                    $result[$f] = $msg;
-                }
-            }
-            return $result;
+            return $bag;           // Returns MessageBag — supports $bag->has(), etc.
         }
 
-        foreach ($bags as $bag) {
-            if (isset($bag[$field])) {
-                $messages = (array) $bag[$field];
-                return $all ? $messages : $messages[0];
-            }
+        $messages = $bag->get($field);
+
+        if (empty($messages)) {
+            return $all ? [] : null;
         }
 
-        return $all ? [] : null;
+        return $all ? $messages : $messages[0];
     }
 }
 
 if (!function_exists('has_error')) {
     /**
      * Check whether a validation error exists for the given field.
-     *
-     * @param  string $field Field name.
-     * @return bool
      */
     function has_error(string $field): bool
     {
@@ -2533,7 +2526,7 @@ if (!function_exists('validate')) {
 
                 Session::start();
 
-                Session::flash('_errors', ['default' => $e->errors()]);
+                Session::flash('_errors', ['default' => $e->errors()->toArray()]);
                 Session::flashInput($input);
 
                 if (session_status() === PHP_SESSION_ACTIVE) {
@@ -2708,11 +2701,11 @@ if (class_exists(Luna::class)) {
 
     // Forms
     Luna::share('old', fn(string $key, mixed $default = ''): mixed => old($key, $default));
-    Luna::share('errors', fn(?string $field = null): mixed => errors($field));
     Luna::share('has_error', fn(string $field): bool => has_error($field));
 
     // Flash
     Luna::share('flash', fn(): FlashMessage => flash());
+    Luna::share('errors', fn(): \Slenix\Supports\Validation\MessageBag => errors());
 
     // URL / navigation
     Luna::share('is_active', fn(string $p, string $a = 'active', string $i = ''): string => is_active($p, $a, $i));
@@ -2720,6 +2713,13 @@ if (class_exists(Luna::class)) {
     Luna::share('url', fn(string $path = '', array $q = []): string => url($path, $q));
     Luna::share('current_url', fn(): string => current_url());
     Luna::share('request_path', fn(): string => request_path());
+
+    // Routing helpers
+    Luna::share('Router', [
+        'has' => fn(string $name, ?string $path = null): bool => Router::has($name, $path),
+        'route' => fn(string $name, array $params = []): ?string => Router::route($name, $params),
+        'routes' => fn(): array => Router::getRoutes(),
+    ]);
 
     // Dates
     Luna::share('now', fn(): \DateTimeImmutable => now());

@@ -20,7 +20,7 @@ abstract class Command
     /**
      * @var string The current version of the CLI tool.
      */
-    protected static string $version = '2.6';
+    protected static string $version = '2.8';
 
     /**
      * Get an instance of the Console helper.
@@ -315,6 +315,7 @@ abstract class Command
                 'make:seeder' => 'Create a new seeder class',
                 'make:factory' => 'Create a new factory',
                 'make:job' => 'Create a new job class',
+                'make:request' => 'Create a new form request class',
             ],
 
             'Security' => [

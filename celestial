@@ -124,6 +124,10 @@ final class Celestial
                     (new MakeCommand($this->args))->makeJob();
                     break;
 
+                case 'make:request':
+                    (new MakeCommand($this->args))->makeRequest();
+                    break;
+
                 // ── Security generators ───────────────────────────────────────
                 case 'make:throttle':
                     (new MakeCommand($this->args))->makeThrottle();

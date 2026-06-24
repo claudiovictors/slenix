@@ -84,6 +84,7 @@ class Kernel
         set_error_handler([$this->errorHandler, 'handleError']);
         set_exception_handler([$this->errorHandler, 'handleException']);
         register_shutdown_function([$this, 'handleShutdown']);
+        class_alias(Router::class, 'Router');
 
         try {
             $this->loadEnvironment();

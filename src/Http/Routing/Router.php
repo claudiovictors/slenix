@@ -32,23 +32,6 @@ use Slenix\Http\Middlewares\Middleware;
  * and dispatch incoming requests through the middleware pipeline to the
  * appropriate handler.
  *
- * Handlers may return:
- *   - A `string`  → sent as an HTML response body.
- *   - An `array`  → encoded as a JSON response.
- *   - An `int`    → treated as an HTTP status code with an empty body.
- *   - `null`/void → assumes the handler managed output directly.
- *
- * Example usage:
- * ```php
- * Router::get('/hello', fn($req, $res) => 'Hello, World!');
- *
- * Router::get('/json', fn($req, $res) => ['status' => 'ok']);
- *
- * Router::group(['prefix' => '/admin', 'middleware' => ['auth']], function () {
- *     Router::get('/dashboard', [AdminController::class, 'index']);
- * });
- * ```
- *
  * @package Slenix\Http\Routing
  */
 class Router
@@ -357,7 +340,7 @@ class Router
      */
     public static function group(array $configs, callable $handle): void
     {
-        $previousPrefix     = self::$prefix;
+        $previousPrefix = self::$prefix;
         $previousMiddleware = self::$groupMiddlewares;
 
         if (isset($configs['prefix'])) {
@@ -374,7 +357,7 @@ class Router
         $handle();
 
         // Restore state after the group callback finishes (supports nesting).
-        self::$prefix           = $previousPrefix;
+        self::$prefix = $previousPrefix;
         self::$groupMiddlewares = $previousMiddleware;
     }
 
@@ -486,14 +469,14 @@ class Router
                 continue;
             }
 
-            $url     = $route['pathUri'];
+            $url = $route['pathUri'];
             $matches = [];
 
             if (preg_match_all('/\{([a-zA-Z0-9_]+)(\?)?\}/', $url, $matches, PREG_SET_ORDER)) {
                 foreach ($matches as $match) {
                     $placeholder = $match[1];
-                    $isOptional  = isset($match[2]);
-                    $token       = $match[0]; // e.g. {id} or {id?}
+                    $isOptional = isset($match[2]);
+                    $token = $match[0]; // e.g. {id} or {id?}
 
                     if (!$isOptional && !isset($params[$placeholder])) {
                         throw new \RuntimeException(
@@ -511,6 +494,51 @@ class Router
         }
 
         return null;
+    }
+
+    /**
+     * Checks whether a route exists by name or by HTTP method + URI pattern.
+     *
+     * Accepts two call signatures:
+     *   - `Router::has('route.name')`          → looks up by route name.
+     *   - `Router::has('GET', '/users/{id}')` → looks up by method and URI pattern.
+     *
+     * Example:
+     * ```php
+     * Router::has('users.show');          // true if a named route exists
+     * Router::has('POST', '/login');      // true if that method+path is registered
+     * ```
+     *
+     * @param  string      $nameOrMethod  Route name, or HTTP method when $pathUri is provided.
+     * @param  string|null $pathUri       URI pattern to match against (when checking by method).
+     * @return bool                       `true` if a matching route is found.
+     */
+    public static function has(string $nameOrMethod, ?string $pathUri = null): bool
+    {
+        // Signature: has('GET', '/users/{id}') — method + URI lookup
+        if ($pathUri !== null) {
+            $method = strtoupper($nameOrMethod);
+
+            foreach (self::$routes as $route) {
+                if (
+                    $route['method'] === $method &&
+                    $route['pathUri'] === $pathUri
+                ) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // Signature: has('users.show') — named route lookup
+        foreach (self::$routes as $route) {
+            if (isset($route['name']) && $route['name'] === $nameOrMethod) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // -----------------------------------------------------------------------
@@ -538,11 +566,11 @@ class Router
      */
     public static function clearRoutes(): void
     {
-        self::$routes           = [];
-        self::$prefix           = [];
+        self::$routes = [];
+        self::$prefix = [];
         self::$groupMiddlewares = [];
         self::$globalMiddlewares = [];
-        self::$webSocketRoutes  = [];
+        self::$webSocketRoutes = [];
     }
 
     // -----------------------------------------------------------------------
@@ -568,10 +596,10 @@ class Router
      */
     public static function dispatch(): void
     {
-        $request  = new Request();
+        $request = new Request();
         $response = new Response();
-        $method   = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
-        $uriPath  = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
+        $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+        $uriPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
 
         foreach (self::$routes as $route) {
             $pattern = self::buildPattern($route['pathUri']);
@@ -600,10 +628,7 @@ class Router
             $handler = function (Request $req, Response $res) use ($route, $params): void {
                 $result = is_callable($route['handler'])
                     ? call_user_func($route['handler'], $req, $res, $params)
-                    : call_user_func_array(
-                        [new $route['handler'][0], $route['handler'][1]],
-                        [$req, $res, $params]
-                    );
+                    : self::callControllerMethod($route['handler'], $req, $res, $params);
 
                 self::resolveHandlerReturn($result);
             };
@@ -643,14 +668,60 @@ class Router
         $routeIndex = count(self::$routes);
 
         self::$routes[$routeIndex] = [
-            'method'     => strtoupper($method),
-            'pathUri'    => $path,
-            'handler'    => $handle,
+            'method' => strtoupper($method),
+            'pathUri' => $path,
+            'handler' => $handle,
             'middleware' => array_merge(self::$globalMiddlewares, self::$groupMiddlewares, $middleware),
-            'name'       => null,
+            'name' => null,
         ];
 
         return new Route($routeIndex);
+    }
+
+    /**
+     * Instantiates a controller and injects a FormRequest when the method
+     * type-hints one, otherwise passes the standard Request.
+     *
+     * @param array   $handler [ControllerClass, method]
+     * @param Request $req
+     * @param Response $res
+     * @param array   $params
+     * @return mixed
+     */
+    private static function callControllerMethod(
+        array $handler,
+        Request $req,
+        Response $res,
+        array $params
+    ): mixed {
+        [$controllerClass, $method] = $handler;
+        $controller = new $controllerClass();
+
+        // Inspect the method's first parameter type hint
+        try {
+            $reflection = new \ReflectionMethod($controllerClass, $method);
+            $parameters = $reflection->getParameters();
+
+            if (!empty($parameters)) {
+                $firstParam = $parameters[0];
+                $type = $firstParam->getType();
+
+                if (
+                    $type instanceof \ReflectionNamedType &&
+                    !$type->isBuiltin() &&
+                    is_subclass_of($type->getName(), \Slenix\Http\FormRequest::class)
+                ) {
+                    $formRequestClass = $type->getName();
+                    $formRequest = \Slenix\Http\FormRequest::createAndValidate($formRequestClass);
+
+                    return $controller->$method($formRequest, $res, $params);
+                }
+            }
+        } catch (\ReflectionException) {
+            // Fall through to standard call
+        }
+
+        return $controller->$method($req, $res, $params);
     }
 
     /**
@@ -667,7 +738,7 @@ class Router
     private static function buildPattern(string $pathUri): string
     {
         $pattern = preg_replace('/\{([a-zA-Z0-9_]+)\?\}/', '(?P<$1>[a-zA-Z0-9_-]*)', $pathUri);
-        $pattern = preg_replace('/\{([a-zA-Z0-9_]+)\}/',   '(?P<$1>[a-zA-Z0-9_-]+)', $pattern);
+        $pattern = preg_replace('/\{([a-zA-Z0-9_]+)\}/', '(?P<$1>[a-zA-Z0-9_-]+)', $pattern);
         return '@^' . $pattern . '$@';
     }
 
@@ -688,7 +759,7 @@ class Router
         $pipeline = $handler;
 
         foreach (array_reverse($middlewares) as $middlewareClass) {
-            $resolvedClass     = self::resolveMiddlewareAlias($middlewareClass);
+            $resolvedClass = self::resolveMiddlewareAlias($middlewareClass);
             $middlewareInstance = new $resolvedClass();
 
             if (!$middlewareInstance instanceof Middleware) {
@@ -774,10 +845,10 @@ class Router
 
         $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
         $isFormSubmit = str_contains($contentType, 'application/x-www-form-urlencoded')
-                     || str_contains($contentType, 'multipart/form-data');
+            || str_contains($contentType, 'multipart/form-data');
 
         if ($isFormSubmit) {
-            $host   = $_SERVER['HTTP_HOST'] ?? '';
+            $host = $_SERVER['HTTP_HOST'] ?? '';
             $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
             $referer = $_SERVER['HTTP_REFERER'] ?? '';
 
@@ -831,7 +902,7 @@ class Router
      */
     private static function resolveMiddlewareAlias(string $alias): string
     {
-        $base   = $alias;
+        $base = $alias;
         $params = '';
 
         if (str_contains($alias, ':')) {
@@ -848,10 +919,10 @@ class Router
         }
 
         $aliases = [
-            'auth'     => 'App\\Middlewares\\AuthMiddleware',
-            'guest'    => 'App\\Middlewares\\GuestMiddleware',
-            'cors'     => 'App\\Middlewares\\CorsMiddleware',
-            'jwt'      => 'App\\Middlewares\\JwtMiddleware',
+            'auth' => 'App\\Middlewares\\AuthMiddleware',
+            'guest' => 'App\\Middlewares\\GuestMiddleware',
+            'cors' => 'App\\Middlewares\\CorsMiddleware',
+            'jwt' => 'App\\Middlewares\\JwtMiddleware',
             'throttle' => 'App\\Middlewares\\ThrottleMiddleware',
         ];
 

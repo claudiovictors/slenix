@@ -43,7 +43,7 @@ class MakeCommand extends Command
      */
     public static function generateKey(): void
     {
-        $envPath     = self::basePath('.env');
+        $envPath = self::basePath('.env');
         $examplePath = self::basePath('.env.example');
 
         if (!file_exists($envPath)) {
@@ -62,7 +62,7 @@ class MakeCommand extends Command
             }
         }
 
-        $key     = 'base64:' . base64_encode(random_bytes(32));
+        $key = 'base64:' . base64_encode(random_bytes(32));
         $content = file_get_contents($envPath);
 
         if ($content === false) {
@@ -108,7 +108,7 @@ class MakeCommand extends Command
      */
     public static function generateJwt(): void
     {
-        $key     = bin2hex(random_bytes(32));
+        $key = bin2hex(random_bytes(32));
         $envPath = self::basePath('.env');
 
         if (!file_exists($envPath)) {
@@ -150,15 +150,15 @@ class MakeCommand extends Command
     public function makeModel(): void
     {
         $name = $this->resolveArgument(
-            index:       2,
-            question:    'What should the model be named?',
+            index: 2,
+            question: 'What should the model be named?',
             placeholder: 'E.g. User',
-            example:     'php celestial make:model User'
+            example: 'php celestial make:model User'
         );
 
         $modelName = ucfirst($name);
         $tableName = strtolower(preg_replace('/(?<!^)[A-Z]/', '_$0', $modelName)) . 's';
-        $filePath  = APP_PATH . '/Models/' . $modelName . '.php';
+        $filePath = APP_PATH . '/Models/' . $modelName . '.php';
 
         $this->ensureFileDoesNotExist($filePath, $modelName, 'Model');
 
@@ -200,9 +200,9 @@ EOT;
     {
         // ── Name ─────────────────────────────────────────────────────────────
         $rawName = $this->resolveArgumentSkipFlags(
-            question:    'What should the controller be named?',
+            question: 'What should the controller be named?',
             placeholder: 'E.g. UserController',
-            example:     'php celestial make:controller Home'
+            example: 'php celestial make:controller Home'
         );
 
         $controllerName = ucfirst($rawName);
@@ -214,7 +214,7 @@ EOT;
 
         // ── Type ──────────────────────────────────────────────────────────────
         $typeArg = $this->findFlag('--type=');
-        $types   = ['Empty', 'Resource', 'API', 'Invokable'];
+        $types = ['Empty', 'Resource', 'API', 'Invokable'];
 
         if ($typeArg !== null) {
             $type = ucfirst(strtolower($typeArg));
@@ -223,7 +223,7 @@ EOT;
             }
         } else {
             $prompt = new Prompt();
-            $type   = $prompt->select(
+            $type = $prompt->select(
                 'Which type of controller would you like?',
                 $types
             );
@@ -252,10 +252,10 @@ EOT;
     public function makeMiddleware(): void
     {
         $name = $this->resolveArgument(
-            index:       2,
-            question:    'What should the middleware be named?',
+            index: 2,
+            question: 'What should the middleware be named?',
             placeholder: 'E.g. Auth',
-            example:     'php celestial make:middleware Auth'
+            example: 'php celestial make:middleware Auth'
         );
 
         $middlewareName = ucfirst($name);
@@ -323,10 +323,10 @@ EOT;
     public function makeJob(): void
     {
         $name = $this->resolveArgument(
-            index:       2,
-            question:    'What should the job be named?',
+            index: 2,
+            question: 'What should the job be named?',
             placeholder: 'E.g. SendWelcomeEmail',
-            example:     'php celestial make:job SendWelcomeEmail'
+            example: 'php celestial make:job SendWelcomeEmail'
         );
 
         $jobName = ucfirst($name);
@@ -335,7 +335,7 @@ EOT;
             $jobName .= 'Job';
         }
 
-        $dir      = APP_PATH . '/Jobs';
+        $dir = APP_PATH . '/Jobs';
         $filePath = $dir . '/' . $jobName . '.php';
 
         if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
@@ -383,10 +383,10 @@ EOT;
     public function makeSeeder(): void
     {
         $name = $this->resolveArgument(
-            index:       2,
-            question:    'What should the seeder be named?',
+            index: 2,
+            question: 'What should the seeder be named?',
             placeholder: 'E.g. UserSeeder',
-            example:     'php celestial make:seeder UserSeeder'
+            example: 'php celestial make:seeder UserSeeder'
         );
 
         $seederName = ucfirst($name);
@@ -396,7 +396,7 @@ EOT;
         }
 
         $seedsPath = dirname(__DIR__, 3) . '/database/seeds';
-        $filePath  = $seedsPath . '/' . $seederName . '.php';
+        $filePath = $seedsPath . '/' . $seederName . '.php';
 
         if (!is_dir($seedsPath) && !mkdir($seedsPath, 0755, true)) {
             self::error("Could not create directory: {$seedsPath}");
@@ -420,13 +420,13 @@ EOT;
     public function makeFactory(): void
     {
         $name = $this->resolveArgument(
-            index:       2,
-            question:    'What should the factory be named?',
+            index: 2,
+            question: 'What should the factory be named?',
             placeholder: 'E.g. UserFactory',
-            example:     'php celestial make:factory UserFactory'
+            example: 'php celestial make:factory UserFactory'
         );
 
-        $factoryName   = ucfirst($name);
+        $factoryName = ucfirst($name);
         $factoriesPath = dirname(__DIR__, 3) . '/database/factories';
 
         if (!str_ends_with($factoryName, 'Factory')) {
@@ -442,7 +442,7 @@ EOT;
 
         $this->ensureFileDoesNotExist($filePath, $factoryName, 'Factory');
 
-        $model    = str_replace('Factory', '', $factoryName);
+        $model = str_replace('Factory', '', $factoryName);
         $template = $this->factoryStub($factoryName, $model);
 
         $this->createFile($filePath, $template, $factoryName, 'Factory');
@@ -462,10 +462,10 @@ EOT;
     public function makeMigration(): void
     {
         $name = $this->resolveArgument(
-            index:       2,
-            question:    'What should the migration be named?',
+            index: 2,
+            question: 'What should the migration be named?',
             placeholder: 'E.g. create_users_table',
-            example:     'php celestial make:migration create_users_table'
+            example: 'php celestial make:migration create_users_table'
         );
 
         // Delegate back to MigrateCommand's makeMigration with the resolved name
@@ -652,7 +652,7 @@ EOT,
     private function seederStub(string $name): string
     {
         $isDatabase = $name === 'DatabaseSeeder';
-        $comment    = $isDatabase
+        $comment = $isDatabase
             ? 'Main entry point. Call other seeders here.'
             : 'Inserts data into the corresponding table.';
 
@@ -840,6 +840,93 @@ EOT;
     }
 
     /**
+     * Generates a new FormRequest class.
+     *
+     * @return void
+     */
+    public function makeRequest(): void
+    {
+        $name = $this->resolveArgument(
+            index: 2,
+            question: 'What should the request be named?',
+            placeholder: 'E.g. LoginRequest',
+            example: 'php celestial make:request LoginRequest'
+        );
+
+        $requestName = ucfirst($name);
+
+        if (!str_ends_with($requestName, 'Request')) {
+            $requestName .= 'Request';
+        }
+
+        $dir = APP_PATH . '/Http/Requests';
+        $filePath = $dir . '/' . $requestName . '.php';
+
+        if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
+            self::error("Could not create directory {$dir}.");
+            exit(1);
+        }
+
+        $this->ensureFileDoesNotExist($filePath, $requestName, 'Request');
+
+        $template = $this->requestStub($requestName);
+
+        $this->createFile($filePath, $template, $requestName, 'Request');
+    }
+
+    /**
+     * Returns the FormRequest boilerplate.
+     *
+     * @param string $name Class name.
+     * @return string
+     */
+    private function requestStub(string $name): string
+    {
+        return <<<EOT
+        <?php
+
+        declare(strict_types=1);
+
+        namespace App\Http\Requests;
+
+        use Slenix\Http\FormRequest;
+
+        class {$name} extends FormRequest
+        {
+            /**
+             * Determine if the user is authorized to make this request.
+             */
+            public function authorize(): bool
+            {
+                return true;
+            }
+
+            /**
+             * Validation rules for this request.
+             *
+             * @return array<string, string|string[]>
+             */
+            public function rules(): array
+            {
+                return [
+                    // 'field' => 'required|string|max:255',
+                ];
+            }
+
+            /**
+             * Custom error messages (optional).
+             *
+             * @return array<string, string>
+             */
+            public function messages(): array
+            {
+                return [];
+            }
+        }
+        EOT;
+    }
+
+    /**
      * Returns the CLI argument at the given index, or prompts the user when it
      * is absent.
      *
@@ -851,7 +938,7 @@ EOT;
      * @return string The resolved name (never empty).
      */
     private function resolveArgument(
-        int    $index,
+        int $index,
         string $question,
         string $placeholder = '',
         string $example = ''
@@ -861,7 +948,7 @@ EOT;
         }
 
         $prompt = new Prompt();
-        $value  = $prompt->text($question, $placeholder);
+        $value = $prompt->text($question, $placeholder);
 
         if (trim($value) === '') {
             echo PHP_EOL;
@@ -898,7 +985,7 @@ EOT;
 
         // No positional argument found — prompt interactively
         $prompt = new Prompt();
-        $value  = $prompt->text($question, $placeholder);
+        $value = $prompt->text($question, $placeholder);
 
         if (trim($value) === '') {
             echo PHP_EOL;

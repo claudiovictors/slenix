@@ -45,9 +45,30 @@ class EnvLoader
             throw new \RuntimeException('Failed to read .env file at: ' . self::$path_env);
         }
 
-        foreach ($lines as $line) {
-            self::parseLine(trim($line), $override);
+        foreach ($lines as $index => $line) {
+            // Strip UTF-8 BOM if present — only ever possible on the first line,
+            // but files saved/edited on Windows commonly carry it.
+            if ($index === 0) {
+                $line = self::stripBom($line);
+            }
+
+            self::parseLine(trim($line), $override, $index + 1);
         }
+    }
+
+    /**
+     * Removes a UTF-8 byte order mark from the start of a string, if present.
+     *
+     * @param  string $line
+     * @return string
+     */
+    private static function stripBom(string $line): string
+    {
+        $bom = "\xEF\xBB\xBF";
+        if (str_starts_with($line, $bom)) {
+            return substr($line, strlen($bom));
+        }
+        return $line;
     }
 
     /**
@@ -55,9 +76,10 @@ class EnvLoader
      *
      * @param  string $line
      * @param  bool   $override
+     * @param  int    $lineNumber For diagnostic purposes only.
      * @return void
      */
-    private static function parseLine(string $line, bool $override): void
+    private static function parseLine(string $line, bool $override, int $lineNumber = 0): void
     {
         // Skip empty lines and full-line comments
         if ($line === '' || str_starts_with($line, '#')) {
@@ -72,6 +94,10 @@ class EnvLoader
 
         $variable = trim($variable);
         $value    = trim($value);
+
+        if ($variable === '') {
+            return;
+        }
 
         // Strip inline comments (e.g. VALUE=something # comment)
         $value = self::stripInlineComment($value);
@@ -110,7 +136,7 @@ class EnvLoader
             return $value;
         }
 
-        // Remove everything from the first unquoted # 
+        // Remove everything from the first unquoted #
         $result = preg_replace('/\s+#.*$/', '', $value);
 
         return $result ?? $value;
@@ -139,21 +165,15 @@ class EnvLoader
     /**
      * Resolves variable interpolation: ${VAR_NAME} and $VAR_NAME.
      *
-     * Example:
-     *   APP_NAME=Slenix
-     *   APP_FULL=${APP_NAME}_Framework → "Slenix_Framework"
-     *
      * @param  string $value
      * @return string
      */
     private static function interpolate(string $value): string
     {
-        // ${VAR_NAME}
         $value = preg_replace_callback('/\$\{([A-Z_][A-Z0-9_]*)\}/', function (array $matches): string {
             return (string) self::get($matches[1], $matches[0]);
         }, $value) ?? $value;
 
-        // $VAR_NAME (without braces)
         $value = preg_replace_callback('/\$([A-Z_][A-Z0-9_]*)/', function (array $matches): string {
             return (string) self::get($matches[1], $matches[0]);
         }, $value) ?? $value;
@@ -164,10 +184,9 @@ class EnvLoader
     /**
      * Casts string values to their appropriate PHP types.
      *
-     * - "true" / "false" → bool
-     * - "null" → null
-     * - Numeric strings → int or float
-     * - Everything else → string
+     * Uses regex instead of ctype_digit() so it never depends on ext-ctype
+     * being compiled/enabled — some minimal PHP builds (e.g. Termux) don't
+     * ship it activated by default.
      *
      * @param  string $value
      * @return mixed
@@ -177,13 +196,13 @@ class EnvLoader
         $lower = strtolower($value);
 
         return match (true) {
-            $lower === 'true'        => true,
-            $lower === 'false'       => false,
-            $lower === 'null'        => null,
-            $lower === 'empty'       => '',
-            ctype_digit($value)      => (int) $value,
-            is_numeric($value)       => (float) $value,
-            default                  => $value,
+            $lower === 'true'                    => true,
+            $lower === 'false'                   => false,
+            $lower === 'null'                    => null,
+            $lower === 'empty'                   => '',
+            preg_match('/^\d+$/', $value) === 1   => (int) $value,
+            is_numeric($value)                   => (float) $value,
+            default                               => $value,
         };
     }
 

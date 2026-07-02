@@ -20,6 +20,8 @@ declare(strict_types=1);
 
 namespace Slenix\Supports\Security;
 
+use Slenix\Core\EnvLoader;
+
 class Session
 {
     // -------------------------------------------------------------------------
@@ -36,13 +38,18 @@ class Session
     public static function start(): void
     {
         if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
+            if (strtolower((string) EnvLoader::get('SESSION_DRIVER', 'native')) === 'redis') {
+                session_set_save_handler(new RedisSessionHandler(), true);
+            }
+
             session_start([
-                'cookie_secure'   => isset($_SERVER['HTTPS']),
+                'cookie_secure' => isset($_SERVER['HTTPS']),
                 'cookie_httponly' => true,
                 'cookie_samesite' => 'Lax',
                 'use_strict_mode' => true,
-                'use_cookies'     => true,
+                'use_cookies' => true,
                 'use_only_cookies' => true,
+                'gc_maxlifetime' => (int) EnvLoader::get('SESSION_LIFETIME', 7200),
             ]);
         }
     }

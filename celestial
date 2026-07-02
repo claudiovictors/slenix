@@ -23,10 +23,14 @@ use Slenix\Core\Console\Command;
 use Slenix\Supports\Template\Luna;
 use Slenix\Core\Console\SeedCommand;
 use Slenix\Core\Console\MakeCommand;
+use Slenix\Core\Console\CacheCommand;
 use Slenix\Core\Console\ServeCommand;
 use Slenix\Core\Console\WorkerCommand;
 use Slenix\Core\Console\MigrateCommand;
+use Slenix\Core\Console\StorageCommand;
+use Slenix\Core\Console\ScheduleCommand;
 use Slenix\Core\WebSocket\WebSocketServer;
+use Slenix\Core\Console\MaintenanceCommand;
 
 /**
  * Attempt to load the environment variables.
@@ -195,6 +199,29 @@ final class Celestial
                 case 'view:clear':
                     Luna::clearCache();
                     Command::success('View cache cleared.');
+                    break;
+                // ── Storage ────────────────────────────────────────────────────
+                case 'storage:link':
+                    StorageCommand::link();
+                    break;
+
+                // ── Cache ──────────────────────────────────────────────────────
+                case 'cache:clear':
+                    CacheCommand::clear();
+                    break;
+
+                // ── Maintenance mode ──────────────────────────────────────────
+                case 'down':
+                    MaintenanceCommand::down($this->args);
+                    break;
+
+                case 'up':
+                    MaintenanceCommand::up();
+                    break;
+
+                // ── Scheduler ──────────────────────────────────────────────────
+                case 'schedule:run':
+                    ScheduleCommand::run();
                     break;
 
                 // ── Help / version ────────────────────────────────────────────

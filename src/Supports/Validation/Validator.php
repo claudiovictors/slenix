@@ -2,29 +2,16 @@
 
 /*
 |--------------------------------------------------------------------------
-| Validator Class
+| Validator Class — Slenix Framework
 |--------------------------------------------------------------------------
 |
 | Slenix Validation Engine. Supports piped rules (|), custom messages,
-| MessageBag errors, and direct request integration.
+| MessageBag errors, direct request integration, and file upload rules
+| that delegate to the Upload class for security-aware validation.
 |
-| Available Rules:
-|   Core types   : required, string, integer, float, boolean, array, numeric
-|   Format       : email, url, ip, uuid, date, alpha, alpha_num, alpha_dash
-|   String       : min, max, between, size, starts_with, ends_with,
-|                  contains, regex, json
-|   Numbers      : gt, gte, lt, lte, digits, digits_between, multiple_of
-|   Arrays       : in, not_in, distinct
-|   File         : mimes, max_size (KB), dimensions (WxH)
-|   DB           : unique, exists
-|   Conditional  : nullable, sometimes, bail,
-|                  required_if, required_unless,
-|                  required_with, required_with_all,
-|                  required_without, required_without_all,
-|                  exclude_if, exclude_unless
-|   Other        : confirmed, same, different, prohibited, accepted, declined
 |
-| @version 2.0.0
+| @version 2.8.0
+| @package Slenix\Supports\Validation
 |
 */
 
@@ -33,34 +20,36 @@ declare(strict_types=1);
 namespace Slenix\Supports\Validation;
 
 use Slenix\Database\Connection;
+use Slenix\Supports\Uploads\Upload;
 
 class Validator
 {
+    // -------------------------------------------------------------------------
+    // Properties
+    // -------------------------------------------------------------------------
+
     /** @var array<string, mixed> Data to be validated */
     protected array $data;
 
     /** @var array<string, string|string[]> Defined validation rules */
     protected array $rules;
 
-    /** @var array<string, string> Custom error messages */
+    /** @var array<string, string> Custom error messages keyed by "field.rule" or "rule" */
     protected array $messages;
 
-    /** @var array<string, string> Custom field labels */
+    /** @var array<string, string> Human-readable field labels used in error messages */
     protected array $labels;
 
-    /** @var MessageBag Current validation errors */
+    /** @var MessageBag Accumulated validation errors from the current run */
     protected MessageBag $errors;
 
-    /** @var array<string, mixed> Data that passed validation */
+    /** @var array<string, mixed> Data that passed all validation rules */
     protected array $validated = [];
 
-    /** @var bool Stop on first failure per field (bail flag) */
+    /** @var bool Whether to stop all fields on first global failure */
     protected bool $bail = false;
 
-    /** @var array<string, bool> Fields whose rules should be skipped when absent (sometimes) */
-    protected array $sometimes = [];
-
-    /** @var array<string, mixed> Fields to exclude from $validated */
+    /** @var array<string, mixed> Fields marked for exclusion via exclude_if / exclude_unless */
     protected array $excluded = [];
 
     // -------------------------------------------------------------------------
@@ -68,10 +57,10 @@ class Validator
     // -------------------------------------------------------------------------
 
     /**
-     * @param array<string, mixed>          $data
-     * @param array<string, string|string[]> $rules
-     * @param array<string, string>          $messages
-     * @param array<string, string>          $labels   Custom human-readable field names.
+     * @param array<string, mixed>           $data
+     * @param array<string, string|string[]>  $rules
+     * @param array<string, string>           $messages  Custom per-rule messages.
+     * @param array<string, string>           $labels    Human-readable field names.
      */
     public function __construct(
         array $data,
@@ -87,12 +76,12 @@ class Validator
     }
 
     /**
-     * Static factory.
+     * Static factory — create and return a Validator instance.
      *
-     * @param array<string, mixed>          $data
-     * @param array<string, string|string[]> $rules
-     * @param array<string, string>          $messages
-     * @param array<string, string>          $labels
+     * @param array<string, mixed>           $data
+     * @param array<string, string|string[]>  $rules
+     * @param array<string, string>           $messages
+     * @param array<string, string>           $labels
      */
     public static function make(
         array $data,
@@ -108,9 +97,13 @@ class Validator
     // -------------------------------------------------------------------------
 
     /**
-     * Runs all validation rules against the data.
+     * Run all validation rules against the data.
      *
-     * @throws ValidationException
+     * Upload rules read from $_FILES automatically — no special handling
+     * required in the caller.
+     *
+     * @throws ValidationException If any rule fails.
+     * @return array<string, mixed> Validated (safe) data.
      */
     public function validate(): array
     {
@@ -124,13 +117,16 @@ class Validator
             $bail     = $this->bail || in_array('bail', $rules, true);
             $value    = $this->getValue($field);
 
-            // @sometimes — skip entirely if the key is absent from data
-            if (in_array('sometimes', $rules, true) && !$this->fieldPresent($field)) {
+            // @sometimes — skip when the field is absent from both data and $_FILES
+            if (in_array('sometimes', $rules, true)
+                && !$this->fieldPresent($field)
+                && !$this->hasUpload($field)
+            ) {
                 continue;
             }
 
-            // Nullable short-circuit
-            if ($nullable && ($value === null || $value === '')) {
+            // Nullable short-circuit — pass through empty non-file values
+            if ($nullable && ($value === null || $value === '') && !$this->hasUpload($field)) {
                 $this->validated[$field] = $value;
                 continue;
             }
@@ -144,20 +140,16 @@ class Validator
 
                 [$ruleName, $params] = $this->parseRule($rule);
 
-                // Handle exclude_if / exclude_unless before applying
+                // exclude_if / exclude_unless — mark field and skip rule
                 if ($ruleName === 'exclude_if') {
-                    $other = $params[0] ?? '';
-                    $val   = $params[1] ?? '';
-                    if ((string) $this->getValue($other) === (string) $val) {
+                    if ((string) $this->getValue($params[0] ?? '') === (string) ($params[1] ?? '')) {
                         $this->excluded[$field] = true;
                     }
                     continue;
                 }
 
                 if ($ruleName === 'exclude_unless') {
-                    $other = $params[0] ?? '';
-                    $val   = $params[1] ?? '';
-                    if ((string) $this->getValue($other) !== (string) $val) {
+                    if ((string) $this->getValue($params[0] ?? '') !== (string) ($params[1] ?? '')) {
                         $this->excluded[$field] = true;
                     }
                     continue;
@@ -208,16 +200,14 @@ class Validator
     // Results
     // -------------------------------------------------------------------------
 
-    /**
-     * Returns a MessageBag with all validation errors.
-     */
+    /** Returns a MessageBag containing all validation errors. */
     public function errors(): MessageBag
     {
         return $this->errors;
     }
 
     /**
-     * Returns only the first error message for each field.
+     * Returns the first error message for each field.
      *
      * @return array<string, string>
      */
@@ -230,34 +220,23 @@ class Validator
         return $result;
     }
 
-    /**
-     * Returns the first error message for a specific field.
-     */
+    /** Returns the first error for a specific field, or null. */
     public function first(string $field): ?string
     {
         $msg = $this->errors->first($field);
         return $msg !== '' ? $msg : null;
     }
 
-    /**
-     * Returns all validated data.
-     */
-    public function safe(): array
-    {
-        return $this->validated;
-    }
+    /** Returns all validated data. */
+    public function safe(): array { return $this->validated; }
 
-    /**
-     * Returns validated data for the given keys only.
-     */
+    /** Returns validated data for the given keys only. */
     public function only(string ...$keys): array
     {
         return array_intersect_key($this->validated, array_flip($keys));
     }
 
-    /**
-     * Returns validated data excluding the given keys.
-     */
+    /** Returns validated data excluding the given keys. */
     public function except(string ...$keys): array
     {
         return array_diff_key($this->validated, array_flip($keys));
@@ -267,11 +246,17 @@ class Validator
     // Rule Dispatcher
     // -------------------------------------------------------------------------
 
+    /**
+     * Dispatch a single rule against a field value and record an error on failure.
+     *
+     * Upload rules read from $_FILES rather than $this->data, so they work
+     * transparently even though file data is never part of the POST body.
+     */
     protected function applyRule(string $field, mixed $value, string $rule, array $params): bool
     {
         $passed = match ($rule) {
-            // Core types
-            'required'             => $this->ruleRequired($value),
+            // ── Core types ──────────────────────────────────────────────────
+            'required'             => $this->ruleRequired($field, $value),
             'string'               => $this->ruleString($value),
             'integer'              => $this->ruleInteger($value),
             'float'                => $this->ruleFloat($value),
@@ -279,7 +264,7 @@ class Validator
             'array'                => $this->ruleArray($value),
             'numeric'              => $this->ruleNumeric($value),
 
-            // Format
+            // ── Format ──────────────────────────────────────────────────────
             'email'                => $this->ruleEmail($value),
             'url'                  => $this->ruleUrl($value),
             'ip'                   => $this->ruleIp($value),
@@ -297,7 +282,7 @@ class Validator
             'alpha_dash'           => $this->ruleAlphaDash($value),
             'json'                 => $this->ruleJson($value),
 
-            // String rules
+            // ── String / length ──────────────────────────────────────────────
             'min'                  => $this->ruleMin($value, (int) ($params[0] ?? 0)),
             'max'                  => $this->ruleMax($value, (int) ($params[0] ?? 0)),
             'between'              => $this->ruleBetween($value, (float) ($params[0] ?? 0), (float) ($params[1] ?? 0)),
@@ -310,7 +295,7 @@ class Validator
             'regex'                => $this->ruleRegex($value, $params[0] ?? ''),
             'not_regex'            => !$this->ruleRegex($value, $params[0] ?? ''),
 
-            // Number comparisons
+            // ── Number comparisons ────────────────────────────────────────────
             'gt'                   => $this->ruleGt($value, $params[0] ?? '0'),
             'gte'                  => $this->ruleGte($value, $params[0] ?? '0'),
             'lt'                   => $this->ruleLt($value, $params[0] ?? '0'),
@@ -319,12 +304,27 @@ class Validator
             'digits_between'       => $this->ruleDigitsBetween($value, (int) ($params[0] ?? 0), (int) ($params[1] ?? 0)),
             'multiple_of'          => $this->ruleMultipleOf($value, (float) ($params[0] ?? 1)),
 
-            // Array
+            // ── Array ─────────────────────────────────────────────────────────
             'in'                   => $this->ruleIn($value, $params),
             'not_in'               => $this->ruleNotIn($value, $params),
             'distinct'             => $this->ruleDistinct($value),
 
-            // Conditional required
+            // ── File uploads ──────────────────────────────────────────────────
+            'file'                 => $this->ruleFile($field),
+            'image'                => $this->ruleFileType($field, 'image'),
+            'video'                => $this->ruleFileType($field, 'video'),
+            'audio'                => $this->ruleFileType($field, 'audio'),
+            'document'             => $this->ruleFileType($field, 'document'),
+            'mimes',
+            'extensions'           => $this->ruleFileMimes($field, $params),
+            'mime_types'           => $this->ruleFileMimeTypes($field, $params),
+            'max_kb'               => $this->ruleFileMaxKb($field, (int) ($params[0] ?? 0)),
+            'min_kb'               => $this->ruleFileMinKb($field, (int) ($params[0] ?? 0)),
+            'dimensions'           => $this->ruleFileDimensions($field, $params, 'exact'),
+            'max_dimensions'       => $this->ruleFileDimensions($field, $params, 'max'),
+            'min_dimensions'       => $this->ruleFileDimensions($field, $params, 'min'),
+
+            // ── Conditional required ──────────────────────────────────────────
             'required_if'          => $this->ruleRequiredIf($field, $value, $params),
             'required_unless'      => $this->ruleRequiredUnless($field, $value, $params),
             'required_with'        => $this->ruleRequiredWith($field, $value, $params),
@@ -332,26 +332,19 @@ class Validator
             'required_without'     => $this->ruleRequiredWithout($field, $value, $params),
             'required_without_all' => $this->ruleRequiredWithoutAll($field, $value, $params),
 
-            // Cross-field
+            // ── Cross-field ───────────────────────────────────────────────────
             'confirmed'            => $this->ruleConfirmed($field, $value),
             'same'                 => $this->ruleSame($value, $this->getValue($params[0] ?? '')),
             'different'            => $this->ruleDifferent($value, $this->getValue($params[0] ?? '')),
 
-            // Accepted / Declined
+            // ── Accepted / declined ───────────────────────────────────────────
             'accepted'             => $this->ruleAccepted($value),
             'accepted_if'          => $this->ruleAcceptedIf($value, $params),
             'declined'             => $this->ruleDeclined($value),
             'prohibited'           => $this->ruleProhibited($value),
             'prohibited_if'        => $this->ruleProhibitedIf($value, $params),
 
-            // File
-            'mimes'                => $this->ruleMimes($field, $params),
-            'max_size'             => $this->ruleMaxSize($field, (int) ($params[0] ?? 0)),
-            'min_size'             => $this->ruleMinSize($field, (int) ($params[0] ?? 0)),
-            'image'                => $this->ruleMimes($field, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg']),
-            'dimensions'           => $this->ruleDimensions($field, $params),
-
-            // Database
+            // ── Database ──────────────────────────────────────────────────────
             'unique'               => $this->ruleUnique($value, $params[0] ?? '', $params[1] ?? 'id', $params[2] ?? null),
             'exists'               => $this->ruleExists($value, $params[0] ?? '', $params[1] ?? 'id'),
 
@@ -365,10 +358,208 @@ class Validator
         return $passed;
     }
 
-    // ---- Core ---------------------------------------------------------------
+    // =========================================================================
+    // Upload Rule Implementations
+    // =========================================================================
 
-    protected function ruleRequired(mixed $v): bool
+    /**
+     * Resolve an Upload instance for the given field from $_FILES.
+     * Returns null when no file was sent or the upload slot is empty.
+     */
+    protected function resolveUpload(string $field): ?Upload
     {
+        $file = $_FILES[$field] ?? null;
+
+        if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+            return null;
+        }
+
+        return new Upload($file);
+    }
+
+    /**
+     * Return true when a non-empty file was uploaded for the given field.
+     * Used by ruleRequired() and the nullable short-circuit in validate().
+     */
+    protected function hasUpload(string $field): bool
+    {
+        $file = $_FILES[$field] ?? null;
+        return $file !== null
+            && ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK
+            && !empty($file['tmp_name']);
+    }
+
+    /**
+     * Rule: 'file'
+     *
+     * The field must have a successfully uploaded file with no PHP upload error
+     * and a valid temporary path. This is the base gate — place it before any
+     * other file rule: 'required|file|image|max_kb:2048'.
+     */
+    protected function ruleFile(string $field): bool
+    {
+        $file = $_FILES[$field] ?? null;
+
+        return $file !== null
+            && ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK
+            && !empty($file['tmp_name'])
+            && is_uploaded_file($file['tmp_name']);
+    }
+
+    /**
+     * Rule: 'image' | 'video' | 'audio' | 'document'
+     *
+     * Delegates to the Upload class type-detection methods, which inspect the
+     * real MIME type from file content (via finfo) rather than trusting the
+     * client-supplied Content-Type header, making spoofing much harder.
+     */
+    protected function ruleFileType(string $field, string $type): bool
+    {
+        $upload = $this->resolveUpload($field);
+
+        if (!$upload) {
+            return false;
+        }
+
+        return match ($type) {
+            'image'    => $upload->isImage(),
+            'video'    => $upload->isVideo(),
+            'audio'    => $upload->isAudio(),
+            'document' => $upload->isDocument(),
+            default    => false,
+        };
+    }
+
+    /**
+     * Rule: 'mimes:{ext,ext}' | 'extensions:{ext,ext}'
+     *
+     * The uploaded file extension must be in the given list.
+     * Case-insensitive. Combine with 'mime_types' for double enforcement.
+     *
+     * Example: 'file|mimes:jpg,png,webp'
+     */
+    protected function ruleFileMimes(string $field, array $params): bool
+    {
+        $upload = $this->resolveUpload($field);
+
+        if (!$upload) {
+            return false;
+        }
+
+        $allowed = array_map('strtolower', $params);
+        return in_array(strtolower($upload->getExtension()), $allowed, true);
+    }
+
+    /**
+     * Rule: 'mime_types:{type,type}'
+     *
+     * The real MIME type (read from file content) must be in the allowed list.
+     * More secure than 'mimes' because it cannot be spoofed by renaming the file.
+     *
+     * Example: 'file|mime_types:image/jpeg,image/png'
+     */
+    protected function ruleFileMimeTypes(string $field, array $params): bool
+    {
+        $upload = $this->resolveUpload($field);
+
+        if (!$upload) {
+            return false;
+        }
+
+        return in_array($upload->getMimeType(), $params, true);
+    }
+
+    /**
+     * Rule: 'max_kb:{n}'
+     *
+     * The uploaded file must not exceed n kilobytes.
+     *
+     * Example: 'file|image|max_kb:2048'  (= 2 MB)
+     */
+    protected function ruleFileMaxKb(string $field, int $kb): bool
+    {
+        $upload = $this->resolveUpload($field);
+        return $upload !== null && $upload->getSize() <= $kb * 1024;
+    }
+
+    /**
+     * Rule: 'min_kb:{n}'
+     *
+     * The uploaded file must be at least n kilobytes.
+     *
+     * Example: 'file|min_kb:10'
+     */
+    protected function ruleFileMinKb(string $field, int $kb): bool
+    {
+        $upload = $this->resolveUpload($field);
+        return $upload !== null && $upload->getSize() >= $kb * 1024;
+    }
+
+    /**
+     * Rule: 'dimensions:{w}x{h}' | 'max_dimensions:{w}x{h}' | 'min_dimensions:{w}x{h}'
+     *
+     * Validates image pixel dimensions. Each dimension component is optional:
+     *   '800x'  — only checks width
+     *   'x600'  — only checks height
+     *   '800x600' — checks both
+     *
+     * Supported $mode values:
+     *   'exact' — dimensions must match exactly
+     *   'max'   — dimensions must not exceed the limit
+     *   'min'   — dimensions must be at least the limit
+     *
+     * Example:
+     *   'file|image|max_dimensions:1920x1080'
+     *   'file|image|min_dimensions:100x100'
+     *   'file|image|dimensions:800x600'
+     */
+    protected function ruleFileDimensions(string $field, array $params, string $mode): bool
+    {
+        $upload = $this->resolveUpload($field);
+
+        if (!$upload || !$upload->isImage()) {
+            return false;
+        }
+
+        $info = $upload->getImageInfo();
+
+        if (!$info) {
+            return false;
+        }
+
+        // Parse '{width}x{height}' — each part is optional
+        $spec   = $params[0] ?? '';
+        $parts  = explode('x', strtolower($spec));
+        $wLimit = isset($parts[0]) && $parts[0] !== '' ? (int) $parts[0] : null;
+        $hLimit = isset($parts[1]) && $parts[1] !== '' ? (int) $parts[1] : null;
+
+        $w = $info['width'];
+        $h = $info['height'];
+
+        return match ($mode) {
+            'exact' => ($wLimit === null || $w === $wLimit) && ($hLimit === null || $h === $hLimit),
+            'max'   => ($wLimit === null || $w <= $wLimit) && ($hLimit === null || $h <= $hLimit),
+            'min'   => ($wLimit === null || $w >= $wLimit) && ($hLimit === null || $h >= $hLimit),
+            default => false,
+        };
+    }
+
+    // =========================================================================
+    // Standard Rule Implementations
+    // =========================================================================
+
+    /**
+     * Rule: 'required'
+     *
+     * For file fields, a successful upload counts as present even though
+     * file data never appears in the POST body ($this->data).
+     */
+    protected function ruleRequired(string $field, mixed $v): bool
+    {
+        if ($this->hasUpload($field)) {
+            return true;
+        }
+
         if (is_string($v)) return trim($v) !== '';
         if (is_array($v))  return !empty($v);
         return $v !== null;
@@ -385,21 +576,18 @@ class Validator
         return in_array($v, [true, false, 0, 1, '0', '1', 'true', 'false', 'on', 'off', 'yes', 'no'], true);
     }
 
-    // ---- Format / Type -------------------------------------------------------
+    protected function ruleEmail(mixed $v): bool  { return filter_var($v, FILTER_VALIDATE_EMAIL) !== false; }
+    protected function ruleUrl(mixed $v): bool    { return filter_var($v, FILTER_VALIDATE_URL) !== false; }
+    protected function ruleIp(mixed $v): bool     { return filter_var($v, FILTER_VALIDATE_IP) !== false; }
+    protected function ruleIpv4(mixed $v): bool   { return filter_var($v, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false; }
+    protected function ruleIpv6(mixed $v): bool   { return filter_var($v, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false; }
+    protected function ruleAlpha(mixed $v): bool  { return ctype_alpha((string) $v); }
+    protected function ruleAlphaNum(mixed $v): bool { return ctype_alnum((string) $v); }
 
-    protected function ruleEmail(mixed $v): bool
+    protected function ruleAlphaDash(mixed $v): bool
     {
-        return filter_var($v, FILTER_VALIDATE_EMAIL) !== false;
+        return (bool) preg_match('/^[a-zA-Z0-9_\-]+$/', (string) $v);
     }
-
-    protected function ruleUrl(mixed $v): bool
-    {
-        return filter_var($v, FILTER_VALIDATE_URL) !== false;
-    }
-
-    protected function ruleIp(mixed $v): bool   { return filter_var($v, FILTER_VALIDATE_IP) !== false; }
-    protected function ruleIpv4(mixed $v): bool { return filter_var($v, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false; }
-    protected function ruleIpv6(mixed $v): bool { return filter_var($v, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false; }
 
     protected function ruleUuid(mixed $v): bool
     {
@@ -409,14 +597,6 @@ class Validator
         );
     }
 
-    protected function ruleAlpha(mixed $v): bool    { return ctype_alpha((string) $v); }
-    protected function ruleAlphaNum(mixed $v): bool { return ctype_alnum((string) $v); }
-
-    protected function ruleAlphaDash(mixed $v): bool
-    {
-        return (bool) preg_match('/^[a-zA-Z0-9_\-]+$/', (string) $v);
-    }
-
     protected function ruleJson(mixed $v): bool
     {
         if (!is_string($v)) return false;
@@ -424,12 +604,7 @@ class Validator
         return json_last_error() === JSON_ERROR_NONE;
     }
 
-    // ---- Date ---------------------------------------------------------------
-
-    protected function ruleDate(mixed $v): bool
-    {
-        return strtotime((string) $v) !== false;
-    }
+    protected function ruleDate(mixed $v): bool { return strtotime((string) $v) !== false; }
 
     protected function ruleDateFormat(mixed $v, string $format): bool
     {
@@ -439,33 +614,27 @@ class Validator
 
     protected function ruleBefore(mixed $v, string $date): bool
     {
-        $t = strtotime((string) $v);
-        $d = strtotime($date);
+        $t = strtotime((string) $v); $d = strtotime($date);
         return $t !== false && $d !== false && $t < $d;
     }
 
     protected function ruleAfter(mixed $v, string $date): bool
     {
-        $t = strtotime((string) $v);
-        $d = strtotime($date);
+        $t = strtotime((string) $v); $d = strtotime($date);
         return $t !== false && $d !== false && $t > $d;
     }
 
     protected function ruleBeforeOrEqual(mixed $v, string $date): bool
     {
-        $t = strtotime((string) $v);
-        $d = strtotime($date);
+        $t = strtotime((string) $v); $d = strtotime($date);
         return $t !== false && $d !== false && $t <= $d;
     }
 
     protected function ruleAfterOrEqual(mixed $v, string $date): bool
     {
-        $t = strtotime((string) $v);
-        $d = strtotime($date);
+        $t = strtotime((string) $v); $d = strtotime($date);
         return $t !== false && $d !== false && $t >= $d;
     }
-
-    // ---- String / Length ----------------------------------------------------
 
     protected function ruleMin(mixed $v, int $min): bool
     {
@@ -496,28 +665,19 @@ class Validator
 
     protected function ruleStartsWith(mixed $v, array $params): bool
     {
-        $str = (string) $v;
-        foreach ($params as $prefix) {
-            if (str_starts_with($str, (string) $prefix)) return true;
-        }
+        foreach ($params as $p) { if (str_starts_with((string) $v, (string) $p)) return true; }
         return false;
     }
 
     protected function ruleEndsWith(mixed $v, array $params): bool
     {
-        $str = (string) $v;
-        foreach ($params as $suffix) {
-            if (str_ends_with($str, (string) $suffix)) return true;
-        }
+        foreach ($params as $p) { if (str_ends_with((string) $v, (string) $p)) return true; }
         return false;
     }
 
     protected function ruleContains(mixed $v, array $params): bool
     {
-        $str = (string) $v;
-        foreach ($params as $needle) {
-            if (str_contains($str, (string) $needle)) return true;
-        }
+        foreach ($params as $p) { if (str_contains((string) $v, (string) $p)) return true; }
         return false;
     }
 
@@ -525,8 +685,6 @@ class Validator
     {
         return (bool) preg_match($pattern, (string) $v);
     }
-
-    // ---- Number Comparisons -------------------------------------------------
 
     protected function ruleGt(mixed $v, string $other): bool
     {
@@ -565,21 +723,11 @@ class Validator
 
     protected function ruleMultipleOf(mixed $v, float $factor): bool
     {
-        if ($factor == 0) return false;
-        return fmod((float) $v, $factor) === 0.0;
+        return $factor != 0 && fmod((float) $v, $factor) === 0.0;
     }
 
-    // ---- Array --------------------------------------------------------------
-
-    protected function ruleIn(mixed $v, array $params): bool
-    {
-        return in_array((string) $v, $params, true);
-    }
-
-    protected function ruleNotIn(mixed $v, array $params): bool
-    {
-        return !in_array((string) $v, $params, true);
-    }
+    protected function ruleIn(mixed $v, array $params): bool    { return in_array((string) $v, $params, true); }
+    protected function ruleNotIn(mixed $v, array $params): bool { return !in_array((string) $v, $params, true); }
 
     protected function ruleDistinct(mixed $v): bool
     {
@@ -587,24 +735,18 @@ class Validator
         return count($v) === count(array_unique($v));
     }
 
-    // ---- Conditional Required -----------------------------------------------
-
     protected function ruleRequiredIf(string $field, mixed $v, array $params): bool
     {
-        $other = $params[0] ?? '';
-        $val   = $params[1] ?? '';
-        if ((string) $this->getValue($other) === (string) $val) {
-            return $this->ruleRequired($v);
+        if ((string) $this->getValue($params[0] ?? '') === (string) ($params[1] ?? '')) {
+            return $this->ruleRequired($field, $v);
         }
         return true;
     }
 
     protected function ruleRequiredUnless(string $field, mixed $v, array $params): bool
     {
-        $other  = $params[0] ?? '';
-        $values = array_slice($params, 1);
-        if (!in_array((string) $this->getValue($other), $values, true)) {
-            return $this->ruleRequired($v);
+        if (!in_array((string) $this->getValue($params[0] ?? ''), array_slice($params, 1), true)) {
+            return $this->ruleRequired($field, $v);
         }
         return true;
     }
@@ -612,8 +754,8 @@ class Validator
     protected function ruleRequiredWith(string $field, mixed $v, array $params): bool
     {
         foreach ($params as $other) {
-            if ($this->ruleRequired($this->getValue($other))) {
-                return $this->ruleRequired($v);
+            if ($this->ruleRequired($other, $this->getValue($other))) {
+                return $this->ruleRequired($field, $v);
             }
         }
         return true;
@@ -622,18 +764,16 @@ class Validator
     protected function ruleRequiredWithAll(string $field, mixed $v, array $params): bool
     {
         foreach ($params as $other) {
-            if (!$this->ruleRequired($this->getValue($other))) {
-                return true;
-            }
+            if (!$this->ruleRequired($other, $this->getValue($other))) return true;
         }
-        return $this->ruleRequired($v);
+        return $this->ruleRequired($field, $v);
     }
 
     protected function ruleRequiredWithout(string $field, mixed $v, array $params): bool
     {
         foreach ($params as $other) {
-            if (!$this->ruleRequired($this->getValue($other))) {
-                return $this->ruleRequired($v);
+            if (!$this->ruleRequired($other, $this->getValue($other))) {
+                return $this->ruleRequired($field, $v);
             }
         }
         return true;
@@ -642,31 +782,18 @@ class Validator
     protected function ruleRequiredWithoutAll(string $field, mixed $v, array $params): bool
     {
         foreach ($params as $other) {
-            if ($this->ruleRequired($this->getValue($other))) {
-                return true;
-            }
+            if ($this->ruleRequired($other, $this->getValue($other))) return true;
         }
-        return $this->ruleRequired($v);
+        return $this->ruleRequired($field, $v);
     }
-
-    // ---- Cross-field --------------------------------------------------------
 
     protected function ruleConfirmed(string $field, mixed $v): bool
     {
         return $v === $this->getValue($field . '_confirmation');
     }
 
-    protected function ruleSame(mixed $v, mixed $other): bool
-    {
-        return $v === $other;
-    }
-
-    protected function ruleDifferent(mixed $v, mixed $other): bool
-    {
-        return $v !== $other;
-    }
-
-    // ---- Accepted / Declined ------------------------------------------------
+    protected function ruleSame(mixed $v, mixed $other): bool      { return $v === $other; }
+    protected function ruleDifferent(mixed $v, mixed $other): bool { return $v !== $other; }
 
     protected function ruleAccepted(mixed $v): bool
     {
@@ -675,9 +802,7 @@ class Validator
 
     protected function ruleAcceptedIf(mixed $v, array $params): bool
     {
-        $other = $params[0] ?? '';
-        $val   = $params[1] ?? '';
-        if ((string) $this->getValue($other) === (string) $val) {
+        if ((string) $this->getValue($params[0] ?? '') === (string) ($params[1] ?? '')) {
             return $this->ruleAccepted($v);
         }
         return true;
@@ -690,79 +815,21 @@ class Validator
 
     protected function ruleProhibited(mixed $v): bool
     {
-        return !$this->ruleRequired($v);
+        return !$this->ruleRequired('__prohibited__', $v);
     }
 
     protected function ruleProhibitedIf(mixed $v, array $params): bool
     {
-        $other = $params[0] ?? '';
-        $val   = $params[1] ?? '';
-        if ((string) $this->getValue($other) === (string) $val) {
+        if ((string) $this->getValue($params[0] ?? '') === (string) ($params[1] ?? '')) {
             return $this->ruleProhibited($v);
         }
         return true;
     }
 
-    // ---- File ---------------------------------------------------------------
-
-    protected function ruleMimes(string $field, array $extensions): bool
-    {
-        $file = $_FILES[$field] ?? null;
-        if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-            return false;
-        }
-        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-        return in_array($ext, $extensions, true);
-    }
-
-    protected function ruleMaxSize(string $field, int $kb): bool
-    {
-        $file = $_FILES[$field] ?? null;
-        if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-            return true; // size check only relevant when file is present
-        }
-        return ($file['size'] ?? 0) <= $kb * 1024;
-    }
-
-    protected function ruleMinSize(string $field, int $kb): bool
-    {
-        $file = $_FILES[$field] ?? null;
-        if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-            return false;
-        }
-        return ($file['size'] ?? 0) >= $kb * 1024;
-    }
-
     /**
-     * Validate image dimensions.
-     * Params: width=N, height=N, min_width=N, min_height=N, max_width=N, max_height=N
+     * Rule: 'unique:table,column,ignoreId'
+     * Value must not already exist in the given database table/column.
      */
-    protected function ruleDimensions(string $field, array $params): bool
-    {
-        $file = $_FILES[$field] ?? null;
-        if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-            return false;
-        }
-
-        [$w, $h] = getimagesize($file['tmp_name']) ?: [0, 0];
-        $constraints = [];
-        foreach ($params as $param) {
-            [$key, $val] = explode('=', $param) + ['', '0'];
-            $constraints[$key] = (int) $val;
-        }
-
-        if (isset($constraints['width'])      && $w !== $constraints['width'])      return false;
-        if (isset($constraints['height'])     && $h !== $constraints['height'])     return false;
-        if (isset($constraints['min_width'])  && $w < $constraints['min_width'])   return false;
-        if (isset($constraints['min_height']) && $h < $constraints['min_height'])  return false;
-        if (isset($constraints['max_width'])  && $w > $constraints['max_width'])   return false;
-        if (isset($constraints['max_height']) && $h > $constraints['max_height'])  return false;
-
-        return true;
-    }
-
-    // ---- Database -----------------------------------------------------------
-
     protected function ruleUnique(mixed $v, string $table, string $column, ?string $ignoreId): bool
     {
         if (empty($table)) return true;
@@ -782,6 +849,10 @@ class Validator
         }
     }
 
+    /**
+     * Rule: 'exists:table,column'
+     * Value must exist in the given database table/column.
+     */
     protected function ruleExists(mixed $v, string $table, string $column): bool
     {
         if (empty($table)) return true;
@@ -795,18 +866,24 @@ class Validator
         }
     }
 
+    // =========================================================================
+    // Error Handling
+    // =========================================================================
+
+    /**
+     * Build and store an error message for the given field and rule.
+     *
+     * Priority: custom message ({field}.{rule}) → custom message ({rule}) → default.
+     * Placeholders :attribute, :field, :value, :param0, :param1, … are replaced.
+     */
     protected function addError(string $field, string $rule, array $params): void
     {
-        $customKey = "{$field}.{$rule}";
-
-        $message = $this->messages[$customKey]
+        $message = $this->messages["{$field}.{$rule}"]
             ?? $this->messages[$rule]
             ?? $this->defaultMessage($field, $rule, $params);
 
-        // Replace :attribute, :field, :value placeholders
         $label   = $this->labels[$field] ?? ucfirst(str_replace(['_', '.'], ' ', $field));
-        $message = str_replace(':attribute', $label, $message);
-        $message = str_replace(':field',     $label, $message);
+        $message = str_replace([':attribute', ':field'], $label, $message);
 
         foreach ($params as $i => $param) {
             $message = str_replace(':param' . $i, (string) $param, $message);
@@ -819,6 +896,10 @@ class Validator
         $this->errors->add($field, $message);
     }
 
+    /**
+     * Returns the default English error message for a given rule.
+     * Upload-specific messages are included alongside standard ones.
+     */
     protected function defaultMessage(string $field, string $rule, array $params): string
     {
         $label = $this->labels[$field] ?? ucfirst(str_replace(['_', '.'], ' ', $field));
@@ -830,6 +911,7 @@ class Validator
             'float'                => "The {$label} field must be a decimal number.",
             'boolean'              => "The {$label} field must be true or false.",
             'array'                => "The {$label} field must be an array.",
+            'numeric'              => "The {$label} field must be numeric.",
             'email'                => "The {$label} field must be a valid email address.",
             'url'                  => "The {$label} field must be a valid URL.",
             'ip', 'ipv4', 'ipv6'  => "The {$label} field must be a valid IP address.",
@@ -843,34 +925,45 @@ class Validator
             'alpha'                => "The {$label} field must contain only letters.",
             'alpha_num'            => "The {$label} field must contain only letters and numbers.",
             'alpha_dash'           => "The {$label} field may only contain letters, numbers, dashes, and underscores.",
-            'numeric'              => "The {$label} field must be numeric.",
             'json'                 => "The {$label} field must be a valid JSON string.",
-            'confirmed'            => "The {$label} confirmation does not match.",
-            'same'                 => "The {$label} and {$params[0]} must match.",
-            'different'            => "The {$label} and {$params[0]} must be different.",
             'min'                  => "The {$label} must be at least {$params[0]}.",
             'max'                  => "The {$label} may not be greater than {$params[0]}.",
             'between'              => "The {$label} must be between {$params[0]} and {$params[1]}.",
             'size'                 => "The {$label} must be exactly {$params[0]}.",
-            'gt'                   => "The {$label} must be greater than {$params[0]}.",
-            'gte'                  => "The {$label} must be greater than or equal to {$params[0]}.",
-            'lt'                   => "The {$label} must be less than {$params[0]}.",
-            'lte'                  => "The {$label} must be less than or equal to {$params[0]}.",
-            'digits'               => "The {$label} must be {$params[0]} digits.",
-            'digits_between'       => "The {$label} must be between {$params[0]} and {$params[1]} digits.",
-            'multiple_of'          => "The {$label} must be a multiple of {$params[0]}.",
             'starts_with'          => "The {$label} must start with one of: " . implode(', ', $params) . ".",
             'ends_with'            => "The {$label} must end with one of: " . implode(', ', $params) . ".",
             'doesnt_start_with'    => "The {$label} must not start with: " . implode(', ', $params) . ".",
             'doesnt_end_with'      => "The {$label} must not end with: " . implode(', ', $params) . ".",
             'contains'             => "The {$label} must contain one of: " . implode(', ', $params) . ".",
+            'regex', 'not_regex'   => "The {$label} field format is invalid.",
+            'gt'                   => "The {$label} must be greater than {$params[0]}.",
+            'gte'                  => "The {$label} must be greater than or equal to {$params[0]}.",
+            'lt'                   => "The {$label} must be less than {$params[0]}.",
+            'lte'                  => "The {$label} must be less than or equal to {$params[0]}.",
+            'digits'               => "The {$label} must be exactly {$params[0]} digits.",
+            'digits_between'       => "The {$label} must be between {$params[0]} and {$params[1]} digits.",
+            'multiple_of'          => "The {$label} must be a multiple of {$params[0]}.",
             'in'                   => "The selected {$label} is invalid.",
             'not_in'               => "The selected {$label} is not allowed.",
             'distinct'             => "The {$label} field has a duplicate value.",
-            'unique'               => "The {$label} has already been taken.",
-            'exists'               => "The selected {$label} does not exist.",
-            'regex'                => "The {$label} field format is invalid.",
-            'not_regex'            => "The {$label} field format is invalid.",
+
+            // Upload
+            'file'                 => "The {$label} must be an uploaded file.",
+            'image'                => "The {$label} must be an image (jpeg, png, gif, webp, bmp, svg).",
+            'video'                => "The {$label} must be a video file.",
+            'audio'                => "The {$label} must be an audio file.",
+            'document'             => "The {$label} must be a document (pdf, doc, docx, xls, xlsx, txt, csv).",
+            'mimes', 'extensions'  => "The {$label} must be a file of type: " . implode(', ', $params) . ".",
+            'mime_types'           => "The {$label} must have one of the following MIME types: " . implode(', ', $params) . ".",
+            'max_kb'               => "The {$label} may not be larger than {$params[0]} KB.",
+            'min_kb'               => "The {$label} must be at least {$params[0]} KB.",
+            'dimensions'           => "The {$label} must be exactly {$params[0]} pixels.",
+            'max_dimensions'       => "The {$label} image must not exceed {$params[0]} pixels.",
+            'min_dimensions'       => "The {$label} image must be at least {$params[0]} pixels.",
+
+            'confirmed'            => "The {$label} confirmation does not match.",
+            'same'                 => "The {$label} and {$params[0]} must match.",
+            'different'            => "The {$label} and {$params[0]} must be different.",
             'accepted'             => "The {$label} must be accepted.",
             'accepted_if'          => "The {$label} must be accepted when {$params[0]} is {$params[1]}.",
             'declined'             => "The {$label} must be declined.",
@@ -882,17 +975,16 @@ class Validator
             'required_with_all'    => "The {$label} field is required when " . implode(', ', $params) . " are all present.",
             'required_without'     => "The {$label} field is required when " . implode(' / ', $params) . " is not present.",
             'required_without_all' => "The {$label} field is required when none of " . implode(', ', $params) . " are present.",
-            'mimes'                => "The {$label} must be a file of type: " . implode(', ', $params) . ".",
-            'max_size'             => "The {$label} may not be larger than {$params[0]} kilobytes.",
-            'min_size'             => "The {$label} must be at least {$params[0]} kilobytes.",
-            'image'                => "The {$label} must be an image.",
-            'dimensions'           => "The {$label} has invalid image dimensions.",
+            'unique'               => "The {$label} has already been taken.",
+            'exists'               => "The selected {$label} does not exist.",
+
             default                => "The {$label} field is invalid.",
         };
     }
 
     /**
-     * Retrieves a value from the data array, supporting dot-notation for nested keys.
+     * Retrieve a value from the data array using dot-notation for nested keys.
+     * Returns null when any segment along the path does not exist.
      */
     protected function getValue(string $field): mixed
     {
@@ -906,7 +998,7 @@ class Validator
     }
 
     /**
-     * Checks whether a field key exists anywhere in the data (including null values).
+     * Check whether a field key exists in the data array (including null values).
      */
     protected function fieldPresent(string $field): bool
     {
@@ -920,9 +1012,13 @@ class Validator
     }
 
     /**
-     * Parses a rule string into its name and parameters.
-     * e.g. "min:3" → ['min', ['3']]
-     *      "between:1,10" → ['between', ['1', '10']]
+     * Parse a rule string into its name and parameters array.
+     *
+     * Examples:
+     *   'min:3'          → ['min',     ['3']]
+     *   'between:1,10'   → ['between', ['1', '10']]
+     *   'mimes:jpg,png'  → ['mimes',   ['jpg', 'png']]
+     *   'dimensions:800x600' → ['dimensions', ['800x600']]
      *
      * @return array{0: string, 1: string[]}
      */

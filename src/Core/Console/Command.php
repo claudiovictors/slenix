@@ -20,7 +20,7 @@ abstract class Command
     /**
      * @var string The current version of the CLI tool.
      */
-    protected static string $version = '3.0';
+    protected static string $version = '3.1.0';
 
     /**
      * Get an instance of the Console helper.
@@ -348,6 +348,12 @@ abstract class Command
             'Other' => [
                 'route:list' => 'List all registered routes',
                 'view:clear' => 'Clear compiled view cache',
+                'cache:clear' => 'Clear the application cache',
+                'storage:link' => 'Create the public/storage symlink',
+                'schedule:run' => 'Run all scheduled tasks due at this minute',
+                'down' => 'Put the application into maintenance mode',
+                'down --message="X"' => 'Custom maintenance message',
+                'up' => 'Bring the application back online',
                 'version' => 'Display installed CLI version',
                 'help' => 'Display this help screen',
             ],

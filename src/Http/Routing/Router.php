@@ -601,6 +601,14 @@ class Router
         $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
         $uriPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
 
+
+        // Auto-resolve CORS preflight (OPTIONS) requests before route matching.
+        // Only intercepts when a route at this path opts into 'cors' — routes
+        // that never declared the middleware behave exactly as before (404).
+        if ($method === 'OPTIONS' && self::handlePreflight($request, $response, $uriPath)) {
+            return;
+        }
+
         foreach (self::$routes as $route) {
             $pattern = self::buildPattern($route['pathUri']);
 
@@ -777,6 +785,52 @@ class Router
         }
 
         return $pipeline;
+    }
+
+    /**
+     * Auto-handles CORS preflight (OPTIONS) requests.
+     *
+     * Browsers send OPTIONS ahead of "non-simple" cross-origin requests
+     * (PUT/DELETE, JSON bodies, custom headers). Since routes are typically
+     * registered only for their real verb (GET, POST, ...), an incoming
+     * OPTIONS would otherwise never match and fall through to 404 — even
+     * when the target route opted into ->middleware('cors').
+     *
+     * This checks whether ANY route exists at the same URI (regardless of
+     * method) that declares 'cors' in its middleware stack, and if so, runs
+     * just the CORS middleware to answer the preflight. Routes that never
+     * use 'cors' are completely unaffected — this returns false immediately
+     * and normal dispatch (→ 404) proceeds as before.
+     *
+     * @param  Request  $request
+     * @param  Response $response
+     * @param  string   $uriPath
+     * @return bool True if the preflight was handled (caller should return).
+     */
+    private static function handlePreflight(Request $request, Response $response, string $uriPath): bool
+    {
+        foreach (self::$routes as $route) {
+            $pattern = self::buildPattern($route['pathUri']);
+
+            if (!preg_match($pattern, $uriPath)) {
+                continue;
+            }
+
+            if (!in_array('cors', $route['middleware'], true)) {
+                continue;
+            }
+
+            $resolvedClass = self::resolveMiddlewareAlias('cors');
+            $middlewareInstance = new $resolvedClass();
+
+            // The middleware itself sends status 204 and exits on OPTIONS —
+            // this call never returns normally for a valid preflight.
+            $middlewareInstance->handle($request, $response, function () {});
+
+            return true;
+        }
+
+        return false;
     }
 
     /**

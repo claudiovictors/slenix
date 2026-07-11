@@ -8,7 +8,7 @@
 | Constrói e executa consultas SQL de forma fluente e segura, usando
 | prepared statements. Suporta SELECT, WHERE, JOIN, ORDER BY, GROUP BY,
 | HAVING, LIMIT, OFFSET, eager loading de relações, agregações e paginação.
-| Retorna instâncias de Collection para encadeamento de métodos.
+| Retorna instâncias de Collection para encadeamento de métodos. 
 |
 */
 
@@ -132,7 +132,7 @@ class QueryBuilder
 
     public function where(string|callable $column, mixed $operator = null, mixed $value = null, string $boolean = 'AND'): static
     {
-        if (is_callable($column)) {
+        if ($column instanceof \Closure) {
             return $this->whereNested($column, $boolean);
         }
 
@@ -175,7 +175,7 @@ class QueryBuilder
      * @param  callable $callback Receives QueryBuilder $query.
      * @return static
      */
-    public function whereCallback(callable $callback): static
+    public function whereCallback(\Closure $callback): static
     {
         return $this->whereNested($callback, 'AND');
     }
@@ -195,7 +195,7 @@ class QueryBuilder
      * @param  callable $callback Receives QueryBuilder $query.
      * @return static
      */
-    public function orWhereCallback(callable $callback): static
+    public function orWhereCallback(\Closure $callback): static
     {
         return $this->whereNested($callback, 'OR');
     }
@@ -327,7 +327,7 @@ class QueryBuilder
      */
     public function orWhere(string|callable $column, mixed $operator = null, mixed $value = null): static
     {
-        if (is_callable($column)) {
+        if ($column instanceof \Closure) {
             return $this->whereNested($column, 'OR');
         }
 
@@ -427,10 +427,10 @@ class QueryBuilder
      *
      * @example ->where(function($q) { $q->where('a', 1)->orWhere('b', 2); })
      */
-    public function whereNested(callable $callback, string $boolean = 'AND'): static
+    public function whereNested(\Closure $callback, string $boolean = 'AND'): static
     {
         $query = new static($this->pdo, $this->table, $this->modelClass);
-        $query->paramCount = $this->paramCount; // Evita conflito de nomes de parâmetros
+        $query->paramCount = $this->paramCount;
         $callback($query);
         $this->paramCount = $query->paramCount; // Sincroniza o contador
 
@@ -496,13 +496,64 @@ class QueryBuilder
     // ORDER / GROUP / HAVING
     // =========================================================
 
+    /**
+     * Adds an "ORDER BY" clause to the query.
+     *
+     * Accepts two call styles:
+     *   - `orderBy('name', 'desc')` → orders by the given column and direction.
+     *   - `orderBy('desc')`         → orders by the model's primary key, using
+     *                                  the single argument as the direction.
+     *                                  Falls back to 'id' when called outside
+     *                                  a model context (e.g. no $modelClass).
+     *
+     * @example Book::query()->orderBy('desc')->get()
+     * @example Book::query()->orderBy('title', 'asc')->get()
+     *
+     * @param  string $column    Column name, or direction ('asc'/'desc') when used alone.
+     * @param  string $direction 'ASC' or 'DESC' (default: 'ASC'). Ignored when
+     *                            $column itself is a direction keyword.
+     * @return static
+     */
     public function orderBy(string $column, string $direction = 'ASC'): static
     {
+        $normalizedFirst = strtoupper(trim($column));
+
+        // Single-argument form: orderBy('desc') / orderBy('asc')
+        if (in_array($normalizedFirst, ['ASC', 'DESC'], true)) {
+            $direction = $normalizedFirst;
+            $column = $this->resolveDefaultOrderColumn();
+        }
+
         $this->orders[] = [
             'column' => $column,
             'direction' => strtoupper($direction) === 'DESC' ? 'DESC' : 'ASC',
         ];
+
         return $this;
+    }
+
+    /**
+     * Resolves the default column used when orderBy() is called with only
+     * a direction argument (e.g. orderBy('desc')).
+     *
+     * Uses the bound model's primary key when available, falling back to 'id'.
+     *
+     * @return string Column name to order by.
+     */
+    protected function resolveDefaultOrderColumn(): string
+    {
+        if (class_exists($this->modelClass) && method_exists($this->modelClass, 'newQuery')) {
+            try {
+                $instance = new $this->modelClass();
+                if (method_exists($instance, 'getKeyName')) {
+                    return $instance->getKeyName();
+                }
+            } catch (\Throwable) {
+                // Fall through to default below.
+            }
+        }
+
+        return 'id';
     }
 
     public function orderByDesc(string $column): static
@@ -953,7 +1004,7 @@ class QueryBuilder
      */
     public function whereHas(
         string $relation,
-        ?callable $callback = null,
+        ?\Closure $callback = null,
         string $boolean = 'AND'
     ): static {
         $instance = new $this->modelClass();
@@ -994,7 +1045,7 @@ class QueryBuilder
      * @param callable|null $callback
      * @return static Fluent.
      */
-    public function orWhereHas(string $relation, ?callable $callback = null): static
+    public function orWhereHas(string $relation, ?\Closure $callback = null): static
     {
         return $this->whereHas($relation, $callback, 'OR');
     }
@@ -1010,7 +1061,7 @@ class QueryBuilder
      * @param callable|null $callback
      * @return static Fluent.
      */
-    public function whereDoesntHave(string $relation, ?callable $callback = null): static
+    public function whereDoesntHave(string $relation, ?\Closure $callback = null): static
     {
         $instance = new $this->modelClass();
         $relationObj = $instance->$relation();
@@ -1052,7 +1103,7 @@ class QueryBuilder
         string $relation,
         string $operator = '>=',
         int $count = 1,
-        ?callable $callback = null
+        ?\Closure $callback = null
     ): static {
         $instance = new $this->modelClass();
         $relationObj = $instance->$relation();

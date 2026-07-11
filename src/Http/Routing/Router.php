@@ -443,24 +443,37 @@ class Router
     /**
      * Generates the URL for a named route, substituting URI parameters.
      *
-     * Required parameters must be present in `$params`. Optional parameters
-     * (declared as `{param?}`) are simply omitted when not provided.
+     * Required parameters (declared as `{param}`) must be present in `$params`.
+     * Optional parameters (declared as `{param?}`) are simply omitted from the
+     * final URL when not provided.
+     *
+     * Parameter values may be `string`, `int`, `float`, or any object implementing
+     * `Stringable` (e.g. a Slug or Uuid value object) — each is safely normalized
+     * to a string before substitution. This allows the same named route to be
+     * resolved with either a numeric ID or a slug, depending on the caller's needs.
      *
      * Example:
      * ```php
      * // Route: /users/{id}  named 'users.show'
-     * Router::route('users.show', ['id' => 42]); // → '/users/42'
+     * Router::route('users.show', ['id' => 42]);          // → '/users/42'
+     * Router::route('users.show', ['id' => $user->id]);   // → '/users/42' (int)
+     *
+     * // Route: /books/{slug}  named 'books.show'
+     * Router::route('books.show', ['slug' => 'dom-casmurro']); // → '/books/dom-casmurro'
      *
      * // Route: /search/{query?}  named 'search'
-     * Router::route('search');                   // → '/search'
-     * Router::route('search', ['query' => 'php']); // → '/search/php'
+     * Router::route('search');                     // → '/search'
+     * Router::route('search', ['query' => 'php']);  // → '/search/php'
      * ```
      *
-     * @param  string  $name   The route name.
-     * @param  array   $params Key-value pairs for URI parameter substitution.
-     * @return string|null     The generated URL, or `null` if the route is not found.
+     * @param  string $name   The route name.
+     * @param  array  $params Key-value pairs for URI parameter substitution.
+     *                        Values may be string, int, float, or Stringable.
+     * @return string|null    The generated URL, or `null` if the route is not found.
      *
      * @throws \RuntimeException If a required URI parameter is missing from `$params`.
+     * @throws \RuntimeException If a parameter value cannot be safely converted to a string
+     *                            (e.g. an array or a non-Stringable object).
      */
     public static function route(string $name, array $params = []): ?string
     {
@@ -484,7 +497,10 @@ class Router
                         );
                     }
 
-                    $url = str_replace($token, $params[$placeholder] ?? '', $url);
+                    $value = $params[$placeholder] ?? '';
+                    $replacement = self::normalizeRouteParam($placeholder, $name, $value);
+
+                    $url = str_replace($token, $replacement, $url);
                 }
             }
 
@@ -494,6 +510,37 @@ class Router
         }
 
         return null;
+    }
+
+    /**
+     * Normalizes a route parameter value into a string safe for URI substitution.
+     *
+     * `str_replace()` only accepts `string` or `array` for its replacement
+     * argument — passing an `int` or `float` directly throws a `TypeError` on
+     * PHP 8+. This helper converts any supported scalar or Stringable value
+     * (e.g. a numeric ID, a slug, or a value object like Uuid) into a plain
+     * string, so route parameters can be provided as either IDs or slugs
+     * interchangeably.
+     *
+     * @param  string $placeholder Name of the URI parameter being resolved (for error messages).
+     * @param  string $routeName   Name of the route being resolved (for error messages).
+     * @param  mixed  $value       Raw parameter value supplied by the caller.
+     * @return string              String-safe replacement value.
+     *
+     * @throws \RuntimeException If the value cannot be safely converted to a string.
+     */
+    private static function normalizeRouteParam(string $placeholder, string $routeName, mixed $value): string
+    {
+        return match (true) {
+            is_string($value) => $value,
+            is_int($value), is_float($value) => (string) $value,
+            $value instanceof \Stringable => (string) $value,
+            $value === '' => '',
+            default => throw new \RuntimeException(
+                "Parameter '{$placeholder}' for route '{$routeName}' must be string, int, float, or Stringable, "
+                . gettype($value) . ' given.'
+            ),
+        };
     }
 
     /**

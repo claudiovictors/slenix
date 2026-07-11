@@ -125,7 +125,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
      * @example $collection->first()
      * @example $collection->first(fn($u) => $u->active)
      */
-    public function first(?callable $callback = null, $default = null)
+    public function first(?\Closure $callback = null, $default = null)
     {
         if ($callback === null) {
             return $this->items[0] ?? $default;
@@ -143,7 +143,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
     /**
      * Returns the last item
      */
-    public function last(?callable $callback = null, $default = null)
+    public function last(?\Closure $callback = null, $default = null)
     {
         if ($callback === null) {
             return !empty($this->items) ? end($this->items) : $default;
@@ -226,7 +226,7 @@ class Collection implements ArrayAccess, Countable, IteratorAggregate, JsonSeria
      *
      * @example $collection->filter(fn($u) => $u->active)
      */
-    public function filter(?callable $callback = null): self
+    public function filter(?\Closure $callback = null): self
     {
         if ($callback === null) {
             return new static(array_filter($this->items));

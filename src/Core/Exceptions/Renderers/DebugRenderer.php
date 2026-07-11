@@ -26,46 +26,20 @@ class DebugRenderer implements ExceptionRenderer
     public function render(\Throwable $exception): string
     {
         $appName   = $this->esc($this->appName());
-        $appVer    = $this->esc($this->appVersion());
-        $phpVer    = $this->esc(PHP_VERSION);
         $exClass   = get_class($exception);
         $message   = $this->esc($exception->getMessage());
         $file      = $exception->getFile();
         $line      = $exception->getLine();
         $shortFile = $this->esc($this->inspector->shortenPath($file));
 
-        // Short class name for title
         $parts     = explode('\\', $exClass);
         $shortName = $this->esc(array_pop($parts));
         $exClassE  = $this->esc($exClass);
 
-        // HTTP method + URL
-        $method    = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
-        $methodCls = 'ign-method ign-method-' . strtolower($method);
-        $url       = ($_SERVER['REQUEST_SCHEME'] ?? 'http')
-            . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost')
-            . ($_SERVER['REQUEST_URI'] ?? '/');
-        $urlE      = $this->esc($url);
-
-        // Status code badge class
-        $statusCode = $exception instanceof \Slenix\Core\Exceptions\SlenixException
-            ? $exception->getStatusCode() : 500;
-
-        // Source code
         $sourceRows = $this->inspector->buildRows($file, $line);
 
-        // Stack frames
-        $frames     = $this->tracer->parse($exception);
-        $framesHtml = $this->buildFramesHtml($frames);
-
-        // Context
-        $contextHtml = $this->buildContextHtml($this->context->collect());
-
-        // Date
-        $date = date('Y/m/d H:i:s.') . substr(microtime(), 2, 3) . ' UTC';
-
-        // Method badge class for overview
-        $ovMethodCls = $method === 'GET' ? 'ign-ov-badge ign-ov-get' : 'ign-ov-badge ign-ov-post';
+        $frames = $this->tracer->parse($exception);
+        //[$framesHtml, $collapsedCount] = $this->buildFramesHtml($frames);
 
         $css = DebugPageAssets::css();
         $js  = DebugPageAssets::js();
@@ -82,123 +56,40 @@ class DebugRenderer implements ExceptionRenderer
 </head>
 <body>
 
-<!-- ── Top bar ─────────────────────────────────────────────── -->
-<div class="ign-topbar">
-    <div class="ign-topbar-icon">!</div>
-    <span class="ign-topbar-title">Internal Server Error</span>
-    <button class="ign-topbar-copy">⎘ Copy as Markdown</button>
-</div>
+<div class="err-overlay">
+  <div class="err-card">
 
-<div class="ign-shell">
-
-<!-- ══════════════════════════════════════════════════════════
-     LEFT PANEL
-════════════════════════════════════════════════════════════ -->
-<div class="ign-left">
-
-    <!-- Error heading -->
-    <div class="ign-error-type">Error</div>
-    <h1 class="ign-error-title">{$shortName}</h1>
-    <p class="ign-error-message">{$message}</p>
-
-    <!-- Meta badges -->
-    <div class="ign-meta-row">
-        <span class="ign-badge">{$appName} <strong>{$appVer}</strong></span>
-        <span class="ign-badge">PHP <strong>{$phpVer}</strong></span>
-        <span class="ign-badge ign-badge-red">▲ UNHANDLED</span>
-        <span class="ign-badge ign-badge-code">CODE {$statusCode}</span>
-    </div>
-
-    <!-- Request URL bar -->
-    <div class="ign-request-bar">
-        <span class="{$methodCls}">{$method}</span>
-        <span class="ign-url">{$urlE}</span>
-        <button class="ign-url-copy" title="Copy URL">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-            </svg>
-        </button>
-    </div>
-
-    <!-- Overview -->
-    <div class="ign-section-lbl">Overview</div>
-    <table class="ign-overview">
-        <tr>
-            <td>DATE</td>
-            <td><span style="font-family:var(--mono);font-size:.78rem;color:var(--text2)">{$date}</span></td>
-        </tr>
-        <tr>
-            <td>STATUS CODE</td>
-            <td><span class="ign-ov-badge ign-ov-500">▲ {$statusCode}</span></td>
-        </tr>
-        <tr>
-            <td>METHOD</td>
-            <td><span class="{$ovMethodCls}">⊕ {$method}</span></td>
-        </tr>
-        <tr>
-            <td>EXCEPTION</td>
-            <td><span style="font-family:var(--mono);font-size:.73rem;color:var(--text2)">{$exClassE}</span></td>
-        </tr>
-    </table>
-
-    <!-- Exception trace / source -->
-    <div class="ign-trace-card">
-        <div class="ign-trace-header">
-            <div class="ign-trace-icon">▲</div>
-            <span class="ign-trace-label">Exception trace</span>
+    <div class="err-topbar">
+        <div class="err-nav">
+            <button class="err-nav-btn" disabled>←</button>
+            <button class="err-nav-btn" disabled>→</button>
+            <span class="err-nav-label">1 of 1 error</span>
         </div>
+        <div class="err-topbar-right">
+            <button class="err-icon-btn err-theme-toggle" title="Toggle theme">
+                <svg class="err-theme-icon" viewBox="0 0 24 24"></svg>
+            </button>
+            <button class="err-icon-btn err-close" title="Close">✕</button>
+        </div>
+    </div>
 
-        <div class="ign-frame-file">
-            <span>{$shortFile}</span>
-            <div style="display:flex;align-items:center;gap:.4rem">
+    <div class="err-body">
+        <h1 class="err-title">Unhandled Runtime Error</h1>
+        <p class="err-message">{$exClassE}: {$message}</p>
+
+        <h2 class="err-section-title">Source</h2>
+        <div class="err-source">
+            <div class="err-source-file">
                 <span>{$shortFile}:{$line}</span>
-                <button class="ign-frame-close">✕</button>
             </div>
+            <div class="err-code">{$sourceRows}</div>
         </div>
 
-        <div class="ign-code-body">{$sourceRows}</div>
+        
     </div>
 
-</div><!-- /ign-left -->
-
-<!-- ══════════════════════════════════════════════════════════
-     RIGHT PANEL
-════════════════════════════════════════════════════════════ -->
-<div class="ign-right">
-    <div class="ign-tabs">
-        <button class="ign-tab active" data-panel="ign-panel-trace">Stack trace</button>
-        <button class="ign-tab" data-panel="ign-panel-request">Request</button>
-        <button class="ign-tab" data-panel="ign-panel-context">Context</button>
-    </div>
-
-    <div id="ign-panel-trace" class="ign-tab-panel active">
-        <div class="frame-list">{$framesHtml}</div>
-    </div>
-
-    <div id="ign-panel-request" class="ign-tab-panel">
-        {$contextHtml}
-    </div>
-
-    <div id="ign-panel-context" class="ign-tab-panel">
-        <div class="ctx-group">
-            <div class="ctx-group-title">PHP</div>
-            <div class="ctx-row"><span class="ctx-key">version</span><span class="ctx-val">{$phpVer}</span></div>
-            <div class="ctx-row"><span class="ctx-key">sapi</span><span class="ctx-val"><?= PHP_SAPI ?></span></div>
-            <div class="ctx-row"><span class="ctx-key">os</span><span class="ctx-val"><?= PHP_OS_FAMILY ?></span></div>
-            <div class="ctx-row"><span class="ctx-key">memory_limit</span><span class="ctx-val"><?= ini_get('memory_limit') ?></span></div>
-            <div class="ctx-row"><span class="ctx-key">max_execution_time</span><span class="ctx-val"><?= ini_get('max_execution_time') ?>s</span></div>
-        </div>
-        <div class="ctx-group">
-            <div class="ctx-group-title">Application</div>
-            <div class="ctx-row"><span class="ctx-key">name</span><span class="ctx-val">{$appName}</span></div>
-            <div class="ctx-row"><span class="ctx-key">version</span><span class="ctx-val">{$appVer}</span></div>
-            <div class="ctx-row"><span class="ctx-key">debug</span><span class="ctx-val">true</span></div>
-            <div class="ctx-row"><span class="ctx-key">timezone</span><span class="ctx-val"><?= date_default_timezone_get() ?></span></div>
-        </div>
-    </div>
-</div><!-- /ign-right -->
-
-</div><!-- /ign-shell -->
+  </div>
+</div>
 
 {$js}
 </body>
@@ -210,67 +101,55 @@ HTML;
     // Private helpers
     // -------------------------------------------------------------------------
 
-    private function buildFramesHtml(array $frames): string
+    /**
+     * Builds the call stack list. App frames render normally; vendor/framework
+     * frames are marked as collapsible and hidden by default (toggle in JS).
+     *
+     * @return array{0: string, 1: int} [html, collapsedCount]
+     */
+    private function buildFramesHtml(array $frames): array
     {
         if (empty($frames)) {
-            return '<p class="ctx-empty">No stack trace available.</p>';
+            return ['<p class="frame-loc">No stack trace available.</p>', 0];
         }
 
         $html = '';
+        $collapsed = 0;
 
         foreach ($frames as $frame) {
-            $isApp    = $frame['is_app'];
-            $cls      = 'frame-item' . ($isApp ? ' frame-app' : ' frame-vendor');
+            $isApp = $frame['is_app'];
+            $rowCls = 'frame-row' . ($isApp ? '' : ' frame-vendor is-collapsed');
+
+            if (!$isApp) {
+                $collapsed++;
+            }
 
             $call = $frame['class']
-                ? $this->esc($frame['class']) . '<span style="color:var(--muted)">::</span>' . $this->esc($frame['function'])
+                ? $this->esc($frame['class']) . '::' . $this->esc($frame['function'])
                 : $this->esc($frame['function']);
 
-            $args = $frame['args']
-                ? '<span style="color:var(--muted)">(' . $this->esc($frame['args']) . ')</span>'
-                : '<span style="color:var(--muted)">()</span>';
-
             $loc = $frame['line']
-                ? $this->esc($frame['short_file']) . '<span class="frame-line-no">:' . $frame['line'] . '</span>'
-                : '<span style="color:var(--dim)">' . $this->esc($frame['short_file']) . '</span>';
+                ? $this->esc($frame['short_file']) . ':' . $frame['line']
+                : $this->esc($frame['short_file']);
 
             $html .= <<<FRAME
-<div class="{$cls}">
-    <div style="display:flex;align-items:flex-start;gap:.3rem">
-        <span class="frame-dot"></span>
-        <span class="frame-fn-name">{$call}{$args}</span>
-    </div>
-    <div class="frame-file-loc">{$loc}</div>
+<div class="{$rowCls}">
+    <div class="frame-fn">{$call}</div>
+    <div class="frame-loc">{$loc}</div>
 </div>
 FRAME;
         }
 
-        return $html;
+        return [$html, $collapsed];
     }
 
-    private function buildContextHtml(array $groups): string
+    private function collapsedToggle(int $count): string
     {
-        $html = '';
-
-        foreach ($groups as $groupName => $rows) {
-            $html .= '<div class="ctx-group">';
-            $html .= '<div class="ctx-group-title">' . $this->esc($groupName) . '</div>';
-
-            if (empty($rows)) {
-                $html .= '<div class="ctx-empty">Empty</div>';
-            } else {
-                foreach ($rows as $key => $value) {
-                    $html .= '<div class="ctx-row">'
-                        . '<span class="ctx-key">' . $this->esc($key) . '</span>'
-                        . '<span class="ctx-val">' . $this->esc($value) . '</span>'
-                        . '</div>';
-                }
-            }
-
-            $html .= '</div>';
+        if ($count === 0) {
+            return '';
         }
 
-        return $html;
+        return '<button class="err-collapsed-toggle">Show collapsed frames</button>';
     }
 
     private function esc(string $value): string

@@ -7,10 +7,10 @@
     <title>404 - Page Not Found</title>
     <style>
         :root {
-            --bg: #000000;
+            --bg: #0a0a0c;
             --text-main: #ffffff;
             --text-muted: #888888;
-            --accent: #FF2D20;
+            --accent: #ff2d55;
         }
 
         body {

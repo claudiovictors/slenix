@@ -31,6 +31,25 @@ abstract class Command
         return new Console();
     }
 
+    public static function welcome(): void
+    {
+        $c = self::console();
+        $version = env('APP_VERSION') ?? self::$version;
+
+        echo PHP_EOL;
+        echo $c->colorize('   _____ __            _         ', 'primary') . PHP_EOL;
+        echo $c->colorize('  / ___// /__  ____  (_)_  __   ', 'primary') . PHP_EOL;
+        echo $c->colorize('  \\__ \\/ / _ \\/ __ \\/ / |/_/   ', 'primary') . PHP_EOL;
+        echo $c->colorize(' ___/ / /  __/ / / / />  <     ', 'purple') . PHP_EOL;
+        echo $c->colorize('/____/_/\\___/_/ /_/_/_/|_|     ', 'purple') . PHP_EOL;
+        echo PHP_EOL;
+
+        self::success("Application ready! v{$version}");
+        echo '  ' . $c->muted('Run ') . $c->colorize('php celestial serve', 'success', true)
+            . $c->muted(' to start building.') . PHP_EOL;
+        echo PHP_EOL;
+    }
+
     /**
      * Prints a modern formatted CLI message line.
      *

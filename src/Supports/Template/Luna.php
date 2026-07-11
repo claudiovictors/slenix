@@ -655,6 +655,7 @@ class Luna
     private function compile(string $source): string
     {
         [$source, $verbatimPlaceholders] = $this->extractVerbatim($source);
+        $source = $this->compileStrAlias($source);
         $source = $this->compileComments($source);
         $source = $this->compileDirectives($source);
         $source = $this->compileRawEchos($source);
@@ -913,7 +914,7 @@ class Luna
         // @empty / @endempty
         $source = preg_replace_callback(
             '/@empty\s*\((.+?)\)\s*$/m',
-            fn(array $m): string => '<?php if(empty(' . trim($m[1]) . ')): ?>',
+            fn(array $m): string => '<?php if(!$__engine->hasItems(' . trim($m[1]) . ')): ?>',
             $source
         ) ?? $source;
         $source = preg_replace('/@endempty\b/', '<?php endif; ?>', $source) ?? $source;
@@ -1027,11 +1028,11 @@ class Luna
                 return
                     '<?php ' .
                     '$__items = ' . $this->extractIterableFromForeach($expr) . '; ' .
-                    '$__parentLoop = isset($loop) ? $loop : null; ' .
+                    '$__loopStack[] = $loop ?? null; ' .
                     '$__depth = isset($__depth) ? $__depth + 1 : 1; ' .
                     '$loop = (object)["index"=>0,"iteration"=>1,"count"=>count((array)$__items),' .
                     '"first"=>true,"last"=>false,"even"=>false,"odd"=>true,' .
-                    '"depth"=>$__depth,"parent"=>$__parentLoop]; ' .
+                    '"depth"=>$__depth,"parent"=>end($__loopStack)]; ' .
                     'foreach(' . $expr . '): ' .
                     '$loop->first = ($loop->index === 0); ' .
                     '$loop->last  = ($loop->index === $loop->count - 1); ' .
@@ -1044,7 +1045,9 @@ class Luna
 
         $source = preg_replace(
             '/@endforeach\b/',
-            '<?php $loop->index++; $loop->iteration++; $loop->first = false; endforeach; $__depth = max(1, $__depth - 1); $loop = $__parentLoop; ?>',
+            '<?php $loop->index++; $loop->iteration++; $loop->first = false; endforeach; '
+            . '$__depth = isset($__depth) ? max(0, $__depth - 1) : 0; '
+            . '$loop = array_pop($__loopStack); ?>',
             $source
         ) ?? $source;
 
@@ -1066,7 +1069,7 @@ class Luna
         // @forelse / @empty / @endforelse
         $source = preg_replace_callback(
             '/@forelse\s*\((.+?)\s+as\s+(.+?)\)\s*$/m',
-            fn(array $m): string => '<?php $__items=' . trim($m[1]) . '; if(!empty($__items)): foreach($__items as ' . trim($m[2]) . '): ?>',
+            fn(array $m): string => '<?php $__items=' . trim($m[1]) . '; if($__engine->hasItems($__items)): foreach($__items as ' . trim($m[2]) . '): ?>',
             $source
         ) ?? $source;
         $source = preg_replace('/@empty\s*$/m', '<?php endforeach; else: ?>', $source) ?? $source;
@@ -1890,6 +1893,39 @@ class Luna
         return $text;
     }
 
+    /**
+     * Determines whether a value should be treated as "has items" for
+     * @forelse / @empty purposes. Unlike PHP's empty(), this works
+     * correctly for objects (Collection, any Countable, any Traversable),
+     * not just arrays and scalars.
+     *
+     * @param mixed $items
+     * @return bool
+     */
+    public function hasItems(mixed $items): bool
+    {
+        if ($items === null) {
+            return false;
+        }
+
+        if (is_array($items)) {
+            return count($items) > 0;
+        }
+
+        if ($items instanceof \Countable) {
+            return count($items) > 0;
+        }
+
+        if ($items instanceof \Traversable) {
+            foreach ($items as $__ignored) {
+                return true;
+            }
+            return false;
+        }
+
+        return !empty($items);
+    }
+
     // =========================================================================
     // Logging
     // =========================================================================
@@ -1932,6 +1968,23 @@ class Luna
         $relative = str_replace(self::$viewsDir . DIRECTORY_SEPARATOR, '', $viewPath);
         $relative = str_replace('.luna.php', '', $relative);
         return str_replace(DIRECTORY_SEPARATOR, '.', $relative);
+    }
+
+    /**
+     * Rewrites unqualified `Str::` references to `\Str::` so they resolve
+     * against the global namespace alias (see helpers.php) regardless of
+     * the namespace the compiled template happens to be eval'd in.
+     *
+     * Without this, `{{ Str::slug($title) }}` would fail to resolve because
+     * eval() executes inside Luna's own namespace (Slenix\Supports\Template),
+     * where no `Str` class exists.
+     *
+     * @param string $source Raw template source (before echo/directive compilation).
+     * @return string
+     */
+    private function compileStrAlias(string $source): string
+    {
+        return preg_replace('/(?<!\\\\)\bStr::/', '\\\\Str::', $source) ?? $source;
     }
 
     /**

@@ -29,8 +29,8 @@ class ServeCommand extends Command
     /** @var array CLI arguments received from the Celestial entry point. */
     private array $args;
 
-    private const DEFAULT_PORT    = 8080;
-    private const DEFAULT_WS_PORT = 8081;
+    private const DEFAULT_PORT = 3000;
+    private const DEFAULT_WS_PORT = 3001;
 
     /**
      * @param array $args Raw argv array forwarded from the Celestial CLI.
@@ -51,8 +51,8 @@ class ServeCommand extends Command
      */
     public function execute(): void
     {
-        $c      = self::console();
-        $port   = self::DEFAULT_PORT;
+        $c = self::console();
+        $port = self::DEFAULT_PORT;
         $wsPort = self::DEFAULT_WS_PORT;
         $withWs = false;
 
@@ -73,7 +73,7 @@ class ServeCommand extends Command
             exit(1);
         }
 
-        $host      = '127.0.0.1';
+        $host = '127.0.0.1';
         $publicDir = PUBLIC_PATH;
 
         // ── Header ────────────────────────────────────────────────────────────
@@ -147,7 +147,7 @@ class ServeCommand extends Command
             PHP_BINARY
             . ' -S ' . escapeshellarg("{$host}:{$port}")
             . ' -t ' . escapeshellarg($publicDir)
-            . ' '    . escapeshellarg($router)
+            . ' ' . escapeshellarg($router)
         );
     }
 
@@ -265,8 +265,8 @@ PHP;
      */
     private function startWithWebSocket(
         string $host,
-        int    $httpPort,
-        int    $wsPort,
+        int $httpPort,
+        int $wsPort,
         string $publicDir
     ): void {
         if (function_exists('pcntl_fork')) {
@@ -291,7 +291,7 @@ PHP;
     private function forkWebSocket(string $host, int $wsPort): void
     {
         $projectRoot = dirname(__DIR__, 3);
-        $pid         = pcntl_fork();
+        $pid = pcntl_fork();
 
         if ($pid === -1) {
             $this->spawnWebSocket($host, $wsPort);
@@ -338,7 +338,7 @@ PHP;
     private function spawnWebSocket(string $host, int $wsPort): void
     {
         $projectRoot = addslashes(dirname(__DIR__, 3));
-        $phpBinary   = PHP_BINARY;
+        $phpBinary = PHP_BINARY;
 
         $inline = <<<PHP
 require_once '{$projectRoot}/vendor/autoload.php';
@@ -352,7 +352,7 @@ foreach (Slenix\\Http\\Routing\\Router::getWebSocketRoutes() as \$path => \$cls)
 \$server->start();
 PHP;
 
-        $escaped     = escapeshellarg($inline);
+        $escaped = escapeshellarg($inline);
         $descriptors = [
             0 => ['pipe', 'r'],
             1 => ['file', '/dev/null', 'a'],
@@ -361,8 +361,21 @@ PHP;
 
         $process = proc_open("{$phpBinary} -r {$escaped}", $descriptors, $pipes);
 
-        if (is_resource($process)) {
-            proc_close($process);
+        if (!is_resource($process)) {
+            return;
         }
+
+        // Close the unused stdin pipe so the child never blocks waiting for input.
+        fclose($pipes[0]);
+
+        // IMPORTANT: never call proc_close() here — it blocks the parent until
+        // the child process exits, and the WebSocket server runs forever by
+        // design. Keep the process handle open and terminate it only when the
+        // dev server itself shuts down (Ctrl+C / script end).
+        register_shutdown_function(static function () use ($process): void {
+            if (is_resource($process)) {
+                proc_terminate($process);
+            }
+        });
     }
 }

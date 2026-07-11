@@ -149,6 +149,37 @@ class Console
     }
 
     /**
+     * Renders a dotted key-value line (Laravel "queue:monitor" style).
+     *
+     * Example:
+     *   default .......................................... [10] OK
+     *
+     * @param string $label  Left-side label.
+     * @param string $status Right-side status/value.
+     * @param string $color  Palette color for the status.
+     * @param int    $width  Total line width.
+     *
+     * @return void
+     */
+    public function dotted(
+        string $label,
+        string $status,
+        string $color = 'success',
+        int $width = 72
+    ): void {
+        $plainStatusLen = mb_strlen($status);
+        $dots = max(3, $width - mb_strlen($label) - $plainStatusLen - 2);
+
+        echo ' '
+            . $this->white($label)
+            . ' '
+            . $this->muted(str_repeat('.', $dots))
+            . ' '
+            . $this->colorize($status, $color, true)
+            . PHP_EOL;
+    }
+
+    /**
      * Renders a muted horizontal separator line.
      *
      * Useful for visually separating sections in CLI output.

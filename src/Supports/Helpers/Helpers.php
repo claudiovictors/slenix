@@ -18,21 +18,23 @@ declare(strict_types=1);
 
 use Slenix\Http\Request;
 use Slenix\Http\Response;
-use Slenix\Supports\Auth\Auth;
 use Slenix\Http\Routing\Router;
-use Slenix\Supports\Cache\Cache;
-use Slenix\Supports\Logging\Log;
-use Slenix\Supports\Template\Luna;
-use Slenix\Supports\Storage\Storage;
+use Slenix\Supports\Auth\Auth;
 use Slenix\Supports\Auth\AuthManager;
-use Slenix\Supports\Security\Session;
-use Slenix\Supports\Validation\Validator;
-use Slenix\Supports\Libraries\FlashMessage;
 use Slenix\Supports\Auth\Guards\GuardInterface;
+use Slenix\Supports\Cache\Cache;
 use Slenix\Supports\Libraries\Collection;
+use Slenix\Supports\Libraries\Date;
+use Slenix\Supports\Libraries\FlashMessage;
 use Slenix\Supports\Libraries\RedirectResponse;
+use Slenix\Supports\Libraries\Str;
+use Slenix\Supports\Logging\Log;
 use Slenix\Supports\Security\CSRF;
+use Slenix\Supports\Security\Session;
+use Slenix\Supports\Storage\Storage;
+use Slenix\Supports\Template\Luna;
 use Slenix\Supports\Validation\ValidationException;
+use Slenix\Supports\Validation\Validator;
 
 // ============================================================================
 // CONSTANTS
@@ -47,6 +49,19 @@ defined('ROUTES_PATH') or define('ROUTES_PATH', ROOT_PATH . '/routes');
 defined('VIEWS_PATH') or define('VIEWS_PATH', ROOT_PATH . '/views');
 defined('STORAGE_PATH') or define('STORAGE_PATH', ROOT_PATH . '/storage');
 defined('CONFIG_PATH') or define('CONFIG_PATH', ROOT_PATH . '/src/Config');
+
+// ============================================================================
+// GLOBAL CLASS ALIASES
+// ============================================================================
+
+if (!class_exists('Str', false)) {
+    /**
+     * Aliases Slenix\Supports\Libraries\Str to the global namespace as `Str`,
+     * so Luna templates can call it directly (e.g. {{ Str::slug($title) }})
+     * without importing the fully-qualified class name in every view.
+     */
+    class_alias(Str::class, 'Str');
+}
 
 // ============================================================================
 // VIEWS
@@ -1772,6 +1787,59 @@ if (!function_exists('trace')) {
 // DATES
 // ============================================================================
 
+if (!function_exists('app_timezone')) {
+    /**
+     * Returns the application's configured timezone identifier.
+     *
+     * @return string e.g. 'UTC', 'Africa/Luanda'.
+     */
+    function app_timezone(): string
+    {
+        return date_default_timezone_get();
+    }
+}
+
+if (!function_exists('app_locale')) {
+    /**
+     * Returns the application's configured locale code, as resolved
+     * during boot (see Kernel::configureLocale()).
+     *
+     * @return string e.g. 'en', 'pt'.
+     */
+    function app_locale(): string
+    {
+        return defined('APP_LOCALE') ? APP_LOCALE : (string) env('APP_LOCALE', 'en');
+    }
+}
+
+if (!function_exists('date_now')) {
+    /**
+     * Returns a Date instance representing the current moment.
+     * Shorthand for \Slenix\Supports\Libraries\Date::now().
+     *
+     * @return Date
+     */
+    function date_now(): Date
+    {
+        return Date::now();
+    }
+}
+
+if (!function_exists('date_parse')) {
+    /**
+     * Parses a date/time string into a Date instance.
+     * Shorthand for \Slenix\Supports\Libraries\Date::parse().
+     *
+     * @param  string      $value
+     * @param  string|null $format
+     * @return Date
+     */
+    function date_parse(string $value, ?string $format = null): Date
+    {
+        return Date::parse($value, $format);
+    }
+}
+
 if (!function_exists('now')) {
     /**
      * Return the current date and time as a DateTimeImmutable.
@@ -2707,6 +2775,10 @@ if (class_exists(Luna::class)) {
     Luna::share('flash', fn(): FlashMessage => flash());
     Luna::share('errors', fn(): \Slenix\Supports\Validation\MessageBag => errors());
 
+    // Timezone / Locale
+    Luna::share('app_locale', fn(): string => app_locale());
+    Luna::share('app_timezone', fn(): string => app_timezone());
+
     // URL / navigation
     Luna::share('is_active', fn(string $p, string $a = 'active', string $i = ''): string => is_active($p, $a, $i));
     Luna::share('asset', fn(string $path): string => asset($path));
@@ -2725,6 +2797,8 @@ if (class_exists(Luna::class)) {
     Luna::share('now', fn(): \DateTimeImmutable => now());
     Luna::share('format_date', fn(string $d, string $f = 'd/m/Y H:i:s'): ?string => format_date($d, $f));
     Luna::share('human_date', fn(string|\DateTimeInterface $d): string => human_date($d));
+    Luna::share('date_now', fn(): Date => date_now());
+    Luna::share('date_parse', fn(string $v, ?string $f = null): Date => date_parse($v, $f));
 
     // Numbers / formatting
     Luna::share('currency', fn(float $v, string $s = '$'): string => currency($v, $s));

@@ -37,11 +37,11 @@ class RedisConnection
             return;
         }
 
-        $host    = (string) EnvLoader::get('REDIS_HOST', '127.0.0.1');
-        $port    = (int) EnvLoader::get('REDIS_PORT', 6379);
+        $host = (string) EnvLoader::get('REDIS_HOST', '127.0.0.1');
+        $port = (int) EnvLoader::get('REDIS_PORT', 6379);
         $timeout = (float) EnvLoader::get('REDIS_TIMEOUT', 2.5);
 
-        $errno  = 0;
+        $errno = 0;
         $errstr = '';
 
         $socket = @stream_socket_client(
@@ -77,10 +77,24 @@ class RedisConnection
      */
     public static function disconnect(): void
     {
-        if (self::$socket !== null && is_resource(self::$socket)) {
+        if (self::isConnected()) {
             fclose(self::$socket);
         }
         self::$socket = null;
+    }
+
+    /**
+     * Checks whether an active socket connection is currently open.
+     *
+     * Does not attempt to connect — only inspects the current in-memory
+     * socket state. Useful for conditionally skipping cleanup or health
+     * checks without triggering a new connection attempt.
+     *
+     * @return bool
+     */
+    public static function isConnected(): bool
+    {
+        return self::$socket !== null && is_resource(self::$socket);
     }
 
     /**
@@ -157,7 +171,8 @@ class RedisConnection
      */
     public static function del(string ...$keys): int
     {
-        if (empty($keys)) return 0;
+        if (empty($keys))
+            return 0;
         return (int) self::command(['DEL', ...$keys]);
     }
 
@@ -230,7 +245,7 @@ class RedisConnection
     public static function keys(string $pattern, int $count = 500): array
     {
         $cursor = '0';
-        $found  = [];
+        $found = [];
 
         do {
             $reply = self::command(['SCAN', $cursor, 'MATCH', $pattern, 'COUNT', $count]);
@@ -252,7 +267,8 @@ class RedisConnection
     public static function flushByPattern(string $pattern): int
     {
         $keys = self::keys($pattern);
-        if (empty($keys)) return 0;
+        if (empty($keys))
+            return 0;
         return self::del(...$keys);
     }
 
@@ -307,7 +323,7 @@ class RedisConnection
             throw new \RuntimeException('Redis: connection closed unexpectedly');
         }
 
-        $type    = $line[0];
+        $type = $line[0];
         $payload = substr($line, 1);
 
         return match ($type) {
@@ -324,13 +340,26 @@ class RedisConnection
      * Reads a bulk string payload of the given length.
      *
      * @param  int $length
+     * @throws \RuntimeException If the connection closes before the full payload is read.
      * @return string|null Null represents a Redis nil bulk string ($-1).
      */
     protected static function readBulkString(int $length): ?string
     {
-        if ($length === -1) return null;
+        if ($length === -1) {
+            return null;
+        }
 
-        $data = self::readBytes($length + 2); // +2 for trailing \r\n
+        $expected = $length + 2; // +2 for trailing \r\n
+        $data = self::readBytes($expected);
+
+        if (strlen($data) < $expected) {
+            self::disconnect();
+            throw new \RuntimeException(
+                "Redis: connection closed before reading full bulk string "
+                . "(expected {$expected} bytes, got " . strlen($data) . ")"
+            );
+        }
+
         return substr($data, 0, $length);
     }
 
@@ -342,7 +371,8 @@ class RedisConnection
      */
     protected static function readArray(int $count): ?array
     {
-        if ($count === -1) return null;
+        if ($count === -1)
+            return null;
 
         $items = [];
         for ($i = 0; $i < $count; $i++) {
@@ -360,7 +390,8 @@ class RedisConnection
     protected static function readLine(): string|false
     {
         $line = fgets(self::$socket);
-        if ($line === false) return false;
+        if ($line === false)
+            return false;
         return rtrim($line, "\r\n");
     }
 
@@ -372,13 +403,14 @@ class RedisConnection
      */
     protected static function readBytes(int $length): string
     {
-        $data      = '';
+        $data = '';
         $remaining = $length;
 
         while ($remaining > 0) {
             $chunk = fread(self::$socket, $remaining);
-            if ($chunk === false || $chunk === '') break;
-            $data      .= $chunk;
+            if ($chunk === false || $chunk === '')
+                break;
+            $data .= $chunk;
             $remaining -= strlen($chunk);
         }
 

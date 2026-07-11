@@ -225,14 +225,22 @@ abstract class Model implements \JsonSerializable
     }
 
     /**
-     * Creates a new QueryBuilder instance for this model
+     * Creates a new QueryBuilder instance for this model.
+     *
+     * Applies any registered global scopes and the automatic soft-delete
+     * filter before returning control to the caller.
+     *
+     * @return QueryBuilder
      */
     public static function newQuery(): QueryBuilder
     {
         $instance = new static();
         $query = new QueryBuilder(Connection::getInstance(), $instance->table, static::class);
 
-        // Automatically apply soft delete filter
+        // Apply all registered global scopes (see addGlobalScope()).
+        static::applyGlobalScopes($query);
+
+        // Automatically apply soft delete filter.
         if ($instance->softDelete) {
             $query->whereNull($instance->deletedAt);
         }
@@ -747,17 +755,17 @@ abstract class Model implements \JsonSerializable
             throw new \RuntimeException('Cannot update a model instance without a primary key value.');
         }
 
-        $data    = $this->serializeForDb($this->dirty);
+        $data = $this->serializeForDb($this->dirty);
         $updates = implode(', ', array_map(fn($k) => "`{$k}` = :{$k}", array_keys($data)));
-        $sql     = "UPDATE `{$this->table}` SET {$updates} WHERE `{$this->primaryKey}` = :__pk__";
+        $sql = "UPDATE `{$this->table}` SET {$updates} WHERE `{$this->primaryKey}` = :__pk__";
 
-        $stmt   = $this->pdo->prepare($sql);
+        $stmt = $this->pdo->prepare($sql);
         $params = array_merge($data, ['__pk__' => $this->attributes[$this->primaryKey]]);
         $result = $stmt->execute($params);
 
         if ($result) {
-            $this->changes  = $this->dirty;
-            $this->dirty    = [];
+            $this->changes = $this->dirty;
+            $this->dirty = [];
             $this->original = [];
         }
 
@@ -781,7 +789,7 @@ abstract class Model implements \JsonSerializable
 
         foreach ($data as $key => $value) {
             if ($value instanceof \DateTime || $value instanceof \DateTimeImmutable) {
-                $castType    = strtolower($this->casts[$key] ?? '');
+                $castType = strtolower($this->casts[$key] ?? '');
                 $result[$key] = $castType === 'date'
                     ? $value->format('Y-m-d')
                     : $value->format('Y-m-d H:i:s');
@@ -2277,13 +2285,25 @@ abstract class Model implements \JsonSerializable
     }
 
     /**
-     * Executes a raw SQL query returning a Collection of models
-     * @param string $sql
-     * @param array $params
-     * @return Collection
+     * Begins a fluent query for this model, or executes a raw SQL statement.
+     *
+     * Supports two call styles:
+     *   - `Book::query()`                          → returns a QueryBuilder for fluent
+     *                                                 chaining (equivalent to `newQuery()`).
+     *                                                 @example Book::query()->orderBy('desc')->get()
+     *   - `Book::query('SELECT * FROM books', [])` → executes the raw SQL and returns
+     *                                                 a Collection of hydrated models.
+     *
+     * @param  string|null           $sql    Raw SQL string, or null for fluent QueryBuilder mode.
+     * @param  array<string, mixed>  $params Bound parameters for the raw SQL statement.
+     * @return QueryBuilder|Collection
      */
-    public static function query(string $sql, array $params = []): Collection
+    public static function query(?string $sql = null, array $params = []): QueryBuilder|Collection
     {
+        if ($sql === null) {
+            return static::newQuery();
+        }
+
         $instance = new static();
         $stmt = $instance->pdo->prepare($sql);
         $stmt->execute($params);

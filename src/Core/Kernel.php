@@ -24,16 +24,17 @@ declare(strict_types=1);
 
 namespace Slenix\Core;
 
+use Slenix\Core\Console\MaintenanceCommand;
 use Slenix\Core\EnvLoader;
+use Slenix\Core\Exceptions\ErrorHandler;
 use Slenix\Http\Routing\Router;
 use Slenix\Supports\Cache\Cache;
 use Slenix\Supports\Logging\Log;
-use Slenix\Supports\Security\CSRF;
-use Slenix\Supports\Storage\Storage;
-use Slenix\Supports\Security\Session;
-use Slenix\Core\Exceptions\ErrorHandler;
 use Slenix\Supports\Redis\RedisConnection;
-use Slenix\Core\Console\MaintenanceCommand;
+use Slenix\Supports\Security\CSRF;
+use Slenix\Supports\Security\Session;
+use Slenix\Supports\Storage\Storage;
+use Slenix\Supports\Template\Luna;
 
 class Kernel
 {
@@ -109,8 +110,6 @@ class Kernel
             // ── Stage 2.5: Maintenance mode ─────────────────────────────────
             $this->checkMaintenanceMode();
 
-            $this->sendSecurityHeaders();
-
             // ── Stage 3: Security headers ───────────────────────────────────
             $this->sendSecurityHeaders();
 
@@ -149,7 +148,9 @@ class Kernel
      */
     public function handleShutdown(): void
     {
-        RedisConnection::disconnect();
+        if (RedisConnection::isConnected()) {
+            RedisConnection::disconnect();
+        }
 
         $error = error_get_last();
 
@@ -185,7 +186,7 @@ class Kernel
     /**
      * Adjusts PHP ini settings based on environment variables.
      *
-     * ⚠️  This method MUST be called before any output (echo, header, whitespace)
+     *     This method MUST be called before any output (echo, header, whitespace)
      *     to ensure ini_set() for session.* settings is accepted by PHP.
      *
      * PHP 8.4 note: E_STRICT was removed. The error_reporting() bitmask no
@@ -211,8 +212,9 @@ class Kernel
         // Hide PHP version from response headers
         ini_set('expose_php', '0');
 
-        // Timezone
-        date_default_timezone_set(EnvLoader::get('APP_TIMEZONE', 'UTC'));
+        // Timezone (validated) + Locale
+        $this->configureTimezone();
+        $this->configureLocale();
 
         // ── Session hardening ──────────────────────────────────────────────
         // All ini_set('session.*') calls must happen before session_start().
@@ -226,6 +228,82 @@ class Kernel
         if ($this->isHttps()) {
             ini_set('session.cookie_secure', '1');
         }
+    }
+
+    /**
+     * Applies APP_TIMEZONE from .env, validating it against PHP's known
+     * timezone database first. Falls back to UTC (with a logged warning)
+     * if the configured value is invalid, instead of letting
+     * date_default_timezone_set() silently emit a PHP warning.
+     *
+     * @return void
+     */
+    private function configureTimezone(): void
+    {
+        $timezone = (string) EnvLoader::get('APP_TIMEZONE', 'UTC');
+
+        if (!in_array($timezone, \DateTimeZone::listIdentifiers(), true)) {
+            try {
+                Log::warning("Invalid APP_TIMEZONE '{$timezone}' in .env — falling back to UTC.");
+            } catch (\Throwable) {
+                // Logging not booted yet this early — safe to ignore.
+            }
+            $timezone = 'UTC';
+        }
+
+        date_default_timezone_set($timezone);
+    }
+
+    /**
+     * Applies APP_LOCALE from .env via setlocale(), used by native PHP
+     * locale-aware functions (strftime-style formatting, number_format
+     * defaults on some platforms, etc). Also stores the resolved locale
+     * as a global constant so other parts of the framework (e.g. a future
+     * Date/translation helper) can read it without re-parsing .env.
+     *
+     * APP_LOCALE is expected to be a short code ('en', 'pt', 'pt_BR', ...).
+     * Since installed system locales vary by OS/server, several common
+     * variants are attempted in order; if none are available, setlocale()
+     * simply keeps the platform default — this never throws.
+     *
+     * @return void
+     */
+    private function configureLocale(): void
+    {
+        $locale = (string) EnvLoader::get('APP_LOCALE', 'en');
+
+        defined('APP_LOCALE') or define('APP_LOCALE', $locale);
+
+        $variants = $this->localeVariants($locale);
+
+        if (!empty($variants)) {
+            setlocale(LC_ALL, ...$variants);
+        }
+    }
+
+    /**
+     * Builds a list of candidate system locale strings for a short locale
+     * code, covering common Linux/macOS and Windows naming conventions.
+     *
+     * @param  string $locale Short code, e.g. 'en', 'pt', 'pt_BR'.
+     * @return string[] Ordered list of candidates to pass to setlocale().
+     */
+    private function localeVariants(string $locale): array
+    {
+        $locale = str_replace('-', '_', $locale);
+
+        $map = [
+            'en' => ['en_US.UTF-8', 'en_US', 'English_United States.1252', 'en'],
+            'en_US' => ['en_US.UTF-8', 'en_US', 'English_United States.1252'],
+            'en_GB' => ['en_GB.UTF-8', 'en_GB', 'English_United Kingdom.1252'],
+            'pt' => ['pt_PT.UTF-8', 'pt_PT', 'Portuguese_Portugal.1252', 'pt'],
+            'pt_PT' => ['pt_PT.UTF-8', 'pt_PT', 'Portuguese_Portugal.1252'],
+            'pt_BR' => ['pt_BR.UTF-8', 'pt_BR', 'Portuguese_Brazil.1252'],
+            'es' => ['es_ES.UTF-8', 'es_ES', 'Spanish_Spain.1252', 'es'],
+            'fr' => ['fr_FR.UTF-8', 'fr_FR', 'French_France.1252', 'fr'],
+        ];
+
+        return $map[$locale] ?? [$locale . '.UTF-8', $locale];
     }
 
     // -------------------------------------------------------------------------
@@ -251,8 +329,11 @@ class Kernel
         header("Referrer-Policy: strict-origin-when-cross-origin");
         header("X-Powered-By: {$appName}");
 
-        // HSTS — production + HTTPS only
-        if (!$this->isDebug() && $this->isHttps()) {
+        // HSTS — production + HTTPS only + never on local/loopback hosts.
+        // Prevents accidentally poisoning the browser's HSTS cache for
+        // localhost/127.0.0.1 during local development (php celestial serve),
+        // which would force HTTPS on a server that only speaks HTTP.
+        if (!$this->isDebug() && $this->isHttps() && !$this->isLocalHost()) {
             header("Strict-Transport-Security: max-age=31536000; includeSubDomains");
         }
 
@@ -269,6 +350,21 @@ class Kernel
             header("Location: https://{$host}{$uri}", true, 301);
             exit;
         }
+    }
+
+    /**
+     * Checks whether the current request host is a loopback/local development
+     * address, where HSTS should never be sent regardless of scheme detection.
+     *
+     * @return bool
+     */
+    private function isLocalHost(): bool
+    {
+        $host = strtolower(explode(':', $_SERVER['HTTP_HOST'] ?? '')[0]);
+
+        return in_array($host, ['localhost', '127.0.0.1', '::1'], true)
+            || str_ends_with($host, '.local')
+            || str_ends_with($host, '.test');
     }
 
     // -------------------------------------------------------------------------
@@ -344,6 +440,10 @@ class Kernel
         Storage::setDisk('public', $storagePath . '/app/public');
         Storage::setDisk('local', $storagePath . '/app/private');
         Storage::setDefaultDisk(EnvLoader::get('STORAGE_DISK', 'public'));
+
+        Luna::setContainer(
+            static fn(string $abstract) => \Slenix\Core\AppFactory::make($abstract)
+        );
 
         $this->bootRedisIfNeeded();
     }

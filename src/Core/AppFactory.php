@@ -29,7 +29,9 @@ class AppFactory
     /**
      * AppFactory constructor (Private to enforce singleton/static usage).
      */
-    private function __construct() {}
+    private function __construct()
+    {
+    }
 
     /**
      * Creates and runs the application.
@@ -49,10 +51,10 @@ class AppFactory
     private static function bootstrap(): void
     {
         // Register Request as a singleton (created from globals)
-        static::singleton('request', static fn () => Request::createFromGlobals());
+        static::singleton('request', static fn() => Request::createFromGlobals());
 
         // Register Response as a singleton
-        static::singleton('response', static fn () => new Response());
+        static::singleton('response', static fn() => new Response());
     }
 
     /**
@@ -64,9 +66,9 @@ class AppFactory
     public static function singleton(string $abstract, callable $factory): void
     {
         static::$bindings[$abstract] = [
-            'factory'   => $factory,
+            'factory' => $factory,
             'singleton' => true,
-            'resolved'  => null,
+            'resolved' => null,
         ];
     }
 
@@ -79,9 +81,9 @@ class AppFactory
     public static function bind(string $abstract, callable $factory): void
     {
         static::$bindings[$abstract] = [
-            'factory'   => $factory,
+            'factory' => $factory,
             'singleton' => false,
-            'resolved'  => null,
+            'resolved' => null,
         ];
     }
 
@@ -94,9 +96,9 @@ class AppFactory
     public static function instance(string $abstract, mixed $instance): void
     {
         static::$bindings[$abstract] = [
-            'factory'   => null,
+            'factory' => null,
             'singleton' => true,
-            'resolved'  => $instance,
+            'resolved' => $instance,
         ];
     }
 
@@ -108,31 +110,71 @@ class AppFactory
      */
     public static function make(string $abstract): mixed
     {
-        if (!isset(static::$bindings[$abstract])) {
-            throw new \InvalidArgumentException(
-                "Service '{$abstract}' is not registered in the container."
-            );
-        }
+        if (isset(static::$bindings[$abstract])) {
+            $binding = &static::$bindings[$abstract];
 
-        $binding = &static::$bindings[$abstract];
+            if ($binding['singleton'] && $binding['resolved'] !== null) {
+                return $binding['resolved'];
+            }
 
-        // Return resolved singleton if available
-        if ($binding['singleton'] && $binding['resolved'] !== null) {
+            if ($binding['factory'] !== null) {
+                $resolved = ($binding['factory'])();
+                if ($binding['singleton']) {
+                    $binding['resolved'] = $resolved;
+                }
+                return $resolved;
+            }
+
             return $binding['resolved'];
         }
 
-        // Resolve via factory callable
-        if ($binding['factory'] !== null) {
-            $resolved = ($binding['factory'])();
-
-            if ($binding['singleton']) {
-                $binding['resolved'] = $resolved;
-            }
-
-            return $resolved;
+        // Fallback: autowire concrete classes not explicitly bound.
+        if (class_exists($abstract)) {
+            return static::autowire($abstract);
         }
 
-        return $binding['resolved'];
+        throw new \InvalidArgumentException(
+            "Service '{$abstract}' is not registered in the container."
+        );
+    }
+
+    /**
+     * Instantiates a class by resolving its constructor dependencies via
+     * Reflection, recursively autowiring type-hinted class parameters.
+     *
+     * @param  string $class Fully-qualified class name.
+     * @return object
+     * @throws \InvalidArgumentException If a required parameter cannot be resolved.
+     */
+    private static function autowire(string $class): object
+    {
+        $reflection = new \ReflectionClass($class);
+        $constructor = $reflection->getConstructor();
+
+        if ($constructor === null) {
+            return new $class();
+        }
+
+        $args = [];
+        foreach ($constructor->getParameters() as $param) {
+            $type = $param->getType();
+
+            if ($type instanceof \ReflectionNamedType && !$type->isBuiltin()) {
+                $args[] = static::make($type->getName());
+                continue;
+            }
+
+            if ($param->isDefaultValueAvailable()) {
+                $args[] = $param->getDefaultValue();
+                continue;
+            }
+
+            throw new \InvalidArgumentException(
+                "Cannot autowire parameter '\${$param->getName()}' for class '{$class}'."
+            );
+        }
+
+        return $reflection->newInstanceArgs($args);
     }
 
     /**

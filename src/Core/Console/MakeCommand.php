@@ -207,21 +207,44 @@ EOT;
 
         $controllerName = ucfirst($rawName);
 
-        // Append "Controller" suffix if missing
         if (!str_ends_with($controllerName, 'Controller')) {
             $controllerName .= 'Controller';
         }
 
         // ── Type ──────────────────────────────────────────────────────────────
-        $typeArg = $this->findFlag('--type=');
         $types = ['Empty', 'Resource', 'API', 'Invokable'];
 
-        if ($typeArg !== null) {
-            $type = ucfirst(strtolower($typeArg));
-            if (!in_array($type, $types, true)) {
-                $type = 'Empty';
+        // 1. Shorthand boolean flags: --resource, --api, --invokable, --empty
+        $shorthand = [
+            '--resource' => 'Resource',
+            '--api' => 'API',
+            '--invokable' => 'Invokable',
+            '--empty' => 'Empty',
+        ];
+
+        $type = null;
+
+        foreach ($shorthand as $flag => $label) {
+            if (in_array($flag, $this->args, true)) {
+                $type = $label;
+                break;
             }
-        } else {
+        }
+
+        // 2. Explicit --type=Resource
+        if ($type === null) {
+            $typeArg = $this->findFlag('--type=');
+
+            if ($typeArg !== null) {
+                $type = ucfirst(strtolower($typeArg));
+                if (!in_array($type, $types, true)) {
+                    $type = 'Empty';
+                }
+            }
+        }
+
+        // 3. Nothing passed — ask interactively
+        if ($type === null) {
             $prompt = new Prompt();
             $type = $prompt->select(
                 'Which type of controller would you like?',

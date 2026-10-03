@@ -421,7 +421,7 @@ EOT;
             $seederName .= 'Seeder';
         }
 
-        $seedsPath = dirname(__DIR__, 3) . '/database/seeds';
+        $seedsPath = dirname(__DIR__, 4) . '/database/seeds';
         $filePath = $seedsPath . '/' . $seederName . '.php';
 
         if (!is_dir($seedsPath) && !mkdir($seedsPath, 0755, true)) {
@@ -453,7 +453,7 @@ EOT;
         );
 
         $factoryName = ucfirst($name);
-        $factoriesPath = dirname(__DIR__, 3) . '/database/factories';
+        $factoriesPath = dirname(__DIR__, 4) . '/database/factories';
 
         if (!str_ends_with($factoryName, 'Factory')) {
             $factoryName .= 'Factory';
@@ -1108,6 +1108,6 @@ EOT;
      */
     private static function basePath(string $relative): string
     {
-        return dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . ltrim($relative, '/\\');
+        return dirname(__DIR__, 4) . DIRECTORY_SEPARATOR . ltrim($relative, '/\\');
     }
 }

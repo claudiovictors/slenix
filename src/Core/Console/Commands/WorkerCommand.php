@@ -51,7 +51,7 @@ class WorkerCommand extends Command
         $channels = array_map('trim', explode(',', $queues));
 
         // Boot Queue storage path
-        $projectRoot = dirname(__DIR__, 3);
+        $projectRoot = dirname(__DIR__, 4);
         Queue::setBasePath($projectRoot . '/storage/queue');
 
         echo PHP_EOL;
@@ -86,7 +86,7 @@ class WorkerCommand extends Command
      */
     public function failed(): void
     {
-        $projectRoot = dirname(__DIR__, 3);
+        $projectRoot = dirname(__DIR__, 4);
         $failedDir   = $projectRoot . '/storage/queue/failed';
 
         if (!is_dir($failedDir)) {
@@ -136,7 +136,7 @@ class WorkerCommand extends Command
     {
         $queue = $this->getOption('queue', '');
 
-        $projectRoot = dirname(__DIR__, 3);
+        $projectRoot = dirname(__DIR__, 4);
         Queue::setBasePath($projectRoot . '/storage/queue');
 
         $cleared = Queue::clear($queue);

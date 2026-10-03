@@ -358,7 +358,7 @@ PHP;
      */
     private function forkWebSocket(string $host, int $wsPort): void
     {
-        $projectRoot = dirname(__DIR__, 3);
+        $projectRoot = dirname(__DIR__, 4);
         $pid = pcntl_fork();
 
         if ($pid === -1) {
@@ -405,12 +405,12 @@ PHP;
      */
     private function spawnWebSocket(string $host, int $wsPort): void
     {
-        $projectRoot = addslashes(dirname(__DIR__, 3));
+        $projectRoot = addslashes(dirname(__DIR__, 4));
         $phpBinary = PHP_BINARY;
 
         $inline = <<<PHP
 require_once '{$projectRoot}/vendor/autoload.php';
-try { (new Slenix\\Core\\EnvLoader)->load('{$projectRoot}/.env'); } catch (\\Throwable \$e) {}
+try { Slenix\\Core\\Foundation\\EnvLoader::load('{$projectRoot}/.env'); } catch (\\Throwable \$e) {}
 \$routesFile = '{$projectRoot}/routes/web.php';
 if (file_exists(\$routesFile)) { require_once \$routesFile; }
 \$server = new Slenix\\Core\\WebSocket\\WebSocketServer('{$host}', {$wsPort});

@@ -46,7 +46,7 @@ class MigrateCommand extends Command
         $this->pretend = in_array('--pretend', $args, true);
         $this->force   = in_array('--force', $args, true);
 
-        $projectRoot    = dirname(__DIR__, 3);
+        $projectRoot    = dirname(__DIR__, 4);
         $this->migrator = new Migrator($projectRoot . '/database/migrations');
 
         if ($this->pretend) {
@@ -373,7 +373,7 @@ class MigrateCommand extends Command
             if (empty($rows)) {
                 self::warning(
                     'No migrations found in: '
-                    . dirname(__DIR__, 3) . '/database/migrations'
+                    . dirname(__DIR__, 4) . '/database/migrations'
                 );
                 return;
             }
@@ -451,7 +451,7 @@ class MigrateCommand extends Command
 
         $name  = Migrator::generateName($rawName);
         $stub  = $this->resolveStub($rawName);
-        $dir   = dirname(__DIR__, 3) . '/database/migrations';
+        $dir   = dirname(__DIR__, 4) . '/database/migrations';
 
         if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
             self::error("Could not create directory: {$dir}");

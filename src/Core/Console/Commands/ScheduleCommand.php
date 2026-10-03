@@ -76,6 +76,6 @@ class ScheduleCommand extends Command
      */
     private static function basePath(string $relative): string
     {
-        return dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . ltrim($relative, '/\\');
+        return dirname(__DIR__, 4) . DIRECTORY_SEPARATOR . ltrim($relative, '/\\');
     }
 }

@@ -36,7 +36,7 @@ class SeedCommand extends Command
     public function __construct(array $args)
     {
         $this->args          = $args;
-        $projectRoot         = dirname(__DIR__, 3);
+        $projectRoot         = dirname(__DIR__, 4);
         $this->seedsPath     = $projectRoot . '/database/seeds';
         $this->factoriesPath = $projectRoot . '/database/factories';
     }

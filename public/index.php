@@ -13,9 +13,9 @@
 
 declare(strict_types=1);
 
-use Slenix\Core\AppFactory;
-
 require_once __DIR__ . '/../vendor/autoload.php';
+
+use Slenix\Core\Foundation\AppFactory;
 
 /**
  * Create the Application Instance.
@@ -23,4 +23,4 @@ require_once __DIR__ . '/../vendor/autoload.php';
  * SLENIX_START constant as the initial execution timestamp.
  * * @var \Slenix\Core\Application $app
  */
-$app = AppFactory::create(SLENIX_START);
+AppFactory::create(SLENIX_START);

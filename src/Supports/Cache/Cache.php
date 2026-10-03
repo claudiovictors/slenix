@@ -18,7 +18,7 @@ declare(strict_types=1);
 
 namespace Slenix\Supports\Cache;
 
-use Slenix\Core\EnvLoader;
+use Slenix\Core\Foundation\EnvLoader;
 use Slenix\Supports\Redis\RedisConnection;
 
 class Cache

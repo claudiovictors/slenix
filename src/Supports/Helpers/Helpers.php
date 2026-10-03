@@ -24,21 +24,23 @@ use Slenix\Supports\Auth\AuthManager;
 use Slenix\Supports\Auth\Guards\GuardInterface;
 use Slenix\Supports\Cache\Cache;
 use Slenix\Supports\Libraries\Collection;
-use Slenix\Supports\Libraries\Date;
 use Slenix\Supports\Libraries\FlashMessage;
 use Slenix\Supports\Libraries\RedirectResponse;
 use Slenix\Supports\Libraries\Str;
 use Slenix\Supports\Logging\Log;
+use Slenix\Supports\Queue\Job;
+use Slenix\Supports\Queue\Queue;
 use Slenix\Supports\Security\CSRF;
 use Slenix\Supports\Security\Session;
 use Slenix\Supports\Storage\Storage;
 use Slenix\Supports\Template\Luna;
 use Slenix\Supports\Validation\ValidationException;
 use Slenix\Supports\Validation\Validator;
+use Slenix\Supports\Vite\Vite;
 
-// ============================================================================
+// ****************************************************************************
 // CONSTANTS
-// ============================================================================
+// ****************************************************************************
 
 defined('SLENIX_START') or define('SLENIX_START', microtime(true));
 defined('ROOT_PATH') or define('ROOT_PATH', dirname(__DIR__, 3));
@@ -50,9 +52,9 @@ defined('VIEWS_PATH') or define('VIEWS_PATH', ROOT_PATH . '/views');
 defined('STORAGE_PATH') or define('STORAGE_PATH', ROOT_PATH . '/storage');
 defined('CONFIG_PATH') or define('CONFIG_PATH', ROOT_PATH . '/src/Config');
 
-// ============================================================================
+// ****************************************************************************
 // GLOBAL CLASS ALIASES
-// ============================================================================
+// ****************************************************************************
 
 if (!class_exists('Str', false)) {
     /**
@@ -63,9 +65,9 @@ if (!class_exists('Str', false)) {
     class_alias(Str::class, 'Str');
 }
 
-// ============================================================================
+// ****************************************************************************
 // VIEWS
-// ============================================================================
+// ****************************************************************************
 
 if (!function_exists('view')) {
     /**
@@ -81,9 +83,9 @@ if (!function_exists('view')) {
     }
 }
 
-// ============================================================================
+// ****************************************************************************
 // REDIRECT
-// ============================================================================
+// ****************************************************************************
 
 if (!function_exists('redirect')) {
     /**
@@ -120,9 +122,9 @@ if (!function_exists('redirect')) {
 }
 
 
-// ============================================================================
+// ****************************************************************************
 // FLASH
-// ============================================================================
+// ****************************************************************************
 
 if (!function_exists('flash')) {
     /**
@@ -150,9 +152,9 @@ if (!function_exists('flash')) {
 }
 
 
-// ============================================================================
+// ****************************************************************************
 // SESSION
-// ============================================================================
+// ****************************************************************************
 
 if (!function_exists('session')) {
     /**
@@ -350,9 +352,9 @@ if (!function_exists('has_error')) {
     }
 }
 
-// ============================================================================
+// ****************************************************************************
 // URL & ROUTING
-// ============================================================================
+// ****************************************************************************
 
 if (!function_exists('url')) {
     /**
@@ -403,6 +405,7 @@ if (!function_exists('route')) {
         return Router::route($name, $params);
     }
 }
+
 
 if (!function_exists('current_url')) {
     /**
@@ -478,9 +481,9 @@ if (!function_exists('query_string')) {
     }
 }
 
-// ============================================================================
+// ****************************************************************************
 // HTTP / ABORT
-// ============================================================================
+// ****************************************************************************
 
 if (!function_exists('abort')) {
     /**
@@ -566,9 +569,9 @@ if (!function_exists('abort_unless')) {
     }
 }
 
-// ============================================================================
+// ****************************************************************************
 // RESPONSE / REQUEST
-// ============================================================================
+// ****************************************************************************
 
 if (!function_exists('response')) {
     /**
@@ -611,58 +614,10 @@ if (!function_exists('request')) {
     }
 }
 
-// ============================================================================
-// JSON
-// ============================================================================
 
-if (!function_exists('to_json')) {
-    /**
-     * Encode a value to a JSON string.
-     *
-     * @param  mixed $data   Value to serialize.
-     * @param  bool  $pretty Pretty-print with indentation (default: false).
-     * @return string
-     */
-    function to_json(mixed $data, bool $pretty = false): string
-    {
-        $flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
-        if ($pretty)
-            $flags |= JSON_PRETTY_PRINT;
-        return json_encode($data, $flags);
-    }
-}
-
-if (!function_exists('from_json')) {
-    /**
-     * Decode a JSON string to an array or object.
-     *
-     * @param  string $json  JSON string to decode.
-     * @param  bool   $assoc Return associative array (default: true).
-     * @return mixed
-     */
-    function from_json(string $json, bool $assoc = true): mixed
-    {
-        return json_decode($json, $assoc);
-    }
-}
-
-if (!function_exists('is_json')) {
-    /**
-     * Check whether a string is valid JSON.
-     *
-     * @param  string $string
-     * @return bool
-     */
-    function is_json(string $string): bool
-    {
-        json_decode($string);
-        return json_last_error() === JSON_ERROR_NONE;
-    }
-}
-
-// ============================================================================
+// ****************************************************************************============================================================================
 // NUMBERS
-// ============================================================================
+// ****************************************************************************
 
 if (!function_exists('currency')) {
     /**
@@ -738,32 +693,6 @@ if (!function_exists('clamp')) {
     }
 }
 
-if (!function_exists('ordinal')) {
-    /**
-     * Return a number with its English ordinal suffix.
-     *
-     * Examples: ordinal(1) → '1st', ordinal(12) → '12th'
-     *
-     * @param  int $number
-     * @return string
-     */
-    function ordinal(int $number): string
-    {
-        $abs = abs($number);
-        $mod100 = $abs % 100;
-        $mod10 = $abs % 10;
-
-        if ($mod100 >= 11 && $mod100 <= 13)
-            return $number . 'th';
-
-        return match ($mod10) {
-            1 => $number . 'st',
-            2 => $number . 'nd',
-            3 => $number . 'rd',
-            default => $number . 'th',
-        };
-    }
-}
 
 if (!function_exists('roman')) {
     /**
@@ -865,31 +794,6 @@ if (!function_exists('number_pad')) {
     }
 }
 
-if (!function_exists('is_even')) {
-    /**
-     * Check whether a number is even.
-     *
-     * @param  int $number
-     * @return bool
-     */
-    function is_even(int $number): bool
-    {
-        return $number % 2 === 0;
-    }
-}
-
-if (!function_exists('is_odd')) {
-    /**
-     * Check whether a number is odd.
-     *
-     * @param  int $number
-     * @return bool
-     */
-    function is_odd(int $number): bool
-    {
-        return $number % 2 !== 0;
-    }
-}
 
 if (!function_exists('is_between')) {
     /**
@@ -1040,39 +944,6 @@ if (!function_exists('memoize')) {
     }
 }
 
-if (!function_exists('pipe')) {
-    /**
-     * Pass a value through a chain of callables sequentially.
-     *
-     * Each callable receives the result of the previous one.
-     *
-     * Example: pipe('hello', 'strtoupper', 'trim') → 'HELLO'
-     *
-     * @param  mixed    $value  Starting value.
-     * @param  callable ...$fns Transformations to apply in order.
-     * @return mixed
-     */
-    function pipe(mixed $value, callable ...$fns): mixed
-    {
-        return array_reduce($fns, fn($carry, $fn) => $fn($carry), $value);
-    }
-}
-
-if (!function_exists('class_basename')) {
-    /**
-     * Return the short class name without the namespace.
-     *
-     * Example: class_basename('App\Models\User') → 'User'
-     *
-     * @param  string|object $class
-     * @return string
-     */
-    function class_basename(string|object $class): string
-    {
-        $class = is_object($class) ? get_class($class) : $class;
-        return basename(str_replace('\\', '/', $class));
-    }
-}
 
 if (!function_exists('data_get')) {
     /**
@@ -1172,33 +1043,182 @@ if (!function_exists('hash_needs_rehash')) {
 
 if (!function_exists('avatar')) {
     /**
-     * Generate an inline SVG avatar using the initials of a name.
+     * Generate an inline SVG avatar from the initials of a name.
      *
-     * @param  string $name  Full name to extract initials from.
-     * @param  int    $size  Pixel size of the avatar (default: 40).
-     * @param  string $bg    Background color (default: '#4f46e5').
-     * @param  string $color Text color (default: '#ffffff').
-     * @return string        SVG markup.
+     * The third argument accepts either a background color (string, like the
+     * previous signature) or an options array, so existing calls such as
+     * `avatar('Maria Silva', 48, '#4f46e5', '#fff')` keep working.
+     *
+     * Options:
+     *   - bg           (string)      Background color, or 'auto' to pick one from the
+     *                                palette based on the name. Default '#0f0f0f'.
+     *   - color        (string|null) Text color, or null / 'auto' to choose black or
+     *                                white depending on the background. Default null.
+     *   - palette      (string|array) Used when bg is 'auto'. A preset name
+     *                                ('vivid', 'pastel', 'dark', 'mono') or a list of
+     *                                colors. Default 'vivid'.
+     *   - seed         (string|null) Value that decides the 'auto' color. Use the user
+     *                                id or e-mail so the color never changes when the
+     *                                name is edited. Default: the name itself.
+     *   - shape        (string)      'circle', 'rounded' or 'square'. Default 'circle'.
+     *   - length       (int)         Number of initials, 1 to 3. Default 2.
+     *   - border       (string|null) Border color. Default null (no border).
+     *   - border_width (int)         Border width in pixels. Default 2.
+     *   - font         (string)      CSS font-family. Default 'system-ui,sans-serif'.
+     *   - weight       (int|string)  CSS font-weight. Default 600.
+     *   - title        (string|null) Accessible label. When set, adds <title>,
+     *                                role="img" and aria-label; otherwise the SVG is
+     *                                marked aria-hidden. Default null.
+     *   - class        (string|null) CSS class(es) added to the <svg>. Default null.
+     *
+     * Examples:
+     *   avatar('Maria Silva');                                   // dark circle, "MS"
+     *   avatar('Maria Silva', 48, 'auto');                       // color from the name
+     *   avatar($c->name, 40, ['bg' => 'auto', 'seed' => $c->id, 'palette' => 'pastel']);
+     *   avatar('Ana', 64, ['shape' => 'rounded', 'bg' => '#fde68a', 'length' => 1]);
+     *
+     * The return value is raw SVG markup: print it without HTML escaping.
+     * Accented and non-Latin letters are supported.
+     *
+     * @param  string       $name    Full name, user name or e-mail to take initials from.
+     * @param  int          $size    Width and height in pixels. Default 40.
+     * @param  string|array $bg      Background color, or an options array (see above).
+     * @param  string|null  $color   Text color (legacy positional argument).
+     * @param  array        $options Options array (see above); overrides the other arguments.
+     * @return string                SVG markup.
      */
     function avatar(
         string $name,
         int $size = 40,
-        string $bg = '#0f0f0f',
-        string $color = '#ffffff'
+        string|array $bg = '#0f0f0f',
+        ?string $color = null,
+        array $options = []
     ): string {
-        $words = preg_split('/\s+/', trim($name));
-        $initials = strtoupper(substr($words[0], 0, 1));
-        if (count($words) > 1) {
-            $initials .= strtoupper(substr(end($words), 0, 1));
+        $opts = array_merge(
+            [
+                'bg'           => '#0f0f0f',
+                'color'        => null,
+                'palette'      => 'vivid',
+                'seed'         => null,
+                'shape'        => 'circle',
+                'length'       => 2,
+                'border'       => null,
+                'border_width' => 2,
+                'font'         => 'system-ui,sans-serif',
+                'weight'       => 600,
+                'title'        => null,
+                'class'        => null,
+            ],
+            is_array($bg) ? $bg : ['bg' => $bg],
+            $color !== null ? ['color' => $color] : [],
+            $options
+        );
+
+        $e = static fn(mixed $v): string => htmlspecialchars((string) $v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+        $size = max(8, $size);
+
+        // ── Initials (first letter of each word; "Maria-José" and "joao.silva@x" split too)
+        $letters = [];
+        foreach (preg_split('/[\s._\-@]+/u', trim($name), -1, PREG_SPLIT_NO_EMPTY) ?: [] as $word) {
+            if (preg_match('/[\p{L}\p{N}]/u', $word, $m)) {
+                $letters[] = $m[0];
+            }
         }
 
-        $font = (int) round($size * 0.38);
+        $length = max(1, min(3, (int) $opts['length']));
+
+        $initials = match (true) {
+            $letters === []                          => '?',
+            $length === 1 || count($letters) === 1   => $letters[0],
+            $length === 2 || count($letters) === 2   => $letters[0] . end($letters),
+            default                                  => $letters[0] . $letters[1] . end($letters),
+        };
+        $initials = mb_strtoupper($initials, 'UTF-8');
+
+        // ── Background (fixed color, or picked from a palette by hashing the seed)
+        $palettes = [
+            'vivid'  => ['#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#3b82f6', '#6366f1', '#a855f7', '#ec4899', '#64748b'],
+            'pastel' => ['#fecaca', '#fed7aa', '#fef08a', '#bbf7d0', '#99f6e4', '#bfdbfe', '#c7d2fe', '#e9d5ff', '#fbcfe8', '#e2e8f0'],
+            'dark'   => ['#0f0f0f', '#171717', '#262626', '#1e293b', '#1f2937', '#312e81', '#4c1d95', '#7f1d1d', '#14532d', '#134e4a'],
+            'mono'   => ['#18181b', '#3f3f46', '#52525b', '#71717a', '#a1a1aa'],
+        ];
+
+        $background = (string) $opts['bg'];
+
+        if (strtolower($background) === 'auto') {
+            $palette = is_array($opts['palette'])
+                ? array_values($opts['palette'])
+                : ($palettes[$opts['palette']] ?? $palettes['vivid']);
+
+            if ($palette === []) {
+                $palette = $palettes['vivid'];
+            }
+
+            $seed       = (string) ($opts['seed'] ?? $name);
+            $background = (string) $palette[crc32(mb_strtolower(trim($seed), 'UTF-8')) % count($palette)];
+        }
+
+        // ── Text color (auto = black or white, whichever reads better)
+        $textColor = $opts['color'];
+
+        if ($textColor === null || strtolower((string) $textColor) === 'auto') {
+            $textColor = '#ffffff';
+
+            if (preg_match('/^#([0-9a-f]{3}|[0-9a-f]{6})$/i', $background, $m)) {
+                $hex = strlen($m[1]) === 3 ? preg_replace('/(.)/', '$1$1', $m[1]) : $m[1];
+                [$r, $g, $b] = array_map('hexdec', str_split((string) $hex, 2));
+
+                if ((0.299 * $r + 0.587 * $g + 0.114 * $b) / 255 > 0.6) {
+                    $textColor = '#111111';
+                }
+            }
+        }
+
+        // ── Shape and border
+        $radius = match ($opts['shape']) {
+            'square'  => 0,
+            'rounded' => (int) round($size * 0.22),
+            default   => $size / 2,
+        };
+
+        $bw       = $opts['border'] ? max(1, (int) $opts['border_width']) : 0;
+        $inset    = $bw / 2;
+        $inner    = $size - $bw;
+        $radius   = max(0, $radius - $inset);
+        $stroke   = $bw > 0 ? ' stroke="' . $e($opts['border']) . '" stroke-width="' . $bw . '"' : '';
+
+        // ── Text size depends on how many characters must fit
+        $factor   = match (mb_strlen($initials, 'UTF-8')) {
+            1       => 0.46,
+            2       => 0.38,
+            default => 0.30,
+        };
+        $font = (int) round($size * $factor);
+
+        // ── Accessibility and extra attributes
+        $label = $opts['title'] !== null && $opts['title'] !== false ? $e($opts['title']) : null;
+        $attrs = $label !== null
+            ? ' role="img" aria-label="' . $label . '"'
+            : ' aria-hidden="true"';
+
+        if (!empty($opts['class'])) {
+            $attrs .= ' class="' . $e($opts['class']) . '"';
+        }
+
+        $titleTag = $label !== null ? "<title>{$label}</title>" : '';
+
+        $initials = $e($initials);
+        $bgAttr   = $e($background);
+        $fgAttr   = $e($textColor);
+        $family   = $e($opts['font']);
+        $weight   = $e($opts['weight']);
 
         return <<<SVG
-        <svg xmlns="http://www.w3.org/2000/svg" width="{$size}" height="{$size}" viewBox="0 0 {$size} {$size}">
-          <rect width="{$size}" height="{$size}" rx="{$size}" fill="{$bg}"/>
+        <svg xmlns="http://www.w3.org/2000/svg" width="{$size}" height="{$size}" viewBox="0 0 {$size} {$size}"{$attrs}>{$titleTag}
+          <rect x="{$inset}" y="{$inset}" width="{$inner}" height="{$inner}" rx="{$radius}" fill="{$bgAttr}"{$stroke}/>
           <text x="50%" y="50%" dominant-baseline="central" text-anchor="middle"
-                font-family="system-ui,sans-serif" font-size="{$font}" font-weight="600" fill="{$color}">{$initials}</text>
+                font-family="{$family}" font-size="{$font}" font-weight="{$weight}" fill="{$fgAttr}">{$initials}</text>
         </svg>
         SVG;
     }
@@ -1629,63 +1649,77 @@ if (!function_exists('dump')) {
 }
 
 if (!function_exists('_slenix_dump_render')) {
-    /** @internal */
+    /**
+     * Renders a value as a flat, editor-style code card.
+     *
+     * Style: dark slate background, three window dots, no shadow, no gradient.
+     * The value is exported with var_export() (falling back to print_r() for
+     * values it cannot handle, such as circular references) and highlighted in a
+     * single pass, so tokens can never end up nested inside each other.
+     *
+     * @internal
+     *
+     * @param  mixed $var   Value to dump.
+     * @param  int   $index Position of this value among the dd()/dump() arguments.
+     * @param  int   $total Total number of values being dumped.
+     * @return string       HTML markup.
+     */
     function _slenix_dump_render(mixed $var, int $index, int $total): string
     {
-        $type = gettype($var);
-        $isLast = $index === $total - 1;
-        $typeColor = match ($type) {
-            'string' => '#a78bfa',
-            'integer', 'double' => '#34d399',
-            'boolean' => '#fbbf24',
-            'NULL' => '#6b7280',
-            'array' => '#38bdf8',
-            'object' => '#f472b6',
-            default => '#cdd6f4',
-        };
-
-        ob_start();
-        var_export($var);
-        $raw = ob_get_clean();
-
-        $raw = preg_replace("/\b(true|false|null|NULL)\b/", '§BOOL§$1§/BOOL§', $raw);
-        $raw = preg_replace("/'((?:[^'\\\\]|\\\\.)*)'/", "§STR§'$1'§/STR§", $raw);
-        $raw = preg_replace('/(?<![\'a-zA-Z_])\b(\d+\.?\d*)\b(?![\'a-zA-Z_])/', '§NUM§$1§/NUM§', $raw);
-        $raw = preg_replace('/\b(array)\s*\(/i', '§ARR§array§/ARR§(', $raw);
-        $raw = htmlspecialchars($raw, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $raw = preg_replace('/§BOOL§(.*?)§\/BOOL§/', '<span style="color:#fbbf24;font-weight:600">$1</span>', $raw);
-        $raw = preg_replace('/§STR§(.*?)§\/STR§/', '<span style="color:#a78bfa">$1</span>', $raw);
-        $raw = preg_replace('/§NUM§(.*?)§\/NUM§/', '<span style="color:#34d399">$1</span>', $raw);
-        $raw = preg_replace('/§ARR§(.*?)§\/ARR§/', '<span style="color:#38bdf8;font-weight:600">$1</span>', $raw);
-
-        $mb = $isLast ? '1rem' : '0.5rem';
-        $border = '1px solid rgba(255,255,255,0.08)';
-
+        $esc = static fn(string $s): string => htmlspecialchars($s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+ 
+        try {
+            $code = var_export($var, true);
+        } catch (\Throwable) {
+            $code = print_r($var, true);
+        }
+ 
+        // One capturing group around every token: preg_split() then returns
+        // [text, token, text, token, ...], so odd positions are tokens.
+        $pattern = <<<'RE'
+~('(?:[^'\\]|\\.)*'|\(object\)|\b(?:array|true|false|null)\b|\\[A-Za-z_][\w\\]*|-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b)~i
+RE;
+ 
+        $colors = [
+            'string'  => '#c3e88d',
+            'keyword' => '#c792ea',
+            'class'   => '#82aaff',
+            'number'  => '#f78c6c',
+        ];
+ 
+        $html = '';
+ 
+        foreach (preg_split($pattern, $code, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [] as $i => $piece) {
+            if ($i % 2 === 0) {
+                $html .= $esc($piece);
+                continue;
+            }
+ 
+            $kind = match (true) {
+                $piece[0] === "'"                   => 'string',
+                $piece[0] === '\\'                  => 'class',
+                (bool) preg_match('/^-?\d/', $piece) => 'number',
+                default                             => 'keyword',
+            };
+ 
+            $html .= '<span style="color:' . $colors[$kind] . '">' . $esc($piece) . '</span>';
+        }
+ 
+        $type   = $esc(get_debug_type($var));
+        $margin = $index === $total - 1 ? '1rem' : '0.5rem';
+        $dot    = 'width:12px;height:12px;border-radius:50%;display:inline-block;';
+ 
         return <<<HTML
-<div style="background:#0a0a0a;border:{$border};border-radius:8px;font-family:'JetBrains Mono','Fira Code',monospace;font-size:13px;overflow:auto;margin:0.4rem 1rem {$mb};box-shadow:0 4px 24px rgba(0,0,0,0.5);">
-  <div style="display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0.85rem;background:rgba(255,255,255,0.03);border-bottom:{$border};">
-    <span style="background:{$typeColor};color:#000;font-size:10px;font-weight:700;padding:1px 8px;border-radius:99px;letter-spacing:0.5px;text-transform:uppercase;">{$type}</span>
-    <span style="color:#4b5563;font-size:11px;margin-left:auto;">Slenix</span>
+<div style="background:#263238;border-radius:10px;font-family:'JetBrains Mono','Fira Code',ui-monospace,Menlo,monospace;font-size:13px;overflow:hidden;margin:0.4rem 1rem {$margin};">
+  <div style="display:flex;align-items:center;gap:8px;padding:14px 18px 0;">
+    <span style="{$dot}background:#ff5f56;"></span>
+    <span style="{$dot}background:#ffbd2e;"></span>
+    <span style="{$dot}background:#27c93f;"></span>
+    <span style="margin-left:auto;color:#546e7a;font-size:11px;">{$type}</span>
   </div>
-  <pre style="margin:0;padding:0.85rem;color:#e2e8f0;line-height:1.7;">{$raw}</pre>
+  <pre style="margin:0;padding:14px 18px 18px;color:#cfd8dc;line-height:1.7;overflow:auto;">{$html}</pre>
 </div>
 HTML;
-    }
-}
-
-if (!function_exists('dj')) {
-    /**
-     * Dump values as formatted JSON and halt execution.
-     *
-     * @param  mixed ...$vars
-     * @return never
-     */
-    function dj(mixed ...$vars): never
-    {
-        header('Content-Type: application/json; charset=UTF-8');
-        $out = count($vars) === 1 ? $vars[0] : $vars;
-        echo json_encode($out, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        exit;
     }
 }
 
@@ -1809,34 +1843,6 @@ if (!function_exists('app_locale')) {
     function app_locale(): string
     {
         return defined('APP_LOCALE') ? APP_LOCALE : (string) env('APP_LOCALE', 'en');
-    }
-}
-
-if (!function_exists('date_now')) {
-    /**
-     * Returns a Date instance representing the current moment.
-     * Shorthand for \Slenix\Supports\Libraries\Date::now().
-     *
-     * @return Date
-     */
-    function date_now(): Date
-    {
-        return Date::now();
-    }
-}
-
-if (!function_exists('date_parse')) {
-    /**
-     * Parses a date/time string into a Date instance.
-     * Shorthand for \Slenix\Supports\Libraries\Date::parse().
-     *
-     * @param  string      $value
-     * @param  string|null $format
-     * @return Date
-     */
-    function date_parse(string $value, ?string $format = null): Date
-    {
-        return Date::parse($value, $format);
     }
 }
 
@@ -2678,16 +2684,16 @@ if (!function_exists('dispatch')) {
     /**
      * Dispatch a job to the queue.
      *
-     * @param  \Slenix\Supports\Queue\Job $job
+     * @param  Job                        $job
      * @param  string                     $queue  Queue channel override.
      * @param  int                        $delay  Delay in seconds.
      * @return string                             Job ID.
      */
-    function dispatch(\Slenix\Supports\Queue\Job $job, string $queue = '', int $delay = 0): string
+    function dispatch(Job $job, string $queue = '', int $delay = 0): string
     {
         $basePath = (defined('STORAGE_PATH') ? STORAGE_PATH : dirname(__DIR__, 3) . '/storage') . '/queue';
-        \Slenix\Supports\Queue\Queue::setBasePath($basePath);
-        return \Slenix\Supports\Queue\Queue::push($job, $queue, $delay);
+        Queue::setBasePath($basePath);
+        return Queue::push($job, $queue, $delay);
     }
 }
 
@@ -2699,13 +2705,13 @@ if (!function_exists('queue')) {
      */
     function queue(): string
     {
-        return \Slenix\Supports\Queue\Queue::class;
+        return Queue::class;
     }
 }
 
-// ============================================================================
+// ****************************************************************************
 // STORAGE
-// ============================================================================
+// ****************************************************************************
 
 if (!function_exists('storage')) {
     /**
@@ -2737,9 +2743,9 @@ if (!function_exists('storage_url')) {
     }
 }
 
-// ============================================================================
+// ****************************************************************************
 // AUTH
-// ============================================================================
+// ****************************************************************************
 
 if (!function_exists('auth')) {
     /**
@@ -2754,9 +2760,25 @@ if (!function_exists('auth')) {
     }
 }
 
-// ============================================================================
+// ****************************************************************************
+// VITE
+// ****************************************************************************
+
+if (!function_exists('vite')) {
+    /**
+     * Gera as tags <script>/<link> do Vite (dev com HMR ou build com manifest).
+     *
+     * @param string|string[] $entries Ex.: ['resources/css/app.css', 'resources/js/app.jsx']
+     */
+    function vite(string|array $entries): string
+    {
+        return Vite::tags($entries);
+    }
+}
+
+// ****************************************************************************
 // LUNA — Global template variables
-// ============================================================================
+// ****************************************************************************
 
 if (class_exists(Luna::class)) {
 
@@ -2792,13 +2814,6 @@ if (class_exists(Luna::class)) {
         'route' => fn(string $name, array $params = []): ?string => Router::route($name, $params),
         'routes' => fn(): array => Router::getRoutes(),
     ]);
-
-    // Dates
-    Luna::share('now', fn(): \DateTimeImmutable => now());
-    Luna::share('format_date', fn(string $d, string $f = 'd/m/Y H:i:s'): ?string => format_date($d, $f));
-    Luna::share('human_date', fn(string|\DateTimeInterface $d): string => human_date($d));
-    Luna::share('date_now', fn(): Date => date_now());
-    Luna::share('date_parse', fn(string $v, ?string $f = null): Date => date_parse($v, $f));
 
     // Numbers / formatting
     Luna::share('currency', fn(float $v, string $s = '$'): string => currency($v, $s));

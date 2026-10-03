@@ -30,7 +30,8 @@
     "scripts": {
         "post-create-project-cmd": [
             "@php -r \"if (!file_exists('.env') && file_exists('.env.example')) { copy('.env.example', '.env'); echo '[INFO]  .env file created successfully.'.PHP_EOL; }\"",
-            "@php celestial key:generate --ansi"
+            "@php celestial key:generate --ansi",
+            "@php celestial frontend:install"
         ],
         "post-install-cmd": [
             "@php -r \"if (!file_exists('.env') && file_exists('.env.example')) { copy('.env.example', '.env'); echo '[INFO]  .env file created successfully.'.PHP_EOL; }\""
@@ -38,7 +39,8 @@
         "serve": "php celestial serve"
     },
     "config": {
-        "sort-packages": true
+        "sort-packages": true,
+        "process-timeout": 0
     },
     "support": {
         "email": "barrosclaudio147@gmail.com",

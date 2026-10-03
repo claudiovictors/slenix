@@ -17,7 +17,7 @@ declare(strict_types=1);
 
 namespace Slenix\Supports\Redis;
 
-use Slenix\Core\EnvLoader;
+use Slenix\Core\Foundation\EnvLoader;
 
 class RedisConnection
 {

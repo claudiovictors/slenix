@@ -132,38 +132,83 @@ class DatabaseCreator
         return true;
     }
 
-    /**
+        /**
      * Creates a PostgreSQL database.
      *
-     * @param array $config
-     * @return bool
+     * Connects to the built-in "postgres" maintenance database (the target
+     * database does not exist yet, so it cannot be used for the connection),
+     * checks whether the target already exists, and creates it if missing.
+     *
+     * The configured charset is normalised before use: MySQL-style names such
+     * as "utf8mb4" (the default DB_CHARSET in .env) are not valid PostgreSQL
+     * encodings and are mapped to "UTF8".
+     *
+     * @param array{
+     *   driver: string,
+     *   host: string,
+     *   port: int|string,
+     *   database: string,
+     *   username: string,
+     *   password: string,
+     *   charset?: string,
+     * } $config Database configuration.
+     *
+     * @return bool True when the database exists after the call.
+     *
+     * @throws PDOException If the connection fails or the CREATE statement is rejected.
      */
     protected static function createPostgres(array $config): bool
     {
-        // Connect to the maintenance database (postgres) first
-        $maintConfig              = $config;
+        // 1. Connect to the maintenance database, not to the target one.
+        $maintConfig             = $config;
         $maintConfig['database'] = 'postgres';
 
         $dsn = static::buildDsn($maintConfig, withDatabase: true);
         $pdo = new PDO($dsn, $config['username'] ?? '', $config['password'] ?? '');
         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-        $db      = $config['database'];
-        $charset = $config['charset'] ?? 'utf8';
+        $database = (string) $config['database'];
+        $encoding = static::normalizePostgresEncoding($config['charset'] ?? null);
 
-        // Check if it already exists to avoid errors
-        $stmt = $pdo->prepare(
-            "SELECT 1 FROM pg_database WHERE datname = :name"
-        );
-        $stmt->execute(['name' => $db]);
+        // 2. Skip creation when the database is already there.
+        $stmt = $pdo->prepare('SELECT 1 FROM pg_database WHERE datname = :name');
+        $stmt->execute(['name' => $database]);
 
-        if (!$stmt->fetchColumn()) {
-            $pdo->exec(
-                "CREATE DATABASE \"{$db}\" ENCODING '{$charset}'"
-            );
+        if ($stmt->fetchColumn()) {
+            return true;
         }
 
+        // 3. Create it. Identifiers cannot be bound as parameters, so the name
+        //    is quoted manually (embedded double quotes are doubled).
+        $quotedName = '"' . str_replace('"', '""', $database) . '"';
+
+        $pdo->exec("CREATE DATABASE {$quotedName} ENCODING '{$encoding}'");
+
         return true;
+    }
+
+    /**
+     * Maps a configured charset to a valid PostgreSQL encoding name.
+     *
+     * MySQL-only values ("utf8mb4", "utf8mb3") and common spellings of UTF-8
+     * all resolve to "UTF8". Any other value is upper-cased and passed through
+     * so legitimate encodings (e.g. "LATIN1") keep working.
+     *
+     * @param string|null $charset Value of DB_CHARSET, or null when unset.
+     *
+     * @return string PostgreSQL encoding name.
+     */
+    protected static function normalizePostgresEncoding(?string $charset): string
+    {
+        $charset = strtoupper(trim((string) $charset));
+
+        if ($charset === '' || in_array($charset, ['UTF8', 'UTF-8', 'UTF8MB4', 'UTF8MB3'], true)) {
+            return 'UTF8';
+        }
+
+        // Defensive: keep only characters valid in an encoding name, since the
+        // value is interpolated into the SQL statement.
+        return preg_replace('/[^A-Z0-9_]/', '', $charset) ?: 'UTF8';
     }
 
     /**

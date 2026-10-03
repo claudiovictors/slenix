@@ -324,6 +324,7 @@ abstract class Command
                 'key:generate' => 'Generate the application key',
                 'serve' => 'Start the HTTP development server',
                 'serve --ws' => 'Start the HTTP + WebSocket server',
+                'frontend:install' => 'Choose the frontend stack (Luna, React, Vue)',
             ],
 
             'Generators' => [

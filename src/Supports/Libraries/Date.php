@@ -1,45 +1,50 @@
 <?php
 
-/*
-|--------------------------------------------------------------------------
-| Date Class — Slenix Framework
-|--------------------------------------------------------------------------
-|
-| Immutable, locale-aware date/time wrapper around DateTimeImmutable.
-| Provides a fluent, professional API for creating, manipulating,
-| comparing, diffing, and formatting dates — without ever relying on
-| strtotime() for calculations. All arithmetic is performed through
-| DateTimeImmutable's native interval methods, which are calendar-aware
-| (correctly handles month/year length, leap years, DST, etc).
-|
-| Locale-aware formatting (month/day names, long-form dates) reads from
-| app_locale() (APP_LOCALE in .env) and falls back to English when a
-| locale has no translation table registered.
-|
-*/
-
 declare(strict_types=1);
 
 namespace Slenix\Supports\Libraries;
 
 use DateTimeImmutable;
-use DateTimeInterface;
 use DateTimeZone;
+use Exception;
+use IntlDateFormatter;
 use InvalidArgumentException;
 
+/**
+ * Date — JavaScript-style Date API for PHP.
+ *
+ * An immutable-under-the-hood, mutable-in-API date/time class that mirrors
+ * the ECMAScript Date object: the constructor accepts the same argument
+ * shapes, getters are zero-based where the JS getters are zero-based,
+ * setters mutate the instance and return the new timestamp, and invalid
+ * input produces an "Invalid Date" state instead of throwing.
+ *
+ * Examples:
+ *
+ *      $date = new Date();
+ *      $date = new Date(1727895720000);
+ *      $date = new Date('2026-10-02 20:02:00');
+ *      $date = new Date(2026, 9, 2, 20, 2, 0, 0);
+ *
+ *      $date->getFullYear();   // 2026
+ *      $date->getMonth();      // 9 (October, zero-based)
+ *      $date->getDay();        // 5 (Friday, 0 = Sunday)
+ *
+ * Requires PHP 8.1+. Locale formatting uses ext-intl (IntlDateFormatter)
+ * when available, with a plain fallback otherwise.
+ */
 class Date
 {
-    /** @var DateTimeImmutable Underlying immutable date/time instance. */
-    private readonly DateTimeImmutable $dt;
-
     /**
-     * Date/time formats attempted by parse() when no explicit format is given,
-     * tried in order until one successfully parses the input string.
+     * Date/time formats attempted, in order, when the constructor receives
+     * a single string argument with no explicit format.
      *
      * @var string[]
      */
     private const PARSE_FORMATS = [
+        'Y-m-d H:i:s.v',
         'Y-m-d H:i:s',
+        'Y-m-d\TH:i:sP',
         'Y-m-d\TH:i:s',
         'Y-m-d',
         'd/m/Y H:i:s',
@@ -49,726 +54,968 @@ class Date
     ];
 
     /**
-     * Locale translation tables for month/day names.
-     * Add new locales here to support additional languages.
-     *
-     * @var array<string, array{months: string[], months_short: string[], days: string[], days_short: string[]}>
+     * Underlying date/time instance. Null represents an invalid date.
      */
-    private static array $locales = [
-        'en' => [
-            'months' => ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
-            'months_short' => ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-            'days' => ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
-            'days_short' => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-        ],
-        'pt' => [
-            'months' => ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'],
-            'months_short' => ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'],
-            'days' => ['segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado', 'domingo'],
-            'days_short' => ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'],
-        ],
-    ];
-
-    // =========================================================================
-    // Construction
-    // =========================================================================
+    private ?DateTimeImmutable $dt;
 
     /**
-     * Date is always created through a named constructor (now(), parse(), etc).
-     *
-     * @param DateTimeImmutable $dt
+     * Shared UTC timezone instance.
      */
-    private function __construct(DateTimeImmutable $dt)
+    private static DateTimeZone $utc;
+
+    /**
+     * Shared local timezone instance, taken from date_default_timezone_get().
+     */
+    private static DateTimeZone $local;
+
+    /**
+     * Creates a new Date instance.
+     *
+     * Supported argument shapes:
+     *
+     *      new Date()                              Current date and time.
+     *      new Date(int|float $ms)                 Milliseconds since the Unix epoch.
+     *      new Date(string $value)                 Date/time string (see PARSE_FORMATS).
+     *      new Date(Date $other)                   Copy of another Date instance.
+     *      new Date($year, $month, $day, ...)      Date components, month zero-based,
+     *                                              with overflow normalisation.
+     *
+     * Years 0-99 are mapped to 1900+year. Out-of-range component values
+     * overflow into the next unit instead of throwing. Unparseable input
+     * results in an invalid date, never an exception.
+     *
+     * @param mixed ...$args
+     */
+    public function __construct(mixed ...$args)
     {
-        $this->dt = $dt;
+        self::$utc   ??= new DateTimeZone('UTC');
+        self::$local ??= new DateTimeZone(date_default_timezone_get());
+
+        $count = count($args);
+
+        try {
+            $this->dt = match (true) {
+                $count === 0 => new DateTimeImmutable('now', self::$local),
+                $count === 1 => $this->constructSingle($args[0]),
+                default      => $this->constructParts($args),
+            };
+        } catch (Exception) {
+            $this->dt = null;
+        }
     }
 
     /**
-     * Returns a Date instance representing the current moment, in the
-     * application's configured timezone.
+     * Resolves a single constructor argument into a DateTimeImmutable.
      *
-     * @param  DateTimeZone|null $timezone Defaults to the app timezone.
-     * @return static
+     * @param mixed $arg
+     * @return DateTimeImmutable
+     *
+     * @throws InvalidArgumentException When the argument type is unsupported.
      */
-    public static function now(?DateTimeZone $timezone = null): static
+    private function constructSingle(mixed $arg): DateTimeImmutable
     {
-        return new static(new DateTimeImmutable('now', $timezone ?? self::appTimezone()));
-    }
-
-    /**
-     * Returns a Date instance representing today at midnight (00:00:00).
-     *
-     * @param  DateTimeZone|null $timezone
-     * @return static
-     */
-    public static function today(?DateTimeZone $timezone = null): static
-    {
-        return static::now($timezone)->startOfDay();
-    }
-
-    /**
-     * Returns a Date instance representing yesterday at midnight.
-     *
-     * @param  DateTimeZone|null $timezone
-     * @return static
-     */
-    public static function yesterday(?DateTimeZone $timezone = null): static
-    {
-        return static::today($timezone)->subDays(1);
-    }
-
-    /**
-     * Returns a Date instance representing tomorrow at midnight.
-     *
-     * @param  DateTimeZone|null $timezone
-     * @return static
-     */
-    public static function tomorrow(?DateTimeZone $timezone = null): static
-    {
-        return static::today($timezone)->addDays(1);
-    }
-
-    /**
-     * Parses a date/time string into a Date instance.
-     *
-     * When $format is omitted, a series of common formats is attempted in
-     * order (see PARSE_FORMATS). This never falls back to strtotime() —
-     * an unparseable string always throws, keeping behaviour predictable.
-     *
-     * @param  string             $value    Date/time string to parse.
-     * @param  string|null        $format   Explicit format (PHP date() tokens). Optional.
-     * @param  DateTimeZone|null  $timezone Defaults to the app timezone.
-     * @return static
-     *
-     * @throws InvalidArgumentException If the string cannot be parsed by any known format.
-     */
-    public static function parse(string $value, ?string $format = null, ?DateTimeZone $timezone = null): static
-    {
-        $tz = $timezone ?? self::appTimezone();
-
-        if ($format !== null) {
-            return static::createFromFormat($format, $value, $tz);
+        if ($arg instanceof self) {
+            return $this->requireValid($arg)->dt;
         }
 
-        foreach (self::PARSE_FORMATS as $candidate) {
-            $dt = DateTimeImmutable::createFromFormat($candidate, $value, $tz);
-            if ($dt instanceof DateTimeImmutable) {
-                return new static($dt);
+        if (is_int($arg) || is_float($arg)) {
+            return $this->fromMilliseconds($arg);
+        }
+
+        if (is_string($arg)) {
+            if (is_numeric($arg)) {
+                return $this->fromMilliseconds((float) $arg);
+            }
+
+            foreach (self::PARSE_FORMATS as $format) {
+                $dt = DateTimeImmutable::createFromFormat($format, $arg, self::$local);
+                if ($dt instanceof DateTimeImmutable) {
+                    return $dt;
+                }
+            }
+
+            return new DateTimeImmutable($arg, self::$local);
+        }
+
+        throw new InvalidArgumentException('Unsupported argument for Date constructor.');
+    }
+
+    /**
+     * Builds a DateTimeImmutable from date/time components, with overflow
+     * normalisation: month 12 rolls into January of the following year,
+     * hour 24 rolls into the next day, and so on.
+     *
+     * @param array<int,mixed> $args year, month (zero-based), day, hours, minutes, seconds, milliseconds.
+     * @return DateTimeImmutable
+     */
+    private function constructParts(array $args): DateTimeImmutable
+    {
+        $year  = (int) ($args[0] ?? 0);
+        $month = (int) ($args[1] ?? 0);
+        $day   = (int) ($args[2] ?? 1);
+        $hour  = (int) ($args[3] ?? 0);
+        $min   = (int) ($args[4] ?? 0);
+        $sec   = (int) ($args[5] ?? 0);
+        $ms    = (int) ($args[6] ?? 0);
+
+        if ($year >= 0 && $year <= 99) {
+            $year += 1900;
+        }
+
+        return (new DateTimeImmutable('now', self::$local))
+            ->setTime(0, 0, 0, 0)
+            ->setDate($year, $month + 1, $day)
+            ->setTime($hour, $min, $sec, $ms * 1000);
+    }
+
+    /**
+     * Builds a local-time DateTimeImmutable from milliseconds since the
+     * Unix epoch.
+     *
+     * @param int|float $ms
+     * @return DateTimeImmutable
+     */
+    private function fromMilliseconds(int|float $ms): DateTimeImmutable
+    {
+        $seconds = intdiv((int) $ms, 1000);
+        $micro   = ((int) round($ms - $seconds * 1000)) * 1000;
+
+        return DateTimeImmutable::createFromFormat('U.u', sprintf('%d.%06d', $seconds, $micro), self::$utc)
+            ->setTimezone(self::$local);
+    }
+
+    /**
+     * Whether this instance holds a valid date.
+     *
+     * @return bool
+     */
+    public function isValid(): bool
+    {
+        return $this->dt !== null;
+    }
+
+    /**
+     * Returns the given instance when valid, otherwise throws.
+     *
+     * @param Date|null $date
+     * @return Date
+     *
+     * @throws InvalidArgumentException When the instance (or $date) is invalid.
+     */
+    private function requireValid(?self $date = null): self
+    {
+        $target = $date ?? $this;
+        if ($target->dt === null) {
+            throw new InvalidArgumentException('Invalid Date');
+        }
+        return $target;
+    }
+
+    /**
+     * Returns the day of the month (1-31) in local time.
+     *
+     * @return int|float
+     */
+    public function getDate(): float|int
+    {
+        return $this->dt ? (int) $this->dt->format('j') : NAN;
+    }
+
+    /**
+     * Returns the day of the week (0 = Sunday through 6 = Saturday)
+     * in local time.
+     *
+     * @return int|float
+     */
+    public function getDay(): float|int
+    {
+        return $this->dt ? (int) $this->dt->format('w') : NAN;
+    }
+
+    /**
+     * Returns the year (four digits) in local time.
+     *
+     * @return int|float
+     */
+    public function getFullYear(): float|int
+    {
+        return $this->dt ? (int) $this->dt->format('Y') : NAN;
+    }
+
+    /**
+     * Returns the hour (0-23) in local time.
+     *
+     * @return int|float
+     */
+    public function getHours(): float|int
+    {
+        return $this->dt ? (int) $this->dt->format('G') : NAN;
+    }
+
+    /**
+     * Returns the milliseconds component (0-999) in local time.
+     *
+     * @return int|float
+     */
+    public function getMilliseconds(): float|int
+    {
+        return $this->dt ? (int) round(((int) $this->dt->format('u')) / 1000) : NAN;
+    }
+
+    /**
+     * Returns the minutes component (0-59) in local time.
+     *
+     * @return int|float
+     */
+    public function getMinutes(): float|int
+    {
+        return $this->dt ? (int) $this->dt->format('i') : NAN;
+    }
+
+    /**
+     * Returns the month (0 = January through 11 = December) in local time.
+     *
+     * @return int|float
+     */
+    public function getMonth(): float|int
+    {
+        return $this->dt ? ((int) $this->dt->format('n')) - 1 : NAN;
+    }
+
+    /**
+     * Returns the seconds component (0-59) in local time.
+     *
+     * @return int|float
+     */
+    public function getSeconds(): float|int
+    {
+        return $this->dt ? (int) $this->dt->format('s') : NAN;
+    }
+
+    /**
+     * Returns the number of milliseconds since the Unix epoch.
+     *
+     * @return float
+     */
+    public function getTime(): float
+    {
+        if ($this->dt === null) {
+            return NAN;
+        }
+
+        return (float) sprintf('%d%03d', $this->dt->getTimestamp(), $this->getMilliseconds());
+    }
+
+    /**
+     * Returns the timezone offset, in minutes, using the UTC-minus-local
+     * sign convention (e.g. GMT-3 yields 180).
+     *
+     * @return int|float
+     */
+    public function getTimezoneOffset(): float|int
+    {
+        return $this->dt ? (int) (-$this->dt->getOffset() / 60) : NAN;
+    }
+
+    /**
+     * Returns the day of the month (1-31) in UTC.
+     *
+     * @return int|float
+     */
+    public function getUTCDate(): float|int
+    {
+        return $this->inUtc() ? (int) $this->inUtc()->format('j') : NAN;
+    }
+
+    /**
+     * Returns the day of the week (0 = Sunday through 6 = Saturday) in UTC.
+     *
+     * @return int|float
+     */
+    public function getUTCDay(): float|int
+    {
+        return $this->inUtc() ? (int) $this->inUtc()->format('w') : NAN;
+    }
+
+    /**
+     * Returns the year (four digits) in UTC.
+     *
+     * @return int|float
+     */
+    public function getUTCFullYear(): float|int
+    {
+        return $this->inUtc() ? (int) $this->inUtc()->format('Y') : NAN;
+    }
+
+    /**
+     * Returns the hour (0-23) in UTC.
+     *
+     * @return int|float
+     */
+    public function getUTCHours(): float|int
+    {
+        return $this->inUtc() ? (int) $this->inUtc()->format('G') : NAN;
+    }
+
+    /**
+     * Returns the milliseconds component (0-999) in UTC.
+     *
+     * @return int|float
+     */
+    public function getUTCMilliseconds(): float|int
+    {
+        return $this->dt === null ? NAN : (int) round(((int) $this->dt->format('u')) / 1000);
+    }
+
+    /**
+     * Returns the minutes component (0-59) in UTC.
+     *
+     * @return int|float
+     */
+    public function getUTCMinutes(): float|int
+    {
+        return $this->inUtc() ? (int) $this->inUtc()->format('i') : NAN;
+    }
+
+    /**
+     * Returns the month (0 = January through 11 = December) in UTC.
+     *
+     * @return int|float
+     */
+    public function getUTCMonth(): float|int
+    {
+        return $this->inUtc() ? ((int) $this->inUtc()->format('n')) - 1 : NAN;
+    }
+
+    /**
+     * Returns the seconds component (0-59) in UTC.
+     *
+     * @return int|float
+     */
+    public function getUTCSeconds(): float|int
+    {
+        return $this->inUtc() ? (int) $this->inUtc()->format('s') : NAN;
+    }
+
+    /**
+     * Returns the underlying instance shifted to UTC, or null when invalid.
+     *
+     * @return DateTimeImmutable|null
+     */
+    private function inUtc(): ?DateTimeImmutable
+    {
+        return $this->dt?->setTimezone(self::$utc);
+    }
+
+    /**
+     * Sets the day of the month in local time. Accepts values outside the
+     * 1-31 range, which overflow into adjacent months.
+     *
+     * @param int $day
+     * @return float The new timestamp in milliseconds.
+     */
+    public function setDate(int $day): float
+    {
+        $this->requireValid();
+        $this->dt = $this->dt->setDate((int) $this->dt->format('Y'), (int) $this->dt->format('n'), $day);
+        return $this->getTime();
+    }
+
+    /**
+     * Sets the year (optionally month and day) in local time. Years 0-99
+     * are mapped to 1900+year.
+     *
+     * @param int $year
+     * @param int|null $month Zero-based month.
+     * @param int|null $day
+     * @return float The new timestamp in milliseconds.
+     */
+    public function setFullYear(int $year, ?int $month = null, ?int $day = null): float
+    {
+        $this->requireValid();
+
+        if ($year >= 0 && $year <= 99) {
+            $year += 1900;
+        }
+
+        $this->dt = $this->dt->setDate(
+            $year,
+            $month !== null ? $month + 1 : (int) $this->dt->format('n'),
+            $day ?? (int) $this->dt->format('j')
+        );
+
+        return $this->getTime();
+    }
+
+    /**
+     * Sets the hour (and optionally minutes, seconds, milliseconds) in
+     * local time, with overflow into adjacent units.
+     *
+     * @param int $hours
+     * @param int|null $minutes
+     * @param int|null $seconds
+     * @param int|null $ms
+     * @return float The new timestamp in milliseconds.
+     */
+    public function setHours(int $hours, ?int $minutes = null, ?int $seconds = null, ?int $ms = null): float
+    {
+        $this->requireValid();
+        $this->dt = $this->dt->setTime(
+            $hours,
+            $minutes ?? (int) $this->dt->format('i'),
+            $seconds ?? (int) $this->dt->format('s'),
+            ($ms ?? $this->getMilliseconds()) * 1000
+        );
+        return $this->getTime();
+    }
+
+    /**
+     * Sets the milliseconds component in local time.
+     *
+     * @param int $ms
+     * @return float The new timestamp in milliseconds.
+     */
+    public function setMilliseconds(int $ms): float
+    {
+        $this->requireValid();
+        $this->dt = $this->dt->setTime(
+            (int) $this->dt->format('G'),
+            (int) $this->dt->format('i'),
+            (int) $this->dt->format('s'),
+            $ms * 1000
+        );
+        return $this->getTime();
+    }
+
+    /**
+     * Sets the minutes component (and optionally seconds and milliseconds)
+     * in local time, with overflow into adjacent units.
+     *
+     * @param int $minutes
+     * @param int|null $seconds
+     * @param int|null $ms
+     * @return float The new timestamp in milliseconds.
+     */
+    public function setMinutes(int $minutes, ?int $seconds = null, ?int $ms = null): float
+    {
+        $this->requireValid();
+        $this->dt = $this->dt->setTime(
+            (int) $this->dt->format('G'),
+            $minutes,
+            $seconds ?? (int) $this->dt->format('s'),
+            ($ms ?? $this->getMilliseconds()) * 1000
+        );
+        return $this->getTime();
+    }
+
+    /**
+     * Sets the month (zero-based, optionally the day too) in local time,
+     * with overflow into adjacent years.
+     *
+     * @param int $month
+     * @param int|null $day
+     * @return float The new timestamp in milliseconds.
+     */
+    public function setMonth(int $month, ?int $day = null): float
+    {
+        $this->requireValid();
+        $this->dt = $this->dt->setDate(
+            (int) $this->dt->format('Y'),
+            $month + 1,
+            $day ?? (int) $this->dt->format('j')
+        );
+        return $this->getTime();
+    }
+
+    /**
+     * Sets the seconds component (and optionally milliseconds) in local
+     * time, with overflow into adjacent units.
+     *
+     * @param int $seconds
+     * @param int|null $ms
+     * @return float The new timestamp in milliseconds.
+     */
+    public function setSeconds(int $seconds, ?int $ms = null): float
+    {
+        $this->requireValid();
+        $this->dt = $this->dt->setTime(
+            (int) $this->dt->format('G'),
+            (int) $this->dt->format('i'),
+            $seconds,
+            ($ms ?? $this->getMilliseconds()) * 1000
+        );
+        return $this->getTime();
+    }
+
+    /**
+     * Sets the date from milliseconds since the Unix epoch.
+     *
+     * @param int|float $ms
+     * @return float The new timestamp in milliseconds.
+     */
+    public function setTime(int|float $ms): float
+    {
+        $this->dt = $this->fromMilliseconds($ms);
+        return $this->getTime();
+    }
+
+    /**
+     * Sets the day of the month in UTC.
+     *
+     * @param int $day
+     * @return float The new timestamp in milliseconds.
+     */
+    public function setUTCDate(int $day): float
+    {
+        $this->requireValid();
+        $utc = $this->inUtc()->setDate((int) $this->inUtc()->format('Y'), (int) $this->inUtc()->format('n'), $day);
+        $this->dt = $utc->setTimezone(self::$local);
+        return $this->getTime();
+    }
+
+    /**
+     * Sets the year (optionally month and day) in UTC. Years 0-99 are
+     * mapped to 1900+year.
+     *
+     * @param int $year
+     * @param int|null $month Zero-based month.
+     * @param int|null $day
+     * @return float The new timestamp in milliseconds.
+     */
+    public function setUTCFullYear(int $year, ?int $month = null, ?int $day = null): float
+    {
+        $this->requireValid();
+
+        if ($year >= 0 && $year <= 99) {
+            $year += 1900;
+        }
+
+        $utc = $this->inUtc()->setDate(
+            $year,
+            $month !== null ? $month + 1 : (int) $this->inUtc()->format('n'),
+            $day ?? (int) $this->inUtc()->format('j')
+        );
+        $this->dt = $utc->setTimezone(self::$local);
+        return $this->getTime();
+    }
+
+    /**
+     * Sets the hour (and optionally minutes, seconds, milliseconds) in UTC.
+     *
+     * @param int $hours
+     * @param int|null $minutes
+     * @param int|null $seconds
+     * @param int|null $ms
+     * @return float The new timestamp in milliseconds.
+     */
+    public function setUTCHours(int $hours, ?int $minutes = null, ?int $seconds = null, ?int $ms = null): float
+    {
+        $this->requireValid();
+        $utc = $this->inUtc()->setTime(
+            $hours,
+            $minutes ?? (int) $this->inUtc()->format('i'),
+            $seconds ?? (int) $this->inUtc()->format('s'),
+            ($ms ?? $this->getMilliseconds()) * 1000
+        );
+        $this->dt = $utc->setTimezone(self::$local);
+        return $this->getTime();
+    }
+
+    /**
+     * Sets the minutes component (and optionally seconds and milliseconds)
+     * in UTC.
+     *
+     * @param int $minutes
+     * @param int|null $seconds
+     * @param int|null $ms
+     * @return float The new timestamp in milliseconds.
+     */
+    public function setUTCMinutes(int $minutes, ?int $seconds = null, ?int $ms = null): float
+    {
+        $this->requireValid();
+        $utc = $this->inUtc()->setTime(
+            (int) $this->inUtc()->format('G'),
+            $minutes,
+            $seconds ?? (int) $this->inUtc()->format('s'),
+            ($ms ?? $this->getMilliseconds()) * 1000
+        );
+        $this->dt = $utc->setTimezone(self::$local);
+        return $this->getTime();
+    }
+
+    /**
+     * Sets the month (zero-based, optionally the day too) in UTC.
+     *
+     * @param int $month
+     * @param int|null $day
+     * @return float The new timestamp in milliseconds.
+     */
+    public function setUTCMonth(int $month, ?int $day = null): float
+    {
+        $this->requireValid();
+        $utc = $this->inUtc()->setDate(
+            (int) $this->inUtc()->format('Y'),
+            $month + 1,
+            $day ?? (int) $this->inUtc()->format('j')
+        );
+        $this->dt = $utc->setTimezone(self::$local);
+        return $this->getTime();
+    }
+
+    /**
+     * Sets the seconds component (and optionally milliseconds) in UTC.
+     *
+     * @param int $seconds
+     * @param int|null $ms
+     * @return float The new timestamp in milliseconds.
+     */
+    public function setUTCSeconds(int $seconds, ?int $ms = null): float
+    {
+        $this->requireValid();
+        $utc = $this->inUtc()->setTime(
+            (int) $this->inUtc()->format('G'),
+            (int) $this->inUtc()->format('i'),
+            $seconds,
+            ($ms ?? $this->getMilliseconds()) * 1000
+        );
+        $this->dt = $utc->setTimezone(self::$local);
+        return $this->getTime();
+    }
+
+    /**
+     * Formats the date portion in English, e.g. "Fri Oct 02 2026".
+     *
+     * @return string
+     */
+    public function toDateString(): string
+    {
+        return $this->dt?->format('D M d Y') ?? 'Invalid Date';
+    }
+
+    /**
+     * Formats the time portion, e.g. "20:02:00 GMT-0300".
+     *
+     * @return string
+     */
+    public function toTimeString(): string
+    {
+        return $this->dt?->format('H:i:s \G\M\TO') ?? 'Invalid Date';
+    }
+
+    /**
+     * Full string representation, e.g.
+     * "Fri Oct 02 2026 20:02:00 GMT-0300 (America/Sao_Paulo)".
+     *
+     * @return string
+     */
+    public function toString(): string
+    {
+        if ($this->dt === null) {
+            return 'Invalid Date';
+        }
+
+        return $this->dt->format('D M d Y H:i:s \G\M\TO') . ' (' . $this->dt->format('e') . ')';
+    }
+
+    /**
+     * Formats the date in UTC, e.g. "Fri, 02 Oct 2026 20:02:00 GMT".
+     *
+     * @return string
+     */
+    public function toUTCString(): string
+    {
+        return $this->dt?->setTimezone(self::$utc)->format('D, d M Y H:i:s \G\M\T') ?? 'Invalid Date';
+    }
+
+    /**
+     * ISO 8601 representation, e.g. "2026-10-02T20:02:00.000Z".
+     *
+     * @return string
+     *
+     * @throws InvalidArgumentException When the instance is an invalid date.
+     */
+    public function toISOString(): string
+    {
+        $this->requireValid();
+        return $this->dt->setTimezone(self::$utc)->format('Y-m-d\TH:i:s.v\Z');
+    }
+
+    /**
+     * JSON representation of the date. Identical to toISOString().
+     *
+     * @return string
+     */
+    public function toJSON(): string
+    {
+        return $this->toISOString();
+    }
+
+    /**
+     * Locale-aware date and time formatting.
+     *
+     * When ext-intl is available, supports the full set of Intl options:
+     *
+     *      ['dateStyle' => 'short|medium|long|full']
+     *      ['timeStyle' => 'short|medium|long|full']
+     *      ['weekday' => 'narrow|short|long']
+     *      ['year' => 'numeric|2-digit']
+     *      ['month' => 'numeric|2-digit|short|long|narrow']
+     *      ['day' => 'numeric|2-digit']
+     *      ['hour' => 'numeric|2-digit']
+     *      ['minute' => 'numeric|2-digit']
+     *      ['second' => 'numeric|2-digit']
+     *      ['hour12' => bool]
+     *
+     * @param string|null $locale Locale code, e.g. 'pt-BR'. Defaults to app_locale() when available.
+     * @param array<string,mixed> $options
+     * @return string
+     */
+    public function toLocaleString(?string $locale = null, array $options = []): string
+    {
+        if ($this->dt === null || !extension_loaded('intl')) {
+            return $this->dt === null ? 'Invalid Date' : $this->dt->format('Y-m-d H:i:s');
+        }
+
+        $locale = $this->normalizeLocale($locale);
+
+        if ($this->hasFieldOptions($options)) {
+            return $this->formatWithFields($locale, $options, true, true);
+        }
+
+        [$dateStyle, $timeStyle] = $this->resolveStyles($options, 'medium', 'short');
+
+        $formatter = new IntlDateFormatter($locale, $dateStyle, $timeStyle, self::$local->getName());
+
+        return $formatter->format($this->dt) ?: '';
+    }
+
+    /**
+     * Locale-aware date-only formatting. Accepts the same options as
+     * toLocaleString().
+     *
+     * @param string|null $locale
+     * @param array<string,mixed> $options
+     * @return string
+     */
+    public function toLocaleDateString(?string $locale = null, array $options = []): string
+    {
+        if ($this->dt === null || !extension_loaded('intl')) {
+            return $this->dt === null ? 'Invalid Date' : $this->dt->format('Y-m-d');
+        }
+
+        $locale = $this->normalizeLocale($locale);
+
+        if ($this->hasFieldOptions($options)) {
+            return $this->formatWithFields($locale, $options, true, false);
+        }
+
+        [$dateStyle] = $this->resolveStyles($options, 'medium', 'medium');
+
+        $formatter = new IntlDateFormatter($locale, $dateStyle, IntlDateFormatter::NONE, self::$local->getName());
+
+        return $formatter->format($this->dt) ?: '';
+    }
+
+    /**
+     * Locale-aware time-only formatting. Accepts the same options as
+     * toLocaleString().
+     *
+     * @param string|null $locale
+     * @param array<string,mixed> $options
+     * @return string
+     */
+    public function toLocaleTimeString(?string $locale = null, array $options = []): string
+    {
+        if ($this->dt === null || !extension_loaded('intl')) {
+            return $this->dt === null ? 'Invalid Date' : $this->dt->format('H:i:s');
+        }
+
+        $locale = $this->normalizeLocale($locale);
+
+        if ($this->hasFieldOptions($options)) {
+            return $this->formatWithFields($locale, $options, false, true);
+        }
+
+        [, $timeStyle] = $this->resolveStyles($options, 'medium', 'short');
+
+        $formatter = new IntlDateFormatter(locale: $locale, timezone: self::$local->getName());
+        $formatter->setPattern($timeStyle === IntlDateFormatter::SHORT ? 'HH:mm' : 'HH:mm:ss');
+
+        return $formatter->format($this->dt) ?: '';
+    }
+
+    /**
+     * Returns the current timestamp in milliseconds.
+     *
+     * @return int
+     */
+    public static function now(): int
+    {
+        return (int) round(microtime(true) * 1000);
+    }
+
+    /**
+     * Parses a date string into a timestamp in milliseconds.
+     *
+     * @param string $value
+     * @return float NAN when the string cannot be parsed.
+     */
+    public static function parse(string $value): float
+    {
+        return (new self($value))->getTime();
+    }
+
+    /**
+     * Builds a UTC timestamp in milliseconds from date/time components.
+     *
+     * @param mixed ...$args year, month (zero-based), day, hours, minutes, seconds, milliseconds.
+     * @return float
+     */
+    public static function UTC(mixed ...$args): float
+    {
+        self::$utc   ??= new DateTimeZone('UTC');
+        self::$local ??= new DateTimeZone(date_default_timezone_get());
+
+        $year  = (int) ($args[0] ?? 0);
+        $month = (int) ($args[1] ?? 0);
+        $day   = (int) ($args[2] ?? 1);
+        $hour  = (int) ($args[3] ?? 0);
+        $min   = (int) ($args[4] ?? 0);
+        $sec   = (int) ($args[5] ?? 0);
+        $ms    = (int) ($args[6] ?? 0);
+
+        if ($year >= 0 && $year <= 99) {
+            $year += 1900;
+        }
+
+        $dt = (new DateTimeImmutable('now', self::$utc))
+            ->setTime(0, 0, 0, 0)
+            ->setDate($year, $month + 1, $day)
+            ->setTime($hour, $min, $sec, $ms * 1000);
+
+        return (float) sprintf('%d%03d', $dt->getTimestamp(), (int) round(((int) $dt->format('u')) / 1000));
+    }
+
+    /**
+     * Returns the full string representation.
+     *
+     * @return string
+     */
+    public function __toString(): string
+    {
+        return $this->toString();
+    }
+
+    /**
+     * Normalizes a locale code (hyphens to underscores) and applies the
+     * default locale when none is given.
+     *
+     * @param string|null $locale
+     * @return string
+     */
+    private function normalizeLocale(?string $locale): string
+    {
+        $locale ??= function_exists('app_locale') ? app_locale() : 'pt_BR';
+        return str_replace('-', '_', $locale);
+    }
+
+    /**
+     * Whether any individual field option is present.
+     *
+     * @param array<string,mixed> $options
+     * @return bool
+     */
+    private function hasFieldOptions(array $options): bool
+    {
+        foreach (['weekday', 'year', 'month', 'day', 'hour', 'minute', 'second'] as $field) {
+            if (isset($options[$field])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Resolves dateStyle/timeStyle options to IntlDateFormatter constants.
+     *
+     * @param array<string,mixed> $options
+     * @return array{0:int,1:int}
+     */
+    private function resolveStyles(array $options, string $defaultDate, string $defaultTime): array
+    {
+        $map = [
+            'short'  => IntlDateFormatter::SHORT,
+            'medium' => IntlDateFormatter::MEDIUM,
+            'long'   => IntlDateFormatter::LONG,
+            'full'   => IntlDateFormatter::FULL,
+        ];
+
+        return [
+            $map[$options['dateStyle'] ?? $defaultDate] ?? IntlDateFormatter::MEDIUM,
+            $map[$options['timeStyle'] ?? $defaultTime] ?? IntlDateFormatter::MEDIUM,
+        ];
+    }
+
+    /**
+     * Builds an ICU pattern from individual field options and formats the
+     * date with it.
+     *
+     * @param string $locale
+     * @param array<string,mixed> $options
+     * @param bool $withDate
+     * @param bool $withTime
+     * @return string
+     */
+    private function formatWithFields(string $locale, array $options, bool $withDate, bool $withTime): string
+    {
+        $hour12  = (bool) ($options['hour12'] ?? false);
+        $pattern = '';
+
+        if ($withDate) {
+            if (isset($options['weekday'])) {
+                $pattern .= match ($options['weekday']) {
+                    'narrow' => 'EEEEE ',
+                    'short'  => 'E ',
+                    default  => 'EEEE ',
+                };
+            }
+            if (isset($options['year'])) {
+                $pattern .= ($options['year'] === '2-digit' ? 'yy ' : 'y ');
+            }
+            if (isset($options['month'])) {
+                $pattern .= match ($options['month']) {
+                    'narrow'  => 'MMMMM ',
+                    'short'   => 'MMM ',
+                    '2-digit' => 'MM ',
+                    'numeric' => 'M ',
+                    default   => 'MMMM ',
+                };
+            }
+            if (isset($options['day'])) {
+                $pattern .= ($options['day'] === '2-digit' ? 'dd ' : 'd ');
             }
         }
 
-        throw new InvalidArgumentException(
-            "Unable to parse '{$value}' as a date. Provide an explicit format via Date::createFromFormat()."
-        );
-    }
-
-    /**
-     * Creates a Date instance from an explicit PHP date() format.
-     *
-     * @param  string            $format   PHP date() format tokens, e.g. 'd/m/Y'.
-     * @param  string            $value    Value to parse against the format.
-     * @param  DateTimeZone|null $timezone Defaults to the app timezone.
-     * @return static
-     *
-     * @throws InvalidArgumentException If the value does not match the given format.
-     */
-    public static function createFromFormat(string $format, string $value, ?DateTimeZone $timezone = null): static
-    {
-        $dt = DateTimeImmutable::createFromFormat($format, $value, $timezone ?? self::appTimezone());
-
-        if (!$dt instanceof DateTimeImmutable) {
-            throw new InvalidArgumentException(
-                "Value '{$value}' does not match format '{$format}'."
-            );
+        if ($withTime) {
+            if (isset($options['hour'])) {
+                $pattern .= $hour12
+                    ? (($options['hour'] === '2-digit' ? 'hh' : 'h') . ':')
+                    : (($options['hour'] === '2-digit' ? 'HH' : 'H') . ':');
+            }
+            if (isset($options['minute'])) {
+                $pattern .= 'mm ';
+            }
+            if (isset($options['second'])) {
+                $pattern .= 'ss ';
+            }
+            if ($hour12) {
+                $pattern .= 'a';
+            }
         }
 
-        return new static($dt);
-    }
+        $formatter = new IntlDateFormatter($locale, IntlDateFormatter::NONE, IntlDateFormatter::NONE, self::$local->getName());
+        $formatter->setPattern(trim($pattern));
 
-    /**
-     * Creates a Date instance from a Unix timestamp.
-     *
-     * @param  int               $timestamp
-     * @param  DateTimeZone|null $timezone Defaults to the app timezone.
-     * @return static
-     */
-    public static function createFromTimestamp(int $timestamp, ?DateTimeZone $timezone = null): static
-    {
-        $dt = (new DateTimeImmutable('@' . $timestamp))->setTimezone($timezone ?? self::appTimezone());
-        return new static($dt);
-    }
-
-    /**
-     * Wraps an existing DateTimeInterface (DateTime or DateTimeImmutable)
-     * instance into a Date, for interoperability with native PHP code.
-     *
-     * @param  DateTimeInterface $dateTime
-     * @return static
-     */
-    public static function fromDateTime(DateTimeInterface $dateTime): static
-    {
-        return new static(
-            $dateTime instanceof DateTimeImmutable
-                ? $dateTime
-                : DateTimeImmutable::createFromInterface($dateTime)
-        );
-    }
-
-    // =========================================================================
-    // Manipulation (immutable — every call returns a new instance)
-    // =========================================================================
-
-    public function addSeconds(int $seconds): static
-    {
-        return $this->withDateTime($this->dt->modify("{$seconds} seconds"));
-    }
-
-    public function subSeconds(int $seconds): static
-    {
-        return $this->addSeconds(-$seconds);
-    }
-
-    public function addMinutes(int $minutes): static
-    {
-        return $this->withDateTime($this->dt->modify("{$minutes} minutes"));
-    }
-
-    public function subMinutes(int $minutes): static
-    {
-        return $this->addMinutes(-$minutes);
-    }
-
-    public function addHours(int $hours): static
-    {
-        return $this->withDateTime($this->dt->modify("{$hours} hours"));
-    }
-
-    public function subHours(int $hours): static
-    {
-        return $this->addHours(-$hours);
-    }
-
-    public function addDays(int $days): static
-    {
-        return $this->withDateTime($this->dt->modify("{$days} days"));
-    }
-
-    public function subDays(int $days): static
-    {
-        return $this->addDays(-$days);
-    }
-
-    public function addWeeks(int $weeks): static
-    {
-        return $this->addDays($weeks * 7);
-    }
-
-    public function subWeeks(int $weeks): static
-    {
-        return $this->addDays(-$weeks * 7);
-    }
-
-    /**
-     * Adds calendar months. Calendar-aware: adding 1 month to Jan 31 lands
-     * on the last valid day of February rather than overflowing into March.
-     *
-     * @param  int $months
-     * @return static
-     */
-    public function addMonths(int $months): static
-{
-    return $this->withDateTime($this->clampedMonthDate($months));
-}
-
-    public function subMonths(int $months): static
-{
-    return $this->withDateTime($this->clampedMonthDate(-$months));
-}
-
-    public function addYears(int $years): static
-    {
-        return $this->withDateTime($this->dt->modify("{$years} years"));
-    }
-
-    public function subYears(int $years): static
-    {
-        return $this->addYears(-$years);
-    }
-
-    public function startOfDay(): static
-    {
-        return $this->withDateTime($this->dt->setTime(0, 0, 0));
-    }
-
-    public function endOfDay(): static
-    {
-        return $this->withDateTime($this->dt->setTime(23, 59, 59));
-    }
-
-    public function startOfWeek(): static
-    {
-        return $this->withDateTime($this->dt->modify('monday this week')->setTime(0, 0, 0));
-    }
-
-    public function endOfWeek(): static
-    {
-        return $this->withDateTime($this->dt->modify('sunday this week')->setTime(23, 59, 59));
-    }
-
-    public function startOfMonth(): static
-    {
-        return $this->withDateTime($this->dt->modify('first day of this month')->setTime(0, 0, 0));
-    }
-
-    public function endOfMonth(): static
-    {
-        return $this->withDateTime($this->dt->modify('last day of this month')->setTime(23, 59, 59));
-    }
-
-    public function startOfYear(): static
-    {
-        return $this->withDateTime($this->dt->setDate((int) $this->dt->format('Y'), 1, 1)->setTime(0, 0, 0));
-    }
-
-    public function endOfYear(): static
-    {
-        return $this->withDateTime($this->dt->setDate((int) $this->dt->format('Y'), 12, 31)->setTime(23, 59, 59));
-    }
-
-    /**
- * Computes a target date after adding/subtracting whole calendar months,
- * clamping the day-of-month to the last valid day of the target month
- * instead of overflowing (e.g. Jan 31 + 1 month → Feb 28/29, not Mar 2/3).
- *
- * @param  int $months
- * @return DateTimeImmutable
- */
-private function clampedMonthDate(int $months): DateTimeImmutable
-{
-    $firstOfTarget = $this->dt->modify('first day of ' . ($months >= 0 ? "+{$months} month" : "{$months} month"));
-    $lastDay = (int) $firstOfTarget->format('t');
-    $originalDay = min((int) $this->dt->format('j'), $lastDay);
-
-    return $firstOfTarget->setDate(
-        (int) $firstOfTarget->format('Y'),
-        (int) $firstOfTarget->format('n'),
-        $originalDay
-    )->setTime(
-        (int) $this->dt->format('H'),
-        (int) $this->dt->format('i'),
-        (int) $this->dt->format('s')
-    );
-}
-
-    // =========================================================================
-    // Comparison
-    // =========================================================================
-
-    public function isBefore(Date $other): bool
-    {
-        return $this->dt < $other->dt;
-    }
-
-    public function isAfter(Date $other): bool
-    {
-        return $this->dt > $other->dt;
-    }
-
-    public function isSameDay(Date $other): bool
-    {
-        return $this->dt->format('Y-m-d') === $other->dt->format('Y-m-d');
-    }
-
-    public function isSameMonth(Date $other): bool
-    {
-        return $this->dt->format('Y-m') === $other->dt->format('Y-m');
-    }
-
-    public function isSameYear(Date $other): bool
-    {
-        return $this->dt->format('Y') === $other->dt->format('Y');
-    }
-
-    public function isPast(): bool
-    {
-        return $this->dt < static::now()->dt;
-    }
-
-    public function isFuture(): bool
-    {
-        return $this->dt > static::now()->dt;
-    }
-
-    public function isToday(): bool
-    {
-        return $this->isSameDay(static::now());
-    }
-
-    public function isTomorrow(): bool
-    {
-        return $this->isSameDay(static::tomorrow());
-    }
-
-    public function isYesterday(): bool
-    {
-        return $this->isSameDay(static::yesterday());
-    }
-
-    public function isWeekend(): bool
-    {
-        return in_array((int) $this->dt->format('N'), [6, 7], true);
-    }
-
-    public function isWeekday(): bool
-    {
-        return !$this->isWeekend();
-    }
-
-    // =========================================================================
-    // Diffing
-    // =========================================================================
-
-    public function diffInSeconds(Date $other): int
-    {
-        return abs($other->dt->getTimestamp() - $this->dt->getTimestamp());
-    }
-
-    public function diffInMinutes(Date $other): int
-    {
-        return intdiv($this->diffInSeconds($other), 60);
-    }
-
-    public function diffInHours(Date $other): int
-    {
-        return intdiv($this->diffInSeconds($other), 3600);
-    }
-
-    public function diffInDays(Date $other): int
-    {
-        return (int) $this->dt->diff($other->dt)->days;
-    }
-
-    public function diffInWeeks(Date $other): int
-    {
-        return intdiv($this->diffInDays($other), 7);
-    }
-
-    public function diffInMonths(Date $other): int
-    {
-        $interval = $this->dt->diff($other->dt);
-        return ($interval->y * 12) + $interval->m;
-    }
-
-    public function diffInYears(Date $other): int
-    {
-        return (int) $this->dt->diff($other->dt)->y;
-    }
-
-    /**
-     * Returns a human-readable, relative description of the time distance
-     * between this Date and now — e.g. "3 days ago", "in 2 hours", "just now".
-     *
-     * Uses the largest applicable unit (years > months > weeks > days >
-     * hours > minutes), mirroring the granularity behaviour of the
-     * existing human_date() global helper, but locale-aware and returned
-     * as part of this class rather than a standalone function.
-     *
-     * @param  string $locale Defaults to app_locale().
-     * @return string
-     */
-    public function diffForHumans(?string $locale = null): string
-    {
-        $now = static::now();
-        $isPast = $this->isBefore($now);
-        $interval = $this->dt->diff($now->dt);
-
-        $unit = match (true) {
-            $interval->y > 0 => [$interval->y, $interval->y === 1 ? 'year' : 'years'],
-            $interval->m > 0 => [$interval->m, $interval->m === 1 ? 'month' : 'months'],
-            $interval->d >= 7 => [(int) ($interval->d / 7), (int) ($interval->d / 7) === 1 ? 'week' : 'weeks'],
-            $interval->d > 0 => [$interval->d, $interval->d === 1 ? 'day' : 'days'],
-            $interval->h > 0 => [$interval->h, $interval->h === 1 ? 'hour' : 'hours'],
-            $interval->i > 0 => [$interval->i, $interval->i === 1 ? 'minute' : 'minutes'],
-            default => null,
-        };
-
-        if ($unit === null) {
-            return $this->translate('just_now', $locale) ?? 'just now';
-        }
-
-        [$amount, $unitLabel] = $unit;
-        $phrase = "{$amount} {$unitLabel}";
-
-        return $isPast
-            ? $phrase . ' ' . ($this->translate('ago', $locale) ?? 'ago')
-            : ($this->translate('in', $locale) ?? 'in') . ' ' . $phrase;
-    }
-
-    // =========================================================================
-    // Formatting
-    // =========================================================================
-
-    /**
-     * Formats using native PHP date() format tokens. Direct passthrough —
-     * not locale-aware (use the named formatters below for that).
-     *
-     * @param  string $format
-     * @return string
-     */
-    public function format(string $format): string
-    {
-        return $this->dt->format($format);
-    }
-
-    public function toDateString(): string
-    {
-        return $this->dt->format('Y-m-d');
-    }
-
-    public function toTimeString(): string
-    {
-        return $this->dt->format('H:i:s');
-    }
-
-    public function toDateTimeString(): string
-    {
-        return $this->dt->format('Y-m-d H:i:s');
-    }
-
-    /**
-     * Short, locale-aware date — e.g. English: "Jan 1, 2026".
-     *
-     * @param  string|null $locale Defaults to app_locale().
-     * @return string
-     */
-    public function toFormattedDate(?string $locale = null): string
-    {
-        $month = $this->monthNameShort($locale);
-        $day = $this->dt->format('j');
-        $year = $this->dt->format('Y');
-
-        return $this->isPortuguese($locale)
-            ? "{$day} {$month} {$year}"
-            : "{$month} {$day}, {$year}";
-    }
-
-    /**
-     * Full-word, locale-aware date — e.g. English: "January 1, 2026",
-     * Portuguese: "1 de janeiro de 2026".
-     *
-     * @param  string|null $locale Defaults to app_locale().
-     * @return string
-     */
-    public function toLongDate(?string $locale = null): string
-    {
-        $month = $this->monthName($locale);
-        $day = $this->dt->format('j');
-        $year = $this->dt->format('Y');
-
-        return $this->isPortuguese($locale)
-            ? "{$day} de {$month} de {$year}"
-            : "{$month} {$day}, {$year}";
-    }
-
-    /**
-     * Full-word date including the weekday name — e.g. English:
-     * "Thursday, January 1, 2026", Portuguese: "quinta-feira, 1 de janeiro de 2026".
-     *
-     * @param  string|null $locale Defaults to app_locale().
-     * @return string
-     */
-    public function toFullDate(?string $locale = null): string
-    {
-        $weekday = $this->dayName($locale);
-        $longDate = $this->toLongDate($locale);
-
-        return "{$weekday}, {$longDate}";
-    }
-
-    public function monthName(?string $locale = null): string
-    {
-        $index = (int) $this->dt->format('n') - 1;
-        return $this->localeTable($locale)['months'][$index];
-    }
-
-    public function monthNameShort(?string $locale = null): string
-    {
-        $index = (int) $this->dt->format('n') - 1;
-        return $this->localeTable($locale)['months_short'][$index];
-    }
-
-    public function dayName(?string $locale = null): string
-    {
-        $index = (int) $this->dt->format('N') - 1;
-        return $this->localeTable($locale)['days'][$index];
-    }
-
-    public function dayNameShort(?string $locale = null): string
-    {
-        $index = (int) $this->dt->format('N') - 1;
-        return $this->localeTable($locale)['days_short'][$index];
-    }
-
-    // =========================================================================
-    // Accessors
-    // =========================================================================
-
-    public function year(): int
-    {
-        return (int) $this->dt->format('Y');
-    }
-
-    public function month(): int
-    {
-        return (int) $this->dt->format('n');
-    }
-
-    public function day(): int
-    {
-        return (int) $this->dt->format('j');
-    }
-
-    public function hour(): int
-    {
-        return (int) $this->dt->format('G');
-    }
-
-    public function minute(): int
-    {
-        return (int) $this->dt->format('i');
-    }
-
-    public function second(): int
-    {
-        return (int) $this->dt->format('s');
-    }
-
-    public function timestamp(): int
-    {
-        return $this->dt->getTimestamp();
-    }
-
-    // =========================================================================
-    // Interoperability
-    // =========================================================================
-
-    /**
-     * Returns the underlying native DateTimeImmutable instance.
-     *
-     * @return DateTimeImmutable
-     */
-    public function toDateTimeImmutable(): DateTimeImmutable
-    {
-        return $this->dt;
-    }
-
-    public function __toString(): string
-    {
-        return $this->toDateTimeString();
-    }
-
-    // =========================================================================
-    // Internals
-    // =========================================================================
-
-    /**
-     * Creates a new Date wrapping the given DateTimeImmutable, preserving
-     * immutability (this Date instance itself is never mutated).
-     *
-     * @param  DateTimeImmutable $dt
-     * @return static
-     */
-    private function withDateTime(DateTimeImmutable $dt): static
-    {
-        return new static($dt);
-    }
-
-    /**
-     * Resolves the translation table for the given (or app-configured)
-     * locale, falling back to English when unregistered.
-     *
-     * @param  string|null $locale
-     * @return array{months: string[], months_short: string[], days: string[], days_short: string[]}
-     */
-    private function localeTable(?string $locale): array
-    {
-        $resolved = $this->resolveLocale($locale);
-        return self::$locales[$resolved] ?? self::$locales['en'];
-    }
-
-    /**
-     * Resolves the effective locale code, defaulting to app_locale()
-     * and normalizing regional variants (pt_BR, pt_PT) to their base
-     * language table (pt) when no exact match is registered.
-     *
-     * @param  string|null $locale
-     * @return string
-     */
-    private function resolveLocale(?string $locale): string
-    {
-        $locale = $locale ?? (function_exists('app_locale') ? app_locale() : 'en');
-        $locale = strtolower($locale);
-
-        if (isset(self::$locales[$locale])) {
-            return $locale;
-        }
-
-        $base = explode('_', $locale)[0];
-        return isset(self::$locales[$base]) ? $base : 'en';
-    }
-
-    private function isPortuguese(?string $locale): bool
-    {
-        return $this->resolveLocale($locale) === 'pt';
-    }
-
-    /**
-     * Translates small connector phrases used by diffForHumans() ('ago',
-     * 'in', 'just_now'). Returns null when no translation exists, letting
-     * the caller fall back to the English default.
-     *
-     * @param  string      $key
-     * @param  string|null $locale
-     * @return string|null
-     */
-    private function translate(string $key, ?string $locale): ?string
-    {
-        $phrases = [
-            'pt' => ['ago' => 'atrás', 'in' => 'em', 'just_now' => 'agora mesmo'],
-        ];
-
-        $resolved = $this->resolveLocale($locale);
-        return $phrases[$resolved][$key] ?? null;
-    }
-
-    /**
-     * Resolves the application's configured timezone as a DateTimeZone.
-     *
-     * @return DateTimeZone
-     */
-    private static function appTimezone(): DateTimeZone
-    {
-        return new DateTimeZone(function_exists('app_timezone') ? app_timezone() : 'UTC');
-    }
-
-    /**
-     * Registers or overrides a locale's translation table at runtime.
-     * Useful for adding languages beyond the built-in 'en' and 'pt'.
-     *
-     * @example
-     * Date::registerLocale('es', [
-     *     'months' => ['enero', 'febrero', ...],
-     *     'months_short' => ['ene', 'feb', ...],
-     *     'days' => ['lunes', 'martes', ...],
-     *     'days_short' => ['lun', 'mar', ...],
-     * ]);
-     *
-     * @param  string $locale
-     * @param  array{months: string[], months_short: string[], days: string[], days_short: string[]} $table
-     * @return void
-     */
-    public static function registerLocale(string $locale, array $table): void
-    {
-        self::$locales[strtolower($locale)] = $table;
+        return $formatter->format($this->dt) ?: '';
     }
 }

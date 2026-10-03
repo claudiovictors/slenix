@@ -64,6 +64,14 @@ class Router
      */
     private static array $prefix = [];
 
+      /**
+     * Global parameter patterns, applied to every route that does not
+     * declare its own constraint for that parameter.
+     *
+     * @var array<string, string>
+     */
+    private static array $patterns = [];
+
     /**
      * Middlewares accumulated from the current group nesting.
      *
@@ -436,44 +444,89 @@ class Router
         }
     }
 
+        /**
+     * Declares a global pattern for a parameter name.
+     *
+     * Example: Router::pattern('id', '[0-9]+');
+     *
+     * @param  string $parameter
+     * @param  string $regex
+     * @return void
+     */
+    public static function pattern(string $parameter, string $regex): void
+    {
+        self::$patterns[$parameter] = $regex;
+    }
+
+    /** @internal Returns a stored route by index. */
+    public static function getRoute(int $routeIndex): ?array
+    {
+        return self::$routes[$routeIndex] ?? null;
+    }
+
+    /** @internal Removes middlewares from a route. */
+    public static function removeRouteMiddleware(int $routeIndex, array|string $middleware): void
+    {
+        if (!isset(self::$routes[$routeIndex])) {
+            return;
+        }
+
+        self::$routes[$routeIndex]['middleware'] = array_values(array_diff(
+            self::$routes[$routeIndex]['middleware'],
+            (array) $middleware
+        ));
+    }
+
+    /** @internal Merges parameter constraints into a route. */
+    public static function setRouteConstraints(int $routeIndex, array $where): void
+    {
+        if (isset(self::$routes[$routeIndex])) {
+            self::$routes[$routeIndex]['where'] = array_merge(self::$routes[$routeIndex]['where'], $where);
+        }
+    }
+
+    /** @internal Merges default parameter values into a route. */
+    public static function setRouteDefaults(int $routeIndex, array $defaults): void
+    {
+        if (isset(self::$routes[$routeIndex])) {
+            self::$routes[$routeIndex]['defaults'] = array_merge(self::$routes[$routeIndex]['defaults'], $defaults);
+        }
+    }
+
+    /** @internal Sets the host restriction of a route. */
+    public static function setRouteDomain(int $routeIndex, string $domain): void
+    {
+        if (isset(self::$routes[$routeIndex])) {
+            self::$routes[$routeIndex]['domain'] = strtolower($domain);
+        }
+    }
+
+    /** @internal Sets the HTTPS-only flag of a route. */
+    public static function setRouteSecure(int $routeIndex, bool $secure): void
+    {
+        if (isset(self::$routes[$routeIndex])) {
+            self::$routes[$routeIndex]['secure'] = $secure;
+        }
+    }
+
     // -----------------------------------------------------------------------
     // URL Generation
     // -----------------------------------------------------------------------
 
-    /**
-     * Generates the URL for a named route, substituting URI parameters.
+        /**
+     * Generates the URL of a named route.
      *
-     * Required parameters (declared as `{param}`) must be present in `$params`.
-     * Optional parameters (declared as `{param?}`) are simply omitted from the
-     * final URL when not provided.
+     * Parameters not used by the URI become the query string. Route defaults
+     * fill in missing parameters. Optional parameters that end up empty are
+     * dropped together with their slash.
      *
-     * Parameter values may be `string`, `int`, `float`, or any object implementing
-     * `Stringable` (e.g. a Slug or Uuid value object) — each is safely normalized
-     * to a string before substitution. This allows the same named route to be
-     * resolved with either a numeric ID or a slug, depending on the caller's needs.
+     *   Router::route('posts.show', ['id' => 5, 'ref' => 'home']); // '/posts/5?ref=home'
      *
-     * Example:
-     * ```php
-     * // Route: /users/{id}  named 'users.show'
-     * Router::route('users.show', ['id' => 42]);          // → '/users/42'
-     * Router::route('users.show', ['id' => $user->id]);   // → '/users/42' (int)
+     * @param  string $name
+     * @param  array  $params
+     * @return string|null Null when no route has that name.
      *
-     * // Route: /books/{slug}  named 'books.show'
-     * Router::route('books.show', ['slug' => 'dom-casmurro']); // → '/books/dom-casmurro'
-     *
-     * // Route: /search/{query?}  named 'search'
-     * Router::route('search');                     // → '/search'
-     * Router::route('search', ['query' => 'php']);  // → '/search/php'
-     * ```
-     *
-     * @param  string $name   The route name.
-     * @param  array  $params Key-value pairs for URI parameter substitution.
-     *                        Values may be string, int, float, or Stringable.
-     * @return string|null    The generated URL, or `null` if the route is not found.
-     *
-     * @throws \RuntimeException If a required URI parameter is missing from `$params`.
-     * @throws \RuntimeException If a parameter value cannot be safely converted to a string
-     *                            (e.g. an array or a non-Stringable object).
+     * @throws \RuntimeException If a required parameter is missing or invalid.
      */
     public static function route(string $name, array $params = []): ?string
     {
@@ -482,31 +535,35 @@ class Router
                 continue;
             }
 
-            $url = $route['pathUri'];
-            $matches = [];
+            $values = array_merge($route['defaults'], $params);
+            $used   = [];
 
-            if (preg_match_all('/\{([a-zA-Z0-9_]+)(\?)?\}/', $url, $matches, PREG_SET_ORDER)) {
-                foreach ($matches as $match) {
-                    $placeholder = $match[1];
-                    $isOptional = isset($match[2]);
-                    $token = $match[0]; // e.g. {id} or {id?}
+            $url = preg_replace_callback(
+                '#(/)?\{([a-zA-Z0-9_]+)(\?)?\}#',
+                function (array $m) use ($values, &$used, $name): string {
+                    $key        = $m[2];
+                    $isOptional = ($m[3] ?? '') !== '';
+                    $value      = $values[$key] ?? null;
 
-                    if (!$isOptional && !isset($params[$placeholder])) {
-                        throw new \RuntimeException(
-                            "Missing required parameter '{$placeholder}' for route '{$name}'."
-                        );
+                    if ($value === null || $value === '') {
+                        if ($isOptional) {
+                            return '';
+                        }
+                        throw new \RuntimeException("Missing required parameter '{$key}' for route '{$name}'.");
                     }
 
-                    $value = $params[$placeholder] ?? '';
-                    $replacement = self::normalizeRouteParam($placeholder, $name, $value);
+                    $used[$key] = true;
 
-                    $url = str_replace($token, $replacement, $url);
-                }
-            }
+                    return ($m[1] ?? '') . rawurlencode(self::normalizeRouteParam($key, $name, $value));
+                },
+                $route['pathUri']
+            );
 
-            // Collapse double slashes and strip trailing slash (keep root '/').
-            $url = preg_replace('#/+#', '/', $url);
-            return rtrim($url, '/') ?: '/';
+            $url   = preg_replace('#/+#', '/', (string) $url);
+            $url   = rtrim($url, '/') ?: '/';
+            $query = array_diff_key($params, $used);
+
+            return $query === [] ? $url : $url . '?' . http_build_query($query);
         }
 
         return null;
@@ -624,62 +681,94 @@ class Router
     // Dispatching
     // -----------------------------------------------------------------------
 
-    /**
+        /**
      * Dispatches the incoming HTTP request to the first matching route.
      *
      * Process:
      *   1. Builds `Request` and `Response` objects.
-     *   2. Iterates registered routes and matches URI + method via regex.
-     *   3. Validates the CSRF token for mutating methods when required.
-     *   4. Wraps the handler in the middleware pipeline (outermost first).
-     *   5. Executes the pipeline and resolves the handler return value:
+     *   2. Answers CORS preflight (OPTIONS) requests for routes that use 'cors'.
+     *   3. Iterates registered routes, skipping those that do not match the
+     *      HTTP method, the URI (honouring `where()` constraints and global
+     *      patterns), the host (`domain()`) or the scheme (`secure()`).
+     *   4. Builds the handler parameters: route defaults, overridden by URI
+     *      parameters, plus any parameters captured from the domain.
+     *   5. Validates the CSRF token for mutating methods when required.
+     *   6. Wraps the handler in the middleware pipeline (outermost first).
+     *   7. Executes the pipeline and resolves the handler return value:
      *      - `string` → sent as `text/html`.
      *      - `array`  → encoded and sent as `application/json`.
      *      - `int`    → sets HTTP status with an empty body.
      *      - `null`   → assumes the handler managed output itself.
-     *   6. Responds with 404 if no route matches.
+     *   8. Responds with 404 if no route matches.
      *
      * @return void
      */
     public static function dispatch(): void
     {
-        $request = new Request();
+        $request  = new Request();
         $response = new Response();
-        $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
-        $uriPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
-
+        $method   = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+        $uriPath  = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
 
         // Auto-resolve CORS preflight (OPTIONS) requests before route matching.
-        // Only intercepts when a route at this path opts into 'cors' — routes
+        // Only intercepts when a route at this path opts into 'cors'; routes
         // that never declared the middleware behave exactly as before (404).
         if ($method === 'OPTIONS' && self::handlePreflight($request, $response, $uriPath)) {
             return;
         }
 
         foreach (self::$routes as $route) {
-            $pattern = self::buildPattern($route['pathUri']);
-
-            if ($route['method'] !== $method || !preg_match($pattern, $uriPath, $matches)) {
+            // 1. HTTP method.
+            if ($route['method'] !== $method) {
                 continue;
             }
 
-            // Extract named URI parameters, discarding numeric keys.
-            $params = array_filter($matches, fn($key) => !is_int($key), ARRAY_FILTER_USE_KEY);
+            // 2. URI pattern (with route constraints and global patterns).
+            $pattern = self::buildPattern($route['pathUri'], $route['where']);
 
-            // CSRF guard for mutating requests.
+            if (!preg_match($pattern, $uriPath, $matches)) {
+                continue;
+            }
+
+            // 3. Host restriction. Null means "does not match".
+            $domainParams = self::matchDomain($route['domain']);
+
+            if ($domainParams === null) {
+                continue;
+            }
+
+            // 4. HTTPS-only routes.
+            if ($route['secure'] && !self::isSecureRequest()) {
+                continue;
+            }
+
+            // 5. Handler parameters: defaults < URI params < domain params.
+            //    Numeric keys and empty optional groups are discarded, so a
+            //    missing optional parameter falls back to its default.
+            $uriParams = array_filter(
+                $matches,
+                static fn($value, $key): bool => !is_int($key) && $value !== '',
+                ARRAY_FILTER_USE_BOTH
+            );
+
+            $params = array_merge($route['defaults'], $uriParams, $domainParams);
+
+            // 6. CSRF guard for mutating requests.
             if (self::shouldValidateCsrf($method) && !self::validateCsrfToken()) {
                 $response->status(419);
                 $message = '419 — Invalid or expired CSRF token.';
+
                 if ($request->expectsJson()) {
                     header('Content-Type: application/json');
                     echo json_encode(['error' => $message]);
                 } else {
                     echo $message;
                 }
+
                 return;
             }
 
-            // Core handler — resolves the return value into an HTTP response.
+            // 7. Core handler — resolves the return value into an HTTP response.
             $handler = function (Request $req, Response $res) use ($route, $params): void {
                 $result = is_callable($route['handler'])
                     ? call_user_func($route['handler'], $req, $res, $params)
@@ -688,14 +777,15 @@ class Router
                 self::resolveHandlerReturn($result);
             };
 
-            // Wrap handler in the middleware pipeline (reversed for correct order).
+            // 8. Wrap the handler in the middleware pipeline (reversed for correct order).
             $pipeline = self::buildPipeline($handler, $route['middleware']);
             $pipeline($request, $response);
+
             return;
         }
 
         $response->status(404);
-        self::handleNotFound();
+        self::handleNotFound($request, $method, $uriPath);
     }
 
     // -----------------------------------------------------------------------
@@ -728,6 +818,10 @@ class Router
             'handler' => $handle,
             'middleware' => array_merge(self::$globalMiddlewares, self::$groupMiddlewares, $middleware),
             'name' => null,
+            'where' => [],
+            'defaults' => [],
+            'domain' => null,
+            'secure' => false,
         ];
 
         return new Route($routeIndex);
@@ -780,20 +874,39 @@ class Router
     }
 
     /**
-     * Converts a URI pattern with `{param}` / `{param?}` tokens into a
-     * named-capture regex pattern.
+     * Converts a URI pattern into a named-capture regex, honouring constraints.
      *
-     * Examples:
-     *   `/users/{id}`       → `@^/users/(?P<id>[a-zA-Z0-9_-]+)$@`
-     *   `/search/{query?}`  → `@^/search/(?P<query>[a-zA-Z0-9_-]*)$@`
+     * Constraint precedence: route ->where() > Router::pattern() > default.
+     * Optional parameters swallow their leading slash, so '/search/{q?}'
+     * matches both '/search' and '/search/php'.
      *
-     * @param  string $pathUri Route URI pattern.
-     * @return string          PCRE regex string ready for `preg_match()`.
+     * A single pass is used on purpose: a constraint such as '[0-9]{4}' must
+     * not be re-read as a '{param}' token.
+     *
+     * @param  string               $pathUri Route URI pattern.
+     * @param  array<string,string> $where   Route-level constraints.
+     * @return string
      */
-    private static function buildPattern(string $pathUri): string
+    private static function buildPattern(string $pathUri, array $where = []): string
     {
-        $pattern = preg_replace('/\{([a-zA-Z0-9_]+)\?\}/', '(?P<$1>[a-zA-Z0-9_-]*)', $pathUri);
-        $pattern = preg_replace('/\{([a-zA-Z0-9_]+)\}/', '(?P<$1>[a-zA-Z0-9_-]+)', $pattern);
+        $pattern = preg_replace_callback(
+            '#(/)?\{([a-zA-Z0-9_]+)(\?)?\}#',
+            static function (array $m) use ($where): string {
+                $slash      = $m[1] ?? '';
+                $name       = $m[2];
+                $isOptional = ($m[3] ?? '') !== '';
+                $regex      = str_replace('@', '\@', $where[$name] ?? self::$patterns[$name] ?? '[a-zA-Z0-9_-]+');
+                $group      = "(?P<{$name}>{$regex})";
+
+                if (!$isOptional) {
+                    return $slash . $group;
+                }
+
+                return $slash !== '' ? "(?:/{$group})?" : "{$group}?";
+            },
+            $pathUri
+        );
+
         return '@^' . $pattern . '$@';
     }
 
@@ -885,12 +998,6 @@ class Router
      *
      * This enables Laravel-style handlers where the return value drives output:
      *
-     * | Return type | Behaviour                                                   |
-     * |-------------|-------------------------------------------------------------|
-     * | `string`    | Sends the string as `text/html; charset=UTF-8`.             |
-     * | `array`     | JSON-encodes and sends as `application/json; charset=UTF-8`.|
-     * | `int`       | Sets the HTTP status code; sends an empty body.             |
-     * | `null`      | No-op — the handler is assumed to have managed output.      |
      *
      * @param  mixed $result Value returned by the route handler.
      * @return void
@@ -987,13 +1094,6 @@ class Router
     /**
      * Resolves a middleware alias to its fully-qualified class name.
      *
-     * Built-in aliases:
-     *   - `auth`          → `App\Middlewares\AuthMiddleware`
-     *   - `guest`         → `App\Middlewares\GuestMiddleware`
-     *   - `cors`          → `App\Middlewares\CorsMiddleware`
-     *   - `jwt`           → `App\Middlewares\JwtMiddleware`
-     *   - `throttle`      → `App\Middlewares\ThrottleMiddleware`
-     *   - `throttle:60,1` → same class; parameters are forwarded via server var.
      *
      * If `$alias` is not a known alias, it is returned unchanged (assumed to
      * be a fully-qualified class name already).
@@ -1030,31 +1130,64 @@ class Router
         return $aliases[$base] ?? $alias;
     }
 
-    /**
-     * Handles unmatched requests by rendering the 404 error page.
+     /**
+     * Handles a request that matched no route.
      *
-     * Searches a list of conventional view paths for a `404.php` file.
-     * If none is found, throws a `RuntimeException`.
+     * - API / AJAX / JSON requests: throws a {@see NotFoundException}, which the
+     *   Kernel hands to the ErrorHandler so the client receives the standard
+     *   JSON error payload (the message is only exposed when APP_DEBUG=true).
+     * - Everything else: prints the 404 page from
+     *   {@see \Slenix\Core\Exceptions\ErrorPage} (developer view in
+     *   views/erros/404.luna.php, or the built-in page).
      *
+     * The HTTP status is expected to have been set by the caller.
+     *
+     * @param  Request $request The current request.
+     * @param  string  $method  HTTP verb of the request (uppercase).
+     * @param  string  $uriPath URI path that failed to match.
      * @return void
-     * @throws \RuntimeException If no 404 view file can be located.
+     *
+     * @throws \Slenix\Core\Exceptions\NotFoundException For API requests.
      */
-    private static function handleNotFound(): void
+    private static function handleNotFound(Request $request, string $method, string $uriPath): void
     {
-        $errorPaths = [
-            __DIR__ . '/../../../views/errors/404.php',
-            __DIR__ . '/../../../views/error/404.php',
-            __DIR__ . '/../../../views/erro/404.php',
-            __DIR__ . '/../../Core/Exceptions/errors/404.php',
-        ];
+        if (\Slenix\Core\Exceptions\ErrorHandler::wantsJson($request)) {
+            throw new \Slenix\Core\Exceptions\NotFoundException("Route not found: {$method} {$uriPath}");
+        }
+ 
+        echo \Slenix\Core\Exceptions\ErrorPage::render(404);
+    }
 
-        foreach ($errorPaths as $path) {
-            if (file_exists($path)) {
-                require_once $path;
-                return;
-            }
+    /**
+     * Matches the request host against a route's domain pattern.
+     *
+     * @param  string|null $domain Pattern such as '{tenant}.example.com'.
+     * @return array<string,string>|null Captured parameters, or null if it does not match.
+     */
+    private static function matchDomain(?string $domain): ?array
+    {
+        if ($domain === null) {
+            return [];
         }
 
-        throw new \RuntimeException('404 — Page not found.');
+        $host  = strtolower(explode(':', $_SERVER['HTTP_HOST'] ?? '')[0]);
+        $regex = preg_replace(
+            '/\\\\\{([a-zA-Z0-9_]+)\\\\\}/',
+            '(?P<$1>[^.]+)',
+            preg_quote($domain, '@')
+        );
+
+        if (!preg_match('@^' . $regex . '$@', $host, $m)) {
+            return null;
+        }
+
+        return array_filter($m, static fn($k): bool => !is_int($k), ARRAY_FILTER_USE_KEY);
+    }
+
+    /** @return bool Whether the current request came over HTTPS. */
+    private static function isSecureRequest(): bool
+    {
+        return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
     }
 }

@@ -15,9 +15,9 @@ declare(strict_types=1);
 
 namespace App\Middlewares;
 
-use Slenix\Core\EnvLoader;
 use Slenix\Http\Request;
 use Slenix\Http\Response;
+use Slenix\Core\Foundation\EnvLoader;
 use Slenix\Http\Middlewares\Middleware;
 
 class CorsMiddleware implements Middleware

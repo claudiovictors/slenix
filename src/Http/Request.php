@@ -1685,7 +1685,7 @@ class Request
      *
      * The instance is created once and reused for the lifetime of the request.
      *
-     * @return \Slenix\Supports\Security\CSRF
+     * @return CSRF
      */
     private function csrf(): CSRF
     {

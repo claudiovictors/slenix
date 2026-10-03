@@ -16,21 +16,21 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/vendor/autoload.php';
 
-use Slenix\Core\EnvLoader;
 use Slenix\Http\Routing\Router;
-use Slenix\Supports\Queue\Queue;
 use Slenix\Core\Console\Command;
 use Slenix\Supports\Template\Luna;
-use Slenix\Core\Console\SeedCommand;
-use Slenix\Core\Console\MakeCommand;
-use Slenix\Core\Console\CacheCommand;
-use Slenix\Core\Console\ServeCommand;
-use Slenix\Core\Console\WorkerCommand;
-use Slenix\Core\Console\MigrateCommand;
-use Slenix\Core\Console\StorageCommand;
-use Slenix\Core\Console\ScheduleCommand;
+use Slenix\Core\Foundation\EnvLoader;
+use Slenix\Core\Console\Commands\CacheCommand;
+use Slenix\Core\Console\Commands\FrontendCommand;
+use Slenix\Core\Console\Commands\MaintenanceCommand;
+use Slenix\Core\Console\Commands\MakeCommand;
+use Slenix\Core\Console\Commands\MigrateCommand;
+use Slenix\Core\Console\Commands\ScheduleCommand;
+use Slenix\Core\Console\Commands\SeedCommand;
+use Slenix\Core\Console\Commands\ServeCommand;
+use Slenix\Core\Console\Commands\StorageCommand;
+use Slenix\Core\Console\Commands\WorkerCommand;
 use Slenix\Core\WebSocket\WebSocketServer;
-use Slenix\Core\Console\MaintenanceCommand;
 
 /**
  * Attempt to load the environment variables.
@@ -222,6 +222,11 @@ final class Celestial
                 // ── Scheduler ──────────────────────────────────────────────────
                 case 'schedule:run':
                     ScheduleCommand::run();
+                    break;
+
+                // ── Frontend scaffolding ──────────────────────────────────────
+                case 'frontend:install':
+                    (new FrontendCommand($this->args))->install();
                     break;
 
                 // ── Help / version ────────────────────────────────────────────

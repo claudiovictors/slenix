@@ -20,7 +20,7 @@ declare(strict_types=1);
 
 namespace Slenix\Supports\Security;
 
-use Slenix\Core\EnvLoader;
+use Slenix\Core\Foundation\EnvLoader;
 
 class Session
 {

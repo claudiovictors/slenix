@@ -1279,8 +1279,8 @@ class Luna
         return preg_replace_callback(
             '/@props\s*\(\s*(\[[\s\S]*?\])\s*\)/',
             fn(array $m): string =>
-            "<?php foreach({$m[1]} as \$__propKey => \$__propDefault): " .
-            "if(!isset(\$\$__propKey)): \$\$__propKey = \$__propDefault; endif; endforeach; ?>",
+                "<?php foreach({$m[1]} as \$__propKey => \$__propDefault): " .
+                "if(!isset(\$\$__propKey)): \$\$__propKey = \$__propDefault; endif; endforeach; ?>",
             $source
         ) ?? $source;
     }
@@ -1308,8 +1308,8 @@ class Luna
         $source = preg_replace('/@php\b([\s\S]*?)@endphp\b/', '<?php $1 ?>', $source) ?? $source;
 
         // @csrf / @csrf_meta
+        $source = str_replace('@csrf_meta', '<?php echo csrf_meta(); ?>', $source);
         $source = str_replace('@csrf', '<?php echo csrf_field(); ?>', $source);
-        $source = str_replace('@csrf_meta', '<?php csrf_meta(); ?>', $source);
 
         // @method('PUT')
         $source = preg_replace_callback(
@@ -1376,10 +1376,10 @@ class Luna
             $source
         ) ?? $source;
 
-        // @vite('resources/app.js')
+        // @vite('resources/js/app.jsx')  ou  @vite(['resources/css/app.css', 'resources/js/app.jsx'])
         $source = preg_replace_callback(
-            '/@vite\s*\(\s*[\'"]([^\'"]+)[\'"]\s*\)/',
-            fn(array $m): string => '<script type="module" src="/' . $m[1] . '"></script>',
+            '/@vite\s*\(\s*(\[[\s\S]*?\]|[\'"][^\'"]+[\'"])\s*\)/',
+            fn(array $m): string => '<?php echo \\Slenix\\Supports\\Vite\\Vite::tags(' . $m[1] . '); ?>',
             $source
         ) ?? $source;
 
@@ -1435,9 +1435,9 @@ class Luna
         $source = preg_replace_callback(
             '/@spaceless([\s\S]*?)@endspaceless/s',
             fn(array $m): string =>
-            '<?php ob_start(); ?>' .
-            $m[1] .
-            '<?php echo preg_replace(\'/>\s+</\', \'><\', ob_get_clean()); ?>',
+                '<?php ob_start(); ?>' .
+                $m[1] .
+                '<?php echo preg_replace(\'/>\s+</\', \'><\', ob_get_clean()); ?>',
             $source
         ) ?? $source;
 
@@ -1457,12 +1457,12 @@ class Luna
         $source = preg_replace_callback(
             '/@error\s*\(\s*[\'"]([^\'"]+)[\'"]\s*\)/',
             fn(array $m): string =>
-            "<?php if(isset(\$errors) && \$errors instanceof \\Slenix\\Supports\\Validation\\MessageBag"
-            . " ? \$errors->has('" . addslashes($m[1]) . "')"
-            . " : errors()->has('" . addslashes($m[1]) . "')): "
-            . "\$message = (isset(\$errors) && \$errors instanceof \\Slenix\\Supports\\Validation\\MessageBag)"
-            . " ? \$errors->first('" . addslashes($m[1]) . "')"
-            . " : errors()->first('" . addslashes($m[1]) . "'); ?>",
+                "<?php if(isset(\$errors) && \$errors instanceof \\Slenix\\Supports\\Validation\\MessageBag"
+                . " ? \$errors->has('" . addslashes($m[1]) . "')"
+                . " : errors()->has('" . addslashes($m[1]) . "')): "
+                . "\$message = (isset(\$errors) && \$errors instanceof \\Slenix\\Supports\\Validation\\MessageBag)"
+                . " ? \$errors->first('" . addslashes($m[1]) . "')"
+                . " : errors()->first('" . addslashes($m[1]) . "'); ?>",
             $source
         ) ?? $source;
 
@@ -1481,9 +1481,9 @@ class Luna
         $source = preg_replace_callback(
             '/@has_error\s*\(\s*[\'"]([^\'"]+)[\'"]\s*\)/',
             fn(array $m): string =>
-            "<?php if(isset(\$errors) && \$errors instanceof \\Slenix\\Supports\\Validation\\MessageBag"
-            . " ? \$errors->has('" . addslashes($m[1]) . "')"
-            . " : errors()->has('" . addslashes($m[1]) . "')): ?>",
+                "<?php if(isset(\$errors) && \$errors instanceof \\Slenix\\Supports\\Validation\\MessageBag"
+                . " ? \$errors->has('" . addslashes($m[1]) . "')"
+                . " : errors()->has('" . addslashes($m[1]) . "')): ?>",
             $source
         ) ?? $source;
         $source = preg_replace('/@endhas_error\b/', '<?php endif; ?>', $source) ?? $source;
@@ -1844,7 +1844,7 @@ class Luna
         $text = preg_replace_callback(
             '/```(\w*)\n?([\s\S]*?)```/s',
             fn($m) => '<pre><code' . ($m[1] ? ' class="language-' . htmlspecialchars($m[1]) . '"' : '') . '>'
-            . htmlspecialchars($m[2]) . '</code></pre>',
+                . htmlspecialchars($m[2]) . '</code></pre>',
             $text
         ) ?? $text;
 

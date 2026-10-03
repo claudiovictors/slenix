@@ -9,17 +9,6 @@
 | to encapsulate validation rules, custom messages, field labels,
 | authorization logic, and post-validation hooks outside of controllers.
 |
-| The Router resolves FormRequest subclasses automatically via
-| dependency injection — you never instantiate them manually.
-|
-| Lifecycle (per request):
-|   1. resolveAndValidate()  — entry point called by the Router
-|   2. authorize()           — gate check; 403 on false
-|   3. prepareForValidation()— optional data transformation before rules run
-|   4. Validator::make()     — runs all rules
-|   5a. passedValidation()   — hook called on success
-|   5b. failedValidation()   — hook called on failure (redirects or JSON)
-|
 | Usage:
 |   php celestial make:request LoginRequest
 |

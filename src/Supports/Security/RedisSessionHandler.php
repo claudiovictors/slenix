@@ -15,7 +15,7 @@ declare(strict_types=1);
 
 namespace Slenix\Supports\Security;
 
-use Slenix\Core\EnvLoader;
+use Slenix\Core\Foundation\EnvLoader;
 use Slenix\Supports\Redis\RedisConnection;
 
 class RedisSessionHandler implements \SessionHandlerInterface

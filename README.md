@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="#"><img src="https://img.shields.io/badge/PHP-8.1%2B-blue?style=flat-square" alt="PHP Version"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Version-2.6-green?style=flat-square" alt="Version"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Version-3.2.1-green?style=flat-square" alt="Version"></a>
   <a href="#"><img src="https://img.shields.io/badge/License-MIT-orange?style=flat-square" alt="License"></a>
 </p>
 

@@ -122,4 +122,26 @@ return [
         'path'               => env('UPLOAD_PATH', 'uploads'),
     ],
 
+     /*
+    |--------------------------------------------------------------------------
+    | SESSION
+    |--------------------------------------------------------------------------
+    */
+    'session' => [
+        'driver'   => env('SESSION_DRIVER', 'native'),
+        'lifetime' => (int) env('SESSION_LIFETIME', 7200),
+        'prefix'   => env('SESSION_PREFIX', 'session:'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Vite
+    |--------------------------------------------------------------------------
+    */
+    'vite' => [
+        'build_dir' => env('VITE_BUILD_DIR', 'build'),
+    ],
+
+    'trusted_proxies' => env('TRUSTED_PROXIES', ''),
+
 ];

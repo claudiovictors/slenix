@@ -28,6 +28,7 @@ use Slenix\Database\Relations\HasOne;
 
 abstract class Model implements \JsonSerializable
 {
+    use \Slenix\Database\Concerns\WrapsIdentifiers;
 
     /** @var string Database table name */
     protected string $table = '';
@@ -715,10 +716,10 @@ abstract class Model implements \JsonSerializable
 
         $data = $this->serializeForDb($this->attributes);
         $columns = array_keys($data);
-        $colList = implode(', ', array_map(fn($c) => "`{$c}`", $columns));
+        $colList = implode(', ', array_map(fn($c) => "{$this->wrap($c)}", $columns));
         $holders = ':' . implode(', :', $columns);
 
-        $sql = "INSERT INTO `{$this->table}` ({$colList}) VALUES ({$holders})";
+        $sql = "INSERT INTO {$this->wrap($this->table)} ({$colList}) VALUES ({$holders})";
         $stmt = $this->pdo->prepare($sql);
         $result = $stmt->execute($data);
 
@@ -756,8 +757,8 @@ abstract class Model implements \JsonSerializable
         }
 
         $data = $this->serializeForDb($this->dirty);
-        $updates = implode(', ', array_map(fn($k) => "`{$k}` = :{$k}", array_keys($data)));
-        $sql = "UPDATE `{$this->table}` SET {$updates} WHERE `{$this->primaryKey}` = :__pk__";
+        $updates = implode(', ', array_map(fn($k) => "{$this->wrap($k)} = :{$k}", array_keys($data)));
+        $sql = "UPDATE {$this->wrap($this->table)} SET {$updates} WHERE {$this->wrap($this->primaryKey)} = :__pk__";
 
         $stmt = $this->pdo->prepare($sql);
         $params = array_merge($data, ['__pk__' => $this->attributes[$this->primaryKey]]);
@@ -828,14 +829,14 @@ abstract class Model implements \JsonSerializable
         static::fireHook('deleting', $this);
 
         if ($this->softDelete) {
-            $sql = "UPDATE `{$this->table}` SET `{$this->deletedAt}` = :deleted_at WHERE `{$this->primaryKey}` = :pk";
+            $sql = "UPDATE {$this->wrap($this->table)} SET {$this->wrap($this->deletedAt)} = :deleted_at WHERE {$this->wrap($this->primaryKey)} = :pk";
             $stmt = $this->pdo->prepare($sql);
             $result = $stmt->execute([
                 'deleted_at' => date('Y-m-d H:i:s'),
                 'pk' => $this->attributes[$this->primaryKey],
             ]);
         } else {
-            $sql = "DELETE FROM `{$this->table}` WHERE `{$this->primaryKey}` = :pk";
+            $sql = "DELETE FROM {$this->wrap($this->table)} WHERE {$this->wrap($this->primaryKey)} = :pk";
             $stmt = $this->pdo->prepare($sql);
             $result = $stmt->execute(['pk' => $this->attributes[$this->primaryKey]]);
         }
@@ -854,7 +855,7 @@ abstract class Model implements \JsonSerializable
         if (empty($this->attributes[$this->primaryKey]))
             return false;
 
-        $sql = "DELETE FROM `{$this->table}` WHERE `{$this->primaryKey}` = :pk";
+        $sql = "DELETE FROM {$this->wrap($this->table)} WHERE {$this->wrap($this->primaryKey)} = :pk";
         $stmt = $this->pdo->prepare($sql);
         return $stmt->execute(['pk' => $this->attributes[$this->primaryKey]]);
     }
@@ -867,7 +868,7 @@ abstract class Model implements \JsonSerializable
         if (!$this->softDelete || empty($this->attributes[$this->primaryKey]))
             return false;
 
-        $sql = "UPDATE `{$this->table}` SET `{$this->deletedAt}` = NULL WHERE `{$this->primaryKey}` = :pk";
+        $sql = "UPDATE {$this->wrap($this->table)} SET {$this->wrap($this->deletedAt)} = NULL WHERE {$this->wrap($this->primaryKey)} = :pk";
         $stmt = $this->pdo->prepare($sql);
         $result = $stmt->execute(['pk' => $this->attributes[$this->primaryKey]]);
 
@@ -2116,8 +2117,8 @@ abstract class Model implements \JsonSerializable
         $now = date('Y-m-d H:i:s');
         $this->attributes[$this->updatedAt] = $now;
 
-        $sql = "UPDATE `{$this->table}` SET `{$this->updatedAt}` = :ts
-             WHERE `{$this->primaryKey}` = :pk";
+        $sql = "UPDATE {$this->wrap($this->table)} SET {$this->wrap($this->updatedAt)} = :ts
+             WHERE {$this->wrap($this->primaryKey)} = :pk";
         $stmt = $this->pdo->prepare($sql);
 
         return $stmt->execute(['ts' => $now, 'pk' => $this->attributes[$this->primaryKey]]);
@@ -2140,9 +2141,9 @@ abstract class Model implements \JsonSerializable
             return false;
         }
 
-        $sql = "UPDATE `{$this->table}`
-             SET `{$column}` = `{$column}` + :by
-             WHERE `{$this->primaryKey}` = :pk";
+        $sql = "UPDATE {$this->wrap($this->table)}
+             SET {$this->wrap($column)} = {$this->wrap($column)} + :by
+             WHERE {$this->wrap($this->primaryKey)} = :pk";
         $stmt = $this->pdo->prepare($sql);
         $ok = $stmt->execute(['by' => $by, 'pk' => $this->attributes[$this->primaryKey]]);
 
@@ -2172,10 +2173,10 @@ abstract class Model implements \JsonSerializable
         }
 
         $setExpr = $floor
-            ? "`{$column}` = GREATEST(0, `{$column}` - :by)"
-            : "`{$column}` = `{$column}` - :by";
+            ? "{$this->wrap($column)} = GREATEST(0, {$this->wrap($column)} - :by)"
+            : "{$this->wrap($column)} = {$this->wrap($column)} - :by";
 
-        $sql = "UPDATE `{$this->table}` SET {$setExpr} WHERE `{$this->primaryKey}` = :pk";
+        $sql = "UPDATE {$this->wrap($this->table)} SET {$setExpr} WHERE {$this->wrap($this->primaryKey)} = :pk";
         $stmt = $this->pdo->prepare($sql);
         $ok = $stmt->execute(['by' => $by, 'pk' => $this->attributes[$this->primaryKey]]);
 
@@ -2227,7 +2228,7 @@ abstract class Model implements \JsonSerializable
             $parentId = $this->attributes[$localKey] ?? $this->getKey();
 
             $stmt = $this->pdo->prepare(
-                "SELECT COUNT(*) FROM `{$relatedTable}` WHERE `{$foreignKey}` = :pk"
+                "SELECT COUNT(*) FROM {$this->wrap($relatedTable)} WHERE {$this->wrap($foreignKey)} = :pk"
             );
             $stmt->execute(['pk' => $parentId]);
 
@@ -2246,7 +2247,7 @@ abstract class Model implements \JsonSerializable
     public static function truncate(): bool
     {
         $instance = new static();
-        return $instance->pdo->exec("TRUNCATE TABLE `{$instance->table}`") !== false;
+        return $instance->pdo->exec("TRUNCATE TABLE {$instance->wrap($instance->table)}") !== false;
     }
 
     /**

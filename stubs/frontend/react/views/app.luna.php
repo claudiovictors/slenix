@@ -6,6 +6,7 @@
   {!! csrf_meta() !!}
   <title>{{ config('app.name') }}</title>
   @vite(['resources/css/app.css', 'resources/js/app.jsx'])
+  <link rel="shortcut icon" href="/logo.svg" type="image/svg+xml">
 </head>
 <body>
   <div id="app" data-props="{{ json_encode(['name' => config('app.name')]) }}"></div>

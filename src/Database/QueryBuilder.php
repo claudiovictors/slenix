@@ -20,6 +20,7 @@ use PDO;
 
 class QueryBuilder
 {
+    use \Slenix\Database\Concerns\WrapsIdentifiers;
     protected PDO $pdo;
     protected string $table;
     protected string $modelClass;
@@ -91,11 +92,11 @@ class QueryBuilder
 
         foreach ($data as $col => $val) {
             $p = $this->generateParamName();
-            $setParts[] = "`{$col}` = :{$p}";
+            $setParts[] = "{$this->wrap($col)} = :{$p}";
             $bindings[$p] = $val;
         }
 
-        $sql = "UPDATE `{$this->table}` SET " . implode(', ', $setParts);
+        $sql = "UPDATE {$this->wrap($this->table)} SET " . implode(', ', $setParts);
         $sql .= ' WHERE ' . $this->buildWhereClause();
 
         $stmt = $this->pdo->prepare($sql);
@@ -119,7 +120,7 @@ class QueryBuilder
             );
         }
 
-        $sql = "DELETE FROM `{$this->table}` WHERE " . $this->buildWhereClause();
+        $sql = "DELETE FROM {$this->wrap($this->table)} WHERE " . $this->buildWhereClause();
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($this->bindings);
 
@@ -829,6 +830,28 @@ class QueryBuilder
     }
 
     /**
+     * Determines whether the query matches no rows (runs a COUNT, loads no models).
+     *
+     * @example Product::where('active', 1)->isEmpty()
+     *
+     * @return bool True when no row matches.
+     */
+    public function isEmpty(): bool
+    {
+        return !$this->exists();
+    }
+
+    /**
+     * Determines whether the query matches at least one row.
+     *
+     * @return bool True when at least one row matches.
+     */
+    public function isNotEmpty(): bool
+    {
+        return $this->exists();
+    }
+
+    /**
      * Retorna paginação completa
      *
      * @return array{data: Collection, current_page: int, per_page: int, total: int, last_page: int, from: int, to: int}
@@ -1267,12 +1290,12 @@ class QueryBuilder
             $bindings[$p] = $k;
         }
 
-        $aggExpr = $func === 'COUNT' ? "COUNT(*)" : "{$func}(`{$col}`)";
+        $aggExpr = $func === 'COUNT' ? "COUNT(*)" : "{$func}({$this->wrap($col)})";
         $inClause = implode(', ', $placeholders);
-        $sql = "SELECT `{$foreignKey}`, {$aggExpr} as __agg__
-                  FROM `{$relatedTable}`
-                  WHERE `{$foreignKey}` IN ({$inClause})
-                  GROUP BY `{$foreignKey}`";
+        $sql = "SELECT {$this->wrap($foreignKey)}, {$aggExpr} as __agg__
+                  FROM {$this->wrap($relatedTable)}
+                  WHERE {$this->wrap($foreignKey)} IN ({$inClause})
+                  GROUP BY {$this->wrap($foreignKey)}";
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($bindings);
@@ -1654,13 +1677,13 @@ class QueryBuilder
             $sql .= 'DISTINCT ';
 
         $sql .= implode(', ', $this->select);
-        $sql .= " FROM `{$this->table}`";
+        $sql .= " FROM {$this->wrap($this->table)}";
 
         foreach ($this->joins as $join) {
             if ($join['type'] === 'CROSS') {
-                $sql .= " CROSS JOIN `{$join['table']}`";
+                $sql .= " CROSS JOIN {$this->wrap($join['table'])}";
             } else {
-                $sql .= " {$join['type']} JOIN `{$join['table']}` ON {$join['first']} {$join['operator']} {$join['second']}";
+                $sql .= " {$join['type']} JOIN {$this->wrap($join['table'])} ON {$join['first']} {$join['operator']} {$join['second']}";
             }
         }
 

@@ -21,6 +21,7 @@ use Slenix\Core\Console\Command;
 use Slenix\Supports\Template\Luna;
 use Slenix\Core\Foundation\EnvLoader;
 use Slenix\Core\Console\Commands\CacheCommand;
+use Slenix\Core\Console\Commands\UpdateCommand;
 use Slenix\Core\Console\Commands\FrontendCommand;
 use Slenix\Core\Console\Commands\MaintenanceCommand;
 use Slenix\Core\Console\Commands\MakeCommand;
@@ -193,6 +194,15 @@ final class Celestial
                 // ── HTTP development server ───────────────────────────────────
                 case 'serve':
                     (new ServeCommand($this->args))->execute();
+                    break;
+
+                // ── Framework updates ─────────────────────────────────────────
+                case 'self:update':
+                    (new UpdateCommand($this->args))->run();
+                    break;
+
+                case 'self:rollback':
+                    (new UpdateCommand($this->args))->rollback();
                     break;
 
                 // ── View maintenance ──────────────────────────────────────────

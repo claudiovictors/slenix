@@ -20,7 +20,7 @@ abstract class Command
     /**
      * @var string The current version of the CLI tool.
      */
-    protected static string $version = '3.1.0';
+    protected static string $version = '3.2.3';
 
     /**
      * Get an instance of the Console helper.
@@ -376,6 +376,10 @@ abstract class Command
                 'up' => 'Bring the application back online',
                 'version' => 'Display installed CLI version',
                 'help' => 'Display this help screen',
+                'self:update' => 'Update Slenix to the latest version',
+                'self:update --check' => 'Check for a new version only',
+                'self:update --dry-run' => 'Show what would change',
+                'self:rollback' => 'Restore the last backup',
             ],
 
         ];
